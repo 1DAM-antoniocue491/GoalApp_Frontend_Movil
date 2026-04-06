@@ -13,7 +13,7 @@ export default function AuthLayout() {
                 // Ocultamos el header nativo — el diseño es completamente custom
                 headerShown: false,
                 // Color de fondo durante la animación de transición entre pantallas
-                contentStyle: { backgroundColor: Colors.bg.base },
+                contentStyle: { backgroundColor: Colors.bg.surface1 },
                 // Animación suave entre login y register
                 animation: 'fade',
             }}

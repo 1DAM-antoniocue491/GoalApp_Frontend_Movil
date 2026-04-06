@@ -4,6 +4,7 @@ import { Text, View } from "react-native";
 
 export default function Index() {
   return (
-    <Redirect href={('/auth/login') as RelativePathString} />
+    /*<Redirect href={('/auth/login') as RelativePathString} />*/
+    <Redirect href={('/(tabs)') as RelativePathString} />
   )
 }

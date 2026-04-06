@@ -2,14 +2,14 @@ import { Text, View } from "react-native";
 import { Screen } from "../../components/layout/Screen";
 import { Button } from "../../components/ui/Button";
 import React from "react";
+import { styles } from "@/src/styles";
 
 export default function HomeScreen() {
     return (
-        <Screen>
-            <View className="flex-1 items-center justify-center gap-4">
-                <Text className="text-2xl font-bold text-black">Home</Text>
-                <Button title="Continuar" />
+        <View className="flex-1" >
+            <View className={styles.screenBase}>
+                <Text className="text-2xl font-bold text-white">Hola Pepe</Text>
             </View>
-        </Screen>
+        </View>
     );
 }

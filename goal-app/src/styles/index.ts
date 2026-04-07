@@ -32,6 +32,15 @@ export const styles = {
   tabContainer: 'flex-row bg-[#1D1C22] rounded-xl p-1 mb-6',
   tabActive: 'flex-1 bg-[#2A2A35] rounded-lg py-2 items-center',
   tabInactive: 'flex-1 py-2 items-center',
-  tabActiveText: 'text-white font-semibold text-sm',
+  tabActiveText: 'text-white font-semibold text-sm items-center',
   tabInactiveText: 'text-[#8A9AA4] text-sm',
+
+
+    // --- Tabs Partidos ---
+  tabPartido: ' flex-1 border-b-4 border-[#C8F558]',
+  tabPartidoInactive: 'flex-1 border-b-1 border-[#C8F558]',
+
 } as const;
+
+
+

@@ -16,3 +16,7 @@ export interface RegisterForm {
 // AuthTabs necesita saber son los botones que permiten saber
 // cuál tab está activa.
 export type AuthTab = "login" | "register";
+
+// AuthTabs necesita saber son los botones que permiten saber
+// cuál tab está activa de par.
+export type MatchesTab = "live" | "programmed" |"finished" ;

@@ -10,7 +10,7 @@ export default function HomeScreen() {
         <View className={styles.screenBase}>
             <View className="items-center pt-5">
                 <Text className={`${styles.titleText} mb-6`}>Iniciar Sesión</Text>
-                
+
             </View>
         </View>
     );

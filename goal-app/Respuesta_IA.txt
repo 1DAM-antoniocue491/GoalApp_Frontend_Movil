@@ -1,0 +1,668 @@
+# GoalApp - Pantalla principal mobile (React Native + Expo + NativeWind)
+
+## Objetivo
+
+Desarrollar la pantalla principal de inicio/onboarding de la app móvil **GoalApp**, una vez el usuario ha hecho login.
+
+La pantalla debe tener una estética **dark premium**, moderna, limpia y bien jerarquizada.  
+El usuario debe poder:
+
+1. Crear una nueva liga
+2. Unirse a una liga con código
+3. Ver las ligas a las que pertenece
+4. Buscar y filtrar ligas
+5. Acceder o reactivar una liga según permisos y estado
+
+---
+
+## Stack técnico
+
+Estoy trabajando con:
+
+- React Native con Expo
+- TailwindCSS + NativeWind
+
+Estructura actual del proyecto:
+
+```txt
+src
+├── app
+│   ├── (tabs)
+│   ├── auth
+│   └── matches
+│       └── all_finished
+├── components
+│   ├── feedback
+│   ├── layout
+│   └── ui
+├── constants
+├── hooks
+├── providers
+├── services
+│   └── api
+├── store
+├── styles
+├── types
+└── utils
+````
+
+### Importante
+
+* En `constants` ya existen colores
+* En `styles` ya existen estilos reutilizables
+* Evitar hardcodear colores o estilos repetidos si ya existen utilidades comunes
+* El código debe quedar limpio, reusable y preparado para conectar luego con API/store real
+
+---
+
+## Estructura visual de la pantalla
+
+La pantalla debe estar dentro de:
+
+* `SafeAreaView`
+* `ScrollView`
+
+Debe tener scroll vertical completo.
+
+---
+
+## 1. Header superior compacto
+
+Mostrar una cabecera horizontal con:
+
+* logo circular de la app a la izquierda
+* texto `GoalApp`
+* icono de notificaciones a la derecha
+
+### Requisitos
+
+* compacta
+* moderna
+* oscura
+* sin ocupar demasiada altura
+
+---
+
+## 2. Bloque de bienvenida
+
+Debajo del header:
+
+* título principal: `Hola, Miguel`
+* línea secundaria pequeña: `Primer acceso`
+* subtítulo: `Elige cómo empezar`
+
+### Requisitos
+
+* dar sensación de bienvenida
+* no demasiado grande
+* mantener buen espaciado vertical
+
+---
+
+## 3. Acciones principales
+
+Debajo de la bienvenida mostrar **dos cards verticales**.
+
+### Card 1: Crear nueva liga
+
+Contenido:
+
+* icono circular decorativo con símbolo `+`
+* título: `Crear nueva liga`
+* descripción: `Configura tu competición y empieza a gestionarla`
+* botón CTA: `Crear liga`
+* flecha a la derecha en el botón
+
+### Card 2: Unirme a una liga
+
+Contenido:
+
+* icono circular decorativo con icono de enlace/cadena
+* título: `Unirme a una liga`
+* descripción: `Únete con un código de invitación y accede al instante`
+* botón CTA: `Unirme`
+* flecha a la derecha en el botón
+
+### Requisitos visuales de ambas cards
+
+* fondo oscuro ligeramente elevado sobre el fondo general
+* bordes redondeados grandes
+* diseño premium
+* buena separación entre icono, textos y CTA
+* padding generoso
+
+---
+
+## 4. Sección "Mis ligas"
+
+### Caso A: Sí existen ligas
+
+Mostrar:
+
+#### Título
+
+`Mis ligas`
+
+#### Buscador
+
+* input oscuro
+* icono de lupa
+* placeholder: `Buscar liga...`
+
+#### Filtros horizontales
+
+Chips/pills con estas opciones:
+
+* `Todas`
+* `Activas`
+* `Finalizadas`
+* `Favoritas`
+
+### Comportamiento
+
+* la opción seleccionada se resalta con el color principal
+* las no activas deben verse oscuras con borde sutil
+* deben poder desplazarse horizontalmente si hace falta
+
+#### Listado de ligas
+
+Debajo mostrar cards grandes de ligas
+
+---
+
+### Caso B: No existen ligas
+
+Si no hay ligas, **NO mostrar**:
+
+* `Mis ligas`
+* buscador
+* filtros
+* listado
+
+En su lugar mostrar un **empty state** con:
+
+* título: `Aún no tienes ligas`
+* texto secundario: `Crea una nueva liga o únete con un código de invitación para empezar`
+
+Puede llevar un icono o ilustración simple relacionada con fútbol/liga.
+
+---
+
+## 5. Diseño de cada card de liga
+
+Cada liga debe mostrarse en una card grande, oscura, premium y muy clara visualmente.
+
+### Estructura general
+
+#### Parte superior
+
+* badge de rol arriba a la izquierda
+* icono de favorito arriba a la derecha
+
+#### Roles posibles
+
+* `Admin`
+* `Entrenador`
+* `Delegado de campo`
+* `Jugador`
+
+#### Colores semánticos sugeridos para roles
+
+* Admin → amarillo/dorado
+* Entrenador → azul/cian
+* Delegado de campo → morado/fucsia
+* Jugador → verde
+
+---
+
+### Icono favorito
+
+* si es favorita → estrella amarilla rellena
+* si no es favorita → estrella gris / contorno
+
+---
+
+### Bloque central
+
+A la izquierda:
+
+* escudo o imagen de la liga/equipo dentro de contenedor circular
+
+A la derecha:
+
+* nombre de la liga
+* temporada
+* estado de la liga
+
+### Estados posibles
+
+* `Activa` con punto verde
+* `Finalizada` con punto rojo
+
+Ejemplo:
+
+* `Temporada 2025/26 • Activa`
+* `Temporada 2025 • Finalizada`
+
+---
+
+### Regla obligatoria para el escudo
+
+Si la liga o el equipo **no tiene imagen de escudo**, mostrar siempre el **escudo por defecto con bordes blancos**.
+
+Nunca debe quedar un hueco vacío.
+
+Ejemplo conceptual:
+
+```tsx
+source={league.crestUrl ? { uri: league.crestUrl } : defaultShieldImage}
+```
+
+---
+
+### Información secundaria
+
+Mostrar debajo del bloque principal:
+
+* `Mi equipo`: nombre del equipo del usuario
+* `Equipos en la liga`: número de equipos
+
+Distribución:
+
+* horizontal en dos bloques
+* con pequeños iconos
+* clara y legible
+
+---
+
+### Botón inferior principal
+
+Mostrar un botón ancho en la parte inferior de la card.
+
+#### Reglas del botón
+
+* si la liga está activa → botón `Entrar`
+* si la liga está finalizada y el usuario tiene permisos → botón `Reactivar liga`
+* si la liga está finalizada y el usuario no tiene permisos → botón deshabilitado
+
+El botón debe tener:
+
+* ancho casi completo
+* esquinas muy redondeadas
+* flecha a la derecha
+
+---
+
+## 6. Comportamiento funcional
+
+### Búsqueda
+
+El buscador debe filtrar por nombre de liga en tiempo real.
+
+### Filtros
+
+Los chips deben filtrar por:
+
+* todas
+* activas
+* finalizadas
+* favoritas
+
+### Favoritos
+
+El icono debe reflejar visualmente si la liga es favorita o no.
+
+### Scroll
+
+Toda la pantalla debe ser scrollable.
+
+---
+
+## 7. Estados de pantalla
+
+### Estado loading
+
+Cuando las ligas se están cargando:
+
+* mostrar skeletons o placeholders elegantes
+* no usar únicamente texto plano tipo "Cargando..."
+
+### Estado vacío
+
+Si no hay ligas:
+
+* mostrar solo el empty state
+* ocultar buscador, filtros y cards
+
+### Estado con datos
+
+Si hay ligas:
+
+* mostrar sección completa con buscador, filtros y cards
+
+---
+
+## 8. Componentización sugerida
+
+Quiero una implementación limpia y reutilizable.
+
+### Archivos sugeridos
+
+```txt
+src/
+  app/
+    (tabs)/
+      index.tsx
+  components/
+    layout/
+      AppHeader.tsx
+    ui/
+      QuickActionCard.tsx
+      LeagueFilterTabs.tsx
+      LeagueCard.tsx
+    feedback/
+      EmptyLeaguesState.tsx
+      LeaguesSkeleton.tsx
+  types/
+    league.ts
+  utils/
+    leagueFilters.ts
+```
+
+### Reglas
+
+* reutilizar componentes si ya existe algo similar
+* no meter toda la UI en un único archivo
+* separar tipado, lógica y presentación
+
+---
+
+## 9. Tipado esperado
+
+Crear tipos base en `types/league.ts`.
+
+Ejemplo orientativo:
+
+```ts
+export type LeagueRole = 'admin' | 'coach' | 'player' | 'field_delegate';
+export type LeagueStatus = 'active' | 'finished';
+
+export interface LeagueItem {
+  id: string;
+  name: string;
+  season: string;
+  status: LeagueStatus;
+  role: LeagueRole;
+  isFavorite: boolean;
+  teamName?: string;
+  teamsCount: number;
+  crestUrl?: string | null;
+  canReactivate?: boolean;
+}
+```
+
+---
+
+## 10. Lógica obligatoria
+
+Aplicar estas reglas exactas:
+
+```ts
+if (leagues.length === 0) {
+  // mostrar empty state
+  // ocultar sección "Mis ligas"
+}
+
+if (!league.crestUrl) {
+  // usar escudo fallback por defecto
+}
+
+if (league.status === 'active') {
+  // botón "Entrar"
+}
+
+if (league.status === 'finished' && league.canReactivate) {
+  // botón "Reactivar liga"
+}
+
+if (league.status === 'finished' && !league.canReactivate) {
+  // botón deshabilitado
+}
+```
+
+---
+
+## 11. Datos mock temporales
+
+Añadir mocks de ejemplo para probar la UI mientras no se conecta la API real.
+
+Incluir varios casos:
+
+* liga activa
+* liga finalizada con permiso para reactivar
+* liga finalizada sin permiso
+* liga favorita
+* liga sin escudo para validar fallback
+
+---
+
+## 12. Resultado esperado
+
+Quiero que generes:
+
+1. La pantalla principal completa
+2. Los componentes reutilizables necesarios
+3. Los tipos base
+4. Los mocks temporales
+5. La lógica de búsqueda y filtros
+6. El fallback del escudo por defecto
+7. El botón dinámico según estado/permisos
+
+### Importante
+
+El resultado debe estar:
+
+* limpio
+* mantenible
+* modular
+* preparado para conectar luego con store/API real
+* adaptado a React Native + Expo + NativeWind
+
+````
+
+---
+
+# Versión corta en Markdown
+
+```md
+# Tarea
+
+Desarrolla la pantalla principal mobile de GoalApp en React Native + Expo + NativeWind.
+
+## Contexto
+Proyecto con estructura:
+
+```txt
+src
+├── app
+│   ├── (tabs)
+│   ├── auth
+│   └── matches/all_finished
+├── components
+│   ├── feedback
+│   ├── layout
+│   └── ui
+├── constants
+├── hooks
+├── providers
+├── services/api
+├── store
+├── styles
+├── types
+└── utils
+````
+
+## Reglas
+
+* ya existen colores en `constants`
+* ya existen estilos reutilizables en `styles`
+* evitar hardcodear estilos repetidos
+* usar `SafeAreaView` + `ScrollView`
+* componentizar
+* dejarlo preparado para conectar luego con API/store real
+
+## Pantalla
+
+### Header
+
+* logo circular
+* texto `GoalApp`
+* campana de notificaciones
+
+### Bienvenida
+
+* `Hola, Miguel`
+* `Primer acceso`
+* `Elige cómo empezar`
+
+### Acciones
+
+Dos cards:
+
+* `Crear nueva liga`
+* `Unirme a una liga`
+
+### Si hay ligas
+
+Mostrar:
+
+* título `Mis ligas`
+* buscador `Buscar liga...`
+* filtros: `Todas`, `Activas`, `Finalizadas`, `Favoritas`
+* listado de cards de ligas
+
+### Si no hay ligas
+
+Ocultar sección de ligas y mostrar:
+
+* `Aún no tienes ligas`
+* `Crea una nueva liga o únete con un código de invitación para empezar`
+
+## Card de liga
+
+Debe incluir:
+
+* badge de rol (`Admin`, `Entrenador`, `Delegado de campo`, `Jugador`)
+* estrella de favorito
+* escudo/imágen
+* fallback obligatorio al escudo por defecto con bordes blancos si no hay imagen
+* nombre de liga
+* temporada
+* estado:
+
+  * activa con punto verde
+  * finalizada con punto rojo
+* mi equipo
+* equipos en la liga
+* botón:
+
+  * `Entrar` si está activa
+  * `Reactivar liga` si está finalizada y tiene permisos
+  * deshabilitado si está finalizada y no tiene permisos
+
+## Tipos
+
+Crear tipos base como:
+
+```ts
+export type LeagueRole = 'admin' | 'coach' | 'player' | 'field_delegate';
+export type LeagueStatus = 'active' | 'finished';
+
+export interface LeagueItem {
+  id: string;
+  name: string;
+  season: string;
+  status: LeagueStatus;
+  role: LeagueRole;
+  isFavorite: boolean;
+  teamName?: string;
+  teamsCount: number;
+  crestUrl?: string | null;
+  canReactivate?: boolean;
+}
+```
+
+## Lógica obligatoria
+
+```ts
+if (leagues.length === 0) {
+  // empty state
+}
+
+if (!league.crestUrl) {
+  // usar escudo por defecto
+}
+
+if (league.status === 'active') {
+  // botón Entrar
+}
+
+if (league.status === 'finished' && league.canReactivate) {
+  // botón Reactivar liga
+}
+
+if (league.status === 'finished' && !league.canReactivate) {
+  // botón deshabilitado
+}
+```
+
+## Componentes sugeridos
+
+```txt
+src/
+  app/(tabs)/index.tsx
+  components/layout/AppHeader.tsx
+  components/ui/QuickActionCard.tsx
+  components/ui/LeagueFilterTabs.tsx
+  components/ui/LeagueCard.tsx
+  components/feedback/EmptyLeaguesState.tsx
+  components/feedback/LeaguesSkeleton.tsx
+  types/league.ts
+  utils/leagueFilters.ts
+```
+
+## Entrega esperada
+
+Genera:
+
+* pantalla principal
+* componentes reutilizables
+* tipos
+* mocks
+* filtros
+* búsqueda
+* fallback de escudo
+* código limpio y mantenible
+
+````
+
+---
+
+También te dejo una **plantilla de instrucción fija** para próximas pantallas, para que Claude/Ollama siga siempre el mismo formato:
+
+```md
+# Instrucciones de salida
+
+Respóndeme siempre en formato Markdown.
+
+## Cuando generes pantallas:
+- describe estructura visual
+- describe comportamiento
+- describe estados vacíos/cargando/error
+- propone componentización
+- da tipado si aplica
+- respeta React Native + Expo + NativeWind
+- evita hardcodear colores si ya existen en constants/styles
+- usa nombres de archivos sugeridos
+- entrega código modular y mantenible
+- Añade comentarios descriptivos entendibles de lo que se está haciendo y con que propósito se hace.

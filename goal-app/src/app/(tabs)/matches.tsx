@@ -4,9 +4,9 @@ import { MatchesTab } from "@/src/types/auth";
 
 import { styles } from "@/src/styles";
 import { MatchesTabs } from "@/src/components/ui/MatchesTabs";
-import Live from "../matches/Live";
-import Programmed from "../matches/Programmed";
-import Finished from "../matches/Finished";
+import Live from "../matches/all_finished/live";
+import Programmed from "../matches/all_finished/alignment";
+import Finished from "../matches/finished";
 
 interface TabContentProps {
   tab: MatchesTab;
@@ -25,12 +25,12 @@ export default function Matches() {
   return (
     <View className={styles.screenBase}>
       <View className=" pt-5">
-        
+
         <Text className={`${styles.titleText} mb-6`}>
           Iniciar Sesión
         </Text>
 
-        <MatchesTabs 
+        <MatchesTabs
           activeTab={activeTab}
           setActiveTab={setActiveTab}
         />

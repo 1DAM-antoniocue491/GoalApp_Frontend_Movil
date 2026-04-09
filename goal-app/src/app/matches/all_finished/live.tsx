@@ -5,15 +5,15 @@ import { Ionicons } from '@expo/vector-icons';
 import { SafeAreaView } from "react-native-safe-area-context";
 import { StatisticTabs } from "@/src/types/auth";
 import { MatchesLive } from "@/src/components/ui/MatchesLive";
-import Statistics from "./Statistics";
-import Alignment from "./Alignment";
+import Statistics from "./statistics";
+import Alignment from "./alignment";
 
 interface TabContentProps {
     tab: StatisticTabs;
 }
 
 function TabContent({ tab }: TabContentProps) {
-    if (tab === 'statistics') return <Statistics/>;
+    if (tab === 'statistics') return <Statistics />;
     if (tab === 'alignment') return <Alignment />;
     return null;
 }
@@ -59,7 +59,7 @@ export default function Live() {
                         </View>
                     </View>
                 </View>
-                <MatchesLive activeTab={activeTab} setActiveTab={setActiveTab}/>
+                <MatchesLive activeTab={activeTab} setActiveTab={setActiveTab} />
                 <TabContent tab={activeTab} />
             </SafeAreaView>
         </View>

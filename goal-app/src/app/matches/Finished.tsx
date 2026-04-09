@@ -12,8 +12,8 @@ export default function Finished() {
                 <Text className="bg-[#C8F558] font-bold px-3 py-1 rounded">Jornada 10</Text>
                 <View className="h-px bg-[#C8F558] w-full mt-8" />
             </View>
-            <View className="border border-[#C8F558] rounded-2xl m-3 p-5 bg-[#161616] shadow-sm shadow-[#C8F558]">
-                <Link href={'../matches/PantallasFinished/live' as RelativePathString}>
+            <View className="border border-[#C8F558] rounded-2xl m-3 p-5 bg-[#161616] shadow-sm shadow-[#C8F558] justify-between">
+                <Link href={'../matches/all_finished/live' as RelativePathString}>
                     <View className="flex flex-row justify-between items-center w-full">
                         <View className="flex flex-col items-center">
                             <Image source={require('../../../assets/images/betis.png')} className="w-15 h-15" resizeMode="contain" />
@@ -35,10 +35,6 @@ export default function Finished() {
                     </View>
                 </Link>
             </View>
-
-
-
-
         </View>
     );
 }

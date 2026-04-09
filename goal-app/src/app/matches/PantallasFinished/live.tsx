@@ -4,9 +4,9 @@ import { styles } from "@/src/styles";
 import { Ionicons } from '@expo/vector-icons';
 import { SafeAreaView } from "react-native-safe-area-context";
 import { StatisticTabs } from "@/src/types/auth";
-import Statistics from "./statistics";
-import Alignment from "./alignment";
 import { MatchesLive } from "@/src/components/ui/MatchesLive";
+import Statistics from "./Statistics";
+import Alignment from "./Alignment";
 
 interface TabContentProps {
     tab: StatisticTabs;

@@ -1,6 +1,4 @@
 import { Text, View } from "react-native";
-import { Screen } from "../../components/layout/Screen";
-import { Button } from "../../components/ui/Button";
 import React from "react";
 import { styles } from "@/src/styles";
 import { Ionicons } from '@expo/vector-icons';
@@ -70,10 +68,7 @@ export default function HomeScreen() {
                         </View>
                     </View>
                 </View>
-
-
             </SafeAreaView>
         </View >
-
     );
 }

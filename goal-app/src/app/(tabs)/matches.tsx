@@ -4,9 +4,10 @@ import { MatchesTab } from "@/src/types/auth";
 
 import { styles } from "@/src/styles";
 import { MatchesTabs } from "@/src/components/ui/MatchesTabs";
-import Live from "../matches/all_finished/live";
-import Programmed from "../matches/all_finished/alignment";
-import Finished from "../matches/finished";
+import Live from "../matches/Live";
+import Programmed from "../matches/Programmed";
+import Finished from "../matches/Finished";
+
 
 interface TabContentProps {
   tab: MatchesTab;

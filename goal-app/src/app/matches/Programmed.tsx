@@ -1,5 +1,4 @@
 import { Text, View, Image } from "react-native";
-import { Screen } from "../../components/layout/Screen";
 import { Button } from "../../components/ui/Button";
 import React from "react";
 import { styles } from "@/src/styles";

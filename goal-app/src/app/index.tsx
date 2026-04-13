@@ -12,6 +12,6 @@ import React from "react";
 export default function Index() {
   // Redirigir al flujo de auth (login/registro)
   return (
-    <Redirect href={('/auth/login') as RelativePathString} />
+    <Redirect href={('../(tabs)/matches') as RelativePathString} />
   );
 }

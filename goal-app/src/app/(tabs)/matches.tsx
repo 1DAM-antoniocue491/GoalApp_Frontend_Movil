@@ -25,6 +25,7 @@ export default function Matches() {
 
   return (
     <View className={styles.screenBase}>
+      
       <View className=" pt-5">
 
         <Text className={`${styles.titleText} mb-6`}>

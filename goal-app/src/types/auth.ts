@@ -25,3 +25,6 @@ export type MatchesTab = "live" | "programmed" |"finished" ;
 // cuál tab está activa de par.
 export type StatisticTabs = "statistics" | "alignment";
 
+// ProgrammedTabs necesita saber son los botones que permiten saber
+// cuál tab está activa de par.
+export type ProgrammedTabs = "previousMeeting" | "squad";

@@ -1,0 +1,87 @@
+Sí, conviértelo en un componente reutilizable.
+
+## Qué quiero
+
+No quiero repetir este bloque en `login` y `register`:
+
+* `TouchableOpacity`
+* icono `eye-outline / eye-off-outline`
+* `accessibilityLabel`
+* `hitSlop`
+* lógica de `secureTextEntry`
+
+## Solución correcta
+
+Crea un componente reutilizable llamado:
+
+* `PasswordField.tsx`
+
+Este componente debe estar construido **encima de `FormField`** y encapsular toda la lógica de mostrar/ocultar contraseña.
+
+## Responsabilidades de `PasswordField`
+
+Debe encargarse de:
+
+1. tener estado interno:
+
+   * `const [isVisible, setIsVisible] = useState(false);`
+
+2. pasar a `FormField`:
+
+   * `secureTextEntry={!isVisible}`
+
+3. renderizar automáticamente el botón derecho con el icono del ojo:
+
+   * `eye-outline`
+   * `eye-off-outline`
+
+4. incluir accesibilidad:
+
+   * `accessibilityRole="button"`
+   * `accessibilityLabel={isVisible ? 'Ocultar contraseña' : 'Mostrar contraseña'}`
+
+5. mantener el estilo visual actual sin romper diseño
+
+## API esperada del componente
+
+Quiero poder usarlo así:
+
+```tsx
+<PasswordField
+  label="Contraseña"
+  value={form.password}
+  onChangeText={(v) => handleChange('password', v)}
+  placeholder="••••••••"
+/>
+```
+
+y también así:
+
+```tsx
+<PasswordField
+  label="Repetir Contraseña"
+  value={form.confirmPassword}
+  onChangeText={(v) => handleChange('confirmPassword', v)}
+  placeholder="••••••••"
+/>
+```
+
+## Importante
+
+* `PasswordField` debe reutilizar internamente `FormField`
+* `FormField` puede ampliarse para aceptar `rightElement` si aún no lo soporta
+* no cambiar validaciones, navegación ni animaciones existentes
+* no duplicar lógica entre `login.tsx` y `register.tsx`
+
+## Qué quiero que me devuelvas
+
+Devuélveme el código final completo de:
+
+* `components/ui/PasswordField.tsx`
+* `components/ui/FormField.tsx` (solo si hay que modificarlo)
+* `login.tsx`
+* `register.tsx`
+
+## Objetivo final
+
+Que `login` y `register` queden más limpios y que toda la lógica del ojo quede centralizada en un único componente reutilizable.

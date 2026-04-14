@@ -20,14 +20,15 @@ import {
     Animated,
     Easing,
 } from 'react-native';
-import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
+import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 // Componentes reutilizables de la UI de autenticación
 import { AppLogo } from '../../components/ui/AppLogo';
 import { AuthTabs } from '../../components/ui/AuthTabs';
 import { FormField } from '../../components/ui/FormField';
+import { PasswordField } from '../../components/ui/PasswordField';
 import { Button } from '../../components/ui/Button';
 
 // Estilos compartidos del proyecto
@@ -283,23 +284,19 @@ export default function RegisterScreen() {
                         />
 
                         {/* Campo contraseña */}
-                        <FormField
+                        <PasswordField
                             label="Contraseña"
-                            icon={<Ionicons name="lock-closed-outline" size={18} color="#8A9AA4" />}
-                            placeholder="••••••••"
                             value={form.password}
                             onChangeText={(v) => handleChange('password', v)}
-                            secureTextEntry
+                            placeholder="••••••••"
                         />
 
                         {/* Campo repetir contraseña */}
-                        <FormField
+                        <PasswordField
                             label="Repetir Contraseña"
-                            icon={<Ionicons name="lock-closed-outline" size={18} color="#8A9AA4" />}
-                            placeholder="••••••••"
                             value={form.confirmPassword}
                             onChangeText={(v) => handleChange('confirmPassword', v)}
-                            secureTextEntry
+                            placeholder="••••••••"
                         />
 
                         {/* Error animado cuando las contraseñas no coinciden */}

@@ -3,39 +3,19 @@
  *
  * Esta pantalla:
  * - Muestra el acceso por email y contraseña
- * - Usa animaciones suaves de entrada
- * - Mantiene el fondo oscuro consistente para evitar flashes
- * - Usa safe area real para que la cabecera no quede demasiado abajo
  * - Navega al onboarding al iniciar sesión correctamente
  */
 
-import React, { useEffect, useRef, useState } from 'react';
-import {
-    View,
-    Text,
-    ScrollView,
-    KeyboardAvoidingView,
-    Platform,
-    Alert,
-    Animated,
-    Easing,
-} from 'react-native';
+import React, { useState } from 'react';
+import { Text, Alert } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 // Componentes reutilizables de la UI de autenticación
-import { AppLogo } from '../../components/ui/AppLogo';
-import { AuthTabs } from '../../components/ui/AuthTabs';
+import { AuthScreenLayout } from '../../components/ui/AuthScreenLayout';
 import { FormField } from '../../components/ui/FormField';
 import { PasswordField } from '../../components/ui/PasswordField';
 import { Button } from '../../components/ui/Button';
-
-// Estilos compartidos del proyecto
-import { styles } from '../../styles';
-
-// Colores del sistema de diseño
-import { Colors } from '../../constants/colors';
 
 // Tipado del formulario de login
 import type { LoginForm } from '../../types/auth';
@@ -47,16 +27,6 @@ export default function LoginScreen() {
     // Router de Expo para navegación
     const router = useRouter();
 
-    // Insets reales del dispositivo para colocar mejor la pantalla
-    const insets = useSafeAreaInsets();
-
-    // Fondo oscuro consistente de la pantalla
-    const screenBackground = Colors.bg.surface1;
-
-    // Espaciado superior consistente:
-    // sube la cabecera para que no parezca "caída" y respeta notch/status bar
-    const topSpacing = Math.max(insets.top + 6, 18);
-
     // Estado principal del formulario
     const [form, setForm] = useState<LoginForm>({
         email: '',
@@ -65,40 +35,6 @@ export default function LoginScreen() {
 
     // Estado de loading para el botón
     const [isLoading, setIsLoading] = useState(false);
-
-    // Animación de entrada para la cabecera
-    const headerAnim = useRef(new Animated.Value(0)).current;
-
-    // Animación de entrada para la card del formulario
-    const cardAnim = useRef(new Animated.Value(0)).current;
-
-    // Animación de entrada para el botón CTA
-    const buttonAnim = useRef(new Animated.Value(0)).current;
-
-    // Al montar la pantalla, lanzamos una secuencia escalonada
-    // para que el contenido entre de forma suave y profesional
-    useEffect(() => {
-        Animated.stagger(110, [
-            Animated.timing(headerAnim, {
-                toValue: 1,
-                duration: 320,
-                easing: Easing.out(Easing.cubic),
-                useNativeDriver: true,
-            }),
-            Animated.timing(cardAnim, {
-                toValue: 1,
-                duration: 340,
-                easing: Easing.out(Easing.cubic),
-                useNativeDriver: true,
-            }),
-            Animated.timing(buttonAnim, {
-                toValue: 1,
-                duration: 300,
-                easing: Easing.out(Easing.cubic),
-                useNativeDriver: true,
-            }),
-        ]).start();
-    }, [headerAnim, cardAnim, buttonAnim]);
 
     // Helper para actualizar cualquier campo del formulario
     function handleChange(field: keyof LoginForm, value: string) {
@@ -138,129 +74,43 @@ export default function LoginScreen() {
         }
     }
 
-    // Estilo animado de la cabecera:
-    // entra con fade y un pequeño desplazamiento vertical
-    const headerAnimatedStyle = {
-        opacity: headerAnim,
-        transform: [
-            {
-                translateY: headerAnim.interpolate({
-                    inputRange: [0, 1],
-                    outputRange: [16, 0],
-                }),
-            },
-        ],
-    };
-
-    // Estilo animado de la card:
-    // entra un poco después que la cabecera
-    const cardAnimatedStyle = {
-        opacity: cardAnim,
-        transform: [
-            {
-                translateY: cardAnim.interpolate({
-                    inputRange: [0, 1],
-                    outputRange: [22, 0],
-                }),
-            },
-        ],
-    };
-
-    // Estilo animado del botón:
-    // entra el último para completar la secuencia
-    const buttonAnimatedStyle = {
-        opacity: buttonAnim,
-        transform: [
-            {
-                translateY: buttonAnim.interpolate({
-                    inputRange: [0, 1],
-                    outputRange: [26, 0],
-                }),
-            },
-        ],
-    };
-
     return (
-        // KeyboardAvoidingView evita que el teclado tape los inputs
-        <KeyboardAvoidingView
-            style={{ flex: 1, backgroundColor: screenBackground }}
-            behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        <AuthScreenLayout
+            title="Iniciar Sesión"
+            activeTab="login"
+            ctaButton={
+                <Button
+                    label="Iniciar Sesión"
+                    isLoading={isLoading}
+                    onPress={handleLogin}
+                    disabled={!isFormValid}
+                />
+            }
         >
-            {/* ScrollView para dispositivos pequeños y teclados abiertos */}
-            <ScrollView
-                style={{ flex: 1, backgroundColor: screenBackground }}
-                contentContainerStyle={{
-                    flexGrow: 1,
-                    backgroundColor: screenBackground,
-                }}
-                keyboardShouldPersistTaps="handled"
-                keyboardDismissMode="on-drag"
-                showsVerticalScrollIndicator={false}
-            >
-                {/* Contenedor principal de la pantalla */}
-                <View
-                    className={styles.screenContent}
-                    style={{
-                        backgroundColor: screenBackground,
-                        justifyContent: 'flex-start',
-                        paddingTop: topSpacing,
-                        paddingBottom: 24,
-                    }}
-                >
-                    {/* Cabecera animada */}
-                    <Animated.View style={headerAnimatedStyle} className="items-center">
-                        {/* Logo de la aplicación */}
-                        <AppLogo />
+            {/* Campo de email */}
+            <FormField
+                label="Gmail"
+                icon={<Ionicons name="mail-outline" size={18} color="#8A9AA4" />}
+                placeholder="john.doe@goalapp.com"
+                value={form.email}
+                onChangeText={(v) => handleChange('email', v)}
+                keyboardType="email-address"
+                autoCapitalize="none"
+                autoComplete="email"
+            />
 
-                        {/* Título principal */}
-                        <Text className={`${styles.titleText} mb-4`}>Iniciar Sesión</Text>
+            {/* Campo de contraseña */}
+            <PasswordField
+                label="Contraseña"
+                value={form.password}
+                onChangeText={(v) => handleChange('password', v)}
+                placeholder="••••••••"
+            />
 
-                        {/* Tabs visuales de auth */}
-                        <AuthTabs activeTab="login" />
-                    </Animated.View>
-
-                    {/* Card del formulario */}
-                    <Animated.View
-                        style={cardAnimatedStyle}
-                        className={`${styles.formCard} mt-4 mb-5 pt-8 pb-8`}
-                    >
-                        {/* Campo de email */}
-                        <FormField
-                            label="Gmail"
-                            icon={<Ionicons name="mail-outline" size={18} color="#8A9AA4" />}
-                            placeholder="john.doe@goalapp.com"
-                            value={form.email}
-                            onChangeText={(v) => handleChange('email', v)}
-                            keyboardType="email-address"
-                            autoCapitalize="none"
-                            autoComplete="email"
-                        />
-
-                        {/* Campo de contraseña */}
-                        <PasswordField
-                            label="Contraseña"
-                            value={form.password}
-                            onChangeText={(v) => handleChange('password', v)}
-                            placeholder="••••••••"
-                        />
-
-                        {/* Acción secundaria */}
-                        <Text className="self-end text-[#18A2FB] text-sm">
-                            ¿Olvidó la contraseña?
-                        </Text>
-                    </Animated.View>
-
-                    {/* Botón CTA animado */}
-                    <Animated.View style={buttonAnimatedStyle}>
-                        <Button
-                            label="Iniciar Sesión"
-                            isLoading={isLoading}
-                            onPress={handleLogin}
-                            disabled={!isFormValid}
-                        />
-                    </Animated.View>
-                </View>
-            </ScrollView>
-        </KeyboardAvoidingView>
+            {/* Acción secundaria */}
+            <Text className="self-end text-[#18A2FB] text-sm">
+                ¿Olvidó la contraseña?
+            </Text>
+        </AuthScreenLayout>
     );
 }

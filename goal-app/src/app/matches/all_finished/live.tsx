@@ -1,10 +1,10 @@
 import { Text, View, Image } from "react-native";
 import React, { useState } from "react";
-import { styles } from "@/src/styles";
+import { styles } from "@/src/shared/styles";
 import { Ionicons } from '@expo/vector-icons';
 import { SafeAreaView } from "react-native-safe-area-context";
-import { StatisticTabs } from "@/src/types/auth";
-import { MatchesLive } from "@/src/components/ui/MatchesLive";
+import { StatisticTabs } from "@/src/shared/types/auth";
+import { MatchesLive } from "@/src/features/matches/components/MatchesLive";
 import Statistics from "./statistics";
 import Alignment from "./alignment";
 import { Link, RelativePathString } from "expo-router";

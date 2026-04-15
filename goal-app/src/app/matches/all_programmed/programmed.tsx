@@ -1,14 +1,14 @@
 import { Text, View, Image } from "react-native";
 import React, { useState } from "react";
-import { styles } from "@/src/styles";
-import { MatchesTabs } from "@/src/components/ui/MatchesTabs";
+import { styles } from "@/src/shared/styles";
+import { MatchesTabs } from "@/src/features/matches/components/MatchesTabs";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Link, RelativePathString } from "expo-router";
 import { Ionicons } from '@expo/vector-icons';
-import { ProgrammedTabs } from "@/src/types/auth";
+import { ProgrammedTabs } from "@/src/shared/types/auth";
 import PreviousMeetings from "../all_programmed/previousMeetings";
 import Squad from "./squad";
-import { MatchesProgrammed } from "@/src/components/ui/MatchesProgrammed";
+import { MatchesProgrammed } from "@/src/features/matches/components/MatchesProgrammed";
 interface TabContentProps {
     tab: ProgrammedTabs;
 }

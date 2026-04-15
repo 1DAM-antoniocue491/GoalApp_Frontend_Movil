@@ -1,7 +1,7 @@
 import { Text, View } from "react-native";
 import React from "react";
-import { styles } from "@/src/styles";
-import { MatchesTabs } from "@/src/components/ui/MatchesTabs";
+import { styles } from "@/src/shared/styles";
+import { MatchesTabs } from "@/src/features/matches/components/MatchesTabs";
 
 export default function HomeScreen() {
     return (

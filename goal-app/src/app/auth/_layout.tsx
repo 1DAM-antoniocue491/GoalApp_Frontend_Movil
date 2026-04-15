@@ -12,7 +12,7 @@ import React from 'react';
 import { Stack } from 'expo-router';
 
 // Importamos los colores del sistema de diseño para no hardcodear
-import { Colors } from '../../constants/colors';
+import { Colors } from '@/src/shared/constants/colors';
 
 export default function AuthLayout() {
     return (

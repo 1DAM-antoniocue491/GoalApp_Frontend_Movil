@@ -1,9 +1,9 @@
 import React, { useState } from "react";
 import { View, Text } from "react-native";
-import { MatchesTab } from "@/src/types/auth";
+import { MatchesTab } from "@/src/shared/types/auth";
 
-import { styles } from "@/src/styles";
-import { MatchesTabs } from "@/src/components/ui/MatchesTabs";
+import { styles } from "@/src/shared/styles";
+import { MatchesTabs } from "@/src/features/matches/components/MatchesTabs";
 import Live from "../matches/Live";
 import Programmed from "../matches/Programmed";
 import Finished from "../matches/Finished";

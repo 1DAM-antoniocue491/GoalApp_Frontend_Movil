@@ -1,6 +1,6 @@
 import { Text, View } from "react-native";
 import React from "react";
-import { styles } from "@/src/styles";
+import { styles } from "@/src/shared/styles";
 import { Ionicons } from '@expo/vector-icons';
 
 import { SafeAreaView } from "react-native-safe-area-context";

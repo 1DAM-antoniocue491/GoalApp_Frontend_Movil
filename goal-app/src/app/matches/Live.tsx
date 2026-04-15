@@ -1,9 +1,9 @@
 import { Text, View, Image } from "react-native";
-import { Button } from "../../components/ui/Button";
+import { Button } from "@/src/shared/components/ui/Button";
 import React from "react";
-import { styles } from "@/src/styles";
+import { styles } from "@/src/shared/styles";
 import { Ionicons } from '@expo/vector-icons';
-import { StatisticTabs } from "@/src/types/auth";
+import { StatisticTabs } from "@/src/shared/types/auth";
 import Statistics from "./all_finished/statistics";
 import Alignment from "./all_finished/alignment";
 import { Link, RelativePathString } from "expo-router";

@@ -11,17 +11,19 @@ import { Text, Animated, Easing, Alert } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 
+import { routes } from '@/src/shared/config/routes';
+
 // Componentes reutilizables de la UI de autenticación
-import { AuthScreenLayout } from '../../components/ui/AuthScreenLayout';
-import { FormField } from '../../components/ui/FormField';
-import { PasswordField } from '../../components/ui/PasswordField';
-import { Button } from '../../components/ui/Button';
+import { AuthScreenLayout } from '@/src/shared/components/ui/AuthScreenLayout';
+import { FormField } from '@/src/shared/components/ui/FormField';
+import { PasswordField } from '@/src/shared/components/ui/PasswordField';
+import { Button } from '@/src/shared/components/ui/Button';
 
 // Tipado del formulario de registro
-import type { RegisterForm } from '../../types/auth';
+import type { RegisterForm } from '@/src/shared/types/auth';
 
 // Helper mock para crear usuario
-import { createUser } from '../../data/data';
+import { createUser } from '@/src/features/auth/services/authService';
 
 export default function RegisterScreen() {
     // Router para navegación
@@ -91,7 +93,7 @@ export default function RegisterScreen() {
                         {
                             text: 'OK',
                             // Replace para no dejar register detrás en el stack
-                            onPress: () => router.replace('/onboarding'),
+                            onPress: () => router.replace(routes.private.onboarding),
                         },
                     ]
                 );

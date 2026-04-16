@@ -1,6 +1,3 @@
-Pega esto como `CONTRIBUTING.md` en la raíz del proyecto:
-
-````md
 # Contributing to GoalApp
 
 Gracias por contribuir a GoalApp.

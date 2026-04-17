@@ -16,7 +16,7 @@ Disabled — #52525B
 
 ### Brand
 
-Primary — #D4FF59
+Primary — #C4F135
 Secondary — #00B4D8
 Accent — #18A0FB
 

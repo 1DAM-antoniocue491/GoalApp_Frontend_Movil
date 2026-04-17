@@ -6,21 +6,21 @@ export const Colors = {
   // Backgrounds (del style guide)
   bg: {
     base: "#0F0F13", // fondo más oscuro, la pantalla principal
-    surface1: "#1D1C22", // tarjetas, formularios
+    surface1: "#1C1C22", // tarjetas, formularios
     surface2: "#2A2A35", // inputs, elementos elevados
   },
 
   // Textos
   text: {
     primary: "#FFFFFF",
-    secondary: "#8A9AA4",
-    disabled: "#525258",
+    secondary: "#A1A1AA",
+    disabled: "#52525B",
   },
 
   // Marca (brand)
   brand: {
     primary: "#C4F135", // verde lima → botón principal, activo
-    secondary: "#00D425", // verde → acento secundario
+    secondary: "#00B4D8", // verde → acento secundario
     accent: "#18A2FB", // azul → links como "¿Olvidó la contraseña?"
   },
 

@@ -19,7 +19,7 @@ export const Colors = {
 
   // Marca (brand)
   brand: {
-    primary: "#C4F135", // verde lima → botón principal, activo
+    primary: "#C8F558", // verde lima → botón principal, activo
     secondary: "#00B4D8", // verde → acento secundario
     accent: "#18A2FB", // azul → links como "¿Olvidó la contraseña?"
   },

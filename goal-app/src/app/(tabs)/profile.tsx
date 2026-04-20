@@ -7,7 +7,6 @@ import { SafeAreaView } from "react-native-safe-area-context";
 
 export default function HomeScreen() {
     return (
-
         <View className={styles.screenBase}>
             <SafeAreaView className="flex-1 m-3">
                 <View className="flex flex-row justify-between items-center">

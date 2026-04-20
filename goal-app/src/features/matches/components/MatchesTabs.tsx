@@ -21,15 +21,15 @@ export function MatchesTabs({ activeTab, setActiveTab }: MatchesTabsProps) {
     // navegamos entre rutas. Directo, Programados y Finalizados.
 
     return (
-        <SafeAreaView className="flex-1 m-3 ">
+        <SafeAreaView className="flex-1 ">
             <View className="flex flex-col">
-                <View className="flex flex-row justify-between">
+                <View className="flex flex-row justify-between gap-2 mr-3 ml-3">
                     <TouchableOpacity
                         onPress={() => setActiveTab('live')}
-                        className={activeTab === 'live' ? styles.tabPartido : styles.tabPartidoInactive}>
+                        className={activeTab === 'live' ? styles.tabStateMatch : styles.tabStateMatchInactive}>
                         <View className="flex flex-row gap-2 items-center justify-center p-2">
                             <View className="w-3 h-3 bg-red-500 rounded-full" />
-                            <Text className={activeTab === 'live' ? styles.tabActiveText : styles.tabInactiveText}>
+                            <Text className={activeTab === 'live' ? styles.tabActiveMatchText : styles.tabInactiveMacthText}>
                                 Directo
                             </Text>
                         </View>
@@ -38,9 +38,9 @@ export function MatchesTabs({ activeTab, setActiveTab }: MatchesTabsProps) {
 
                     <TouchableOpacity
                         onPress={() => setActiveTab('programmed')}
-                        className={activeTab === 'programmed' ? styles.tabPartido : styles.tabPartidoInactive}>
+                        className={activeTab === 'programmed' ? styles.tabStateMatch : styles.tabStateMatchInactive}>
                         <View className="flex flex-row  justify-center p-2 ">
-                            <Text className={activeTab === 'programmed' ? styles.tabActiveText : styles.tabInactiveText}>
+                            <Text className={activeTab === 'programmed' ? styles.tabActiveMatchText : styles.tabInactiveMacthText}>
                                 Programados
 
                             </Text>
@@ -51,9 +51,9 @@ export function MatchesTabs({ activeTab, setActiveTab }: MatchesTabsProps) {
                    
                     <TouchableOpacity
                         onPress={() => setActiveTab('finished')}
-                        className={activeTab === 'finished' ? styles.tabPartido : styles.tabPartidoInactive}>
+                        className={activeTab === 'finished' ? styles.tabStateMatch : styles.tabStateMatchInactive}>
                         <View className="flex justify-center items-center p-2">
-                            <Text className={activeTab === 'finished' ? styles.tabActiveText : styles.tabInactiveText}>
+                            <Text className={activeTab === 'finished' ? styles.tabActiveMatchText : styles.tabInactiveMacthText}>
                                 Finalizados
                             </Text>
                         </View>

@@ -17,6 +17,10 @@ export interface RegisterForm {
 // cuál tab está activa.
 export type AuthTab = "login" | "register";
 
+// LeagueTab necesita saber son los botones que permiten saber
+// cuál tab está activa de par.
+export type LeagueTab = "match" | "teams" |"classification" ;
+
 // MatchesTabs necesita saber son los botones que permiten saber
 // cuál tab está activa de par.
 export type MatchesTab = "live" | "programmed" |"finished" ;

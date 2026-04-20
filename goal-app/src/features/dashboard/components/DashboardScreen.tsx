@@ -23,6 +23,7 @@ import {
   PlayerDashboard,
   FieldDelegateDashboard,
 } from '@/src/features/dashboard/components';
+import { SafeAreaView } from 'react-native-safe-area-context';
 
 export default function DashboardScreen() {
   const { session, hasActiveLeague } = useActiveLeague();
@@ -30,6 +31,7 @@ export default function DashboardScreen() {
   // Si no hay liga activa, mostrar mensaje
   if (!hasActiveLeague() || !session) {
     return (
+      <SafeAreaView className='flex-1'>
       <View className="flex-1 bg-[#0F0F13] items-center justify-center px-6">
         <Ionicons name="warning-outline" size={48} color="#525258" />
         <Text className="text-white font-bold text-lg mt-4 text-center">
@@ -39,6 +41,7 @@ export default function DashboardScreen() {
           Debes seleccionar una liga desde el onboarding
         </Text>
       </View>
+      </SafeAreaView>
     );
   }
 

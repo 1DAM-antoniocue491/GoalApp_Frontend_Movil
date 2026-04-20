@@ -40,6 +40,12 @@ export const styles = {
   tabPartido: ' flex-1 border-b-4 border-[#C8F558]',
   tabPartidoInactive: 'flex-1 border-b-1 border-[#C8F558]',
 
+  tabStateMatch: ' flex-1 bg-white rounded-2xl ',
+  tabStateMatchInactive: 'flex-1 bg-neutral-800 rounded-2xl',
+
+  tabActiveMatchText: 'text-black font-semibold text-sm items-center',
+  tabInactiveMacthText: 'text-[#8A9AA4] text-sm text-white',
+
 } as const;
 
 

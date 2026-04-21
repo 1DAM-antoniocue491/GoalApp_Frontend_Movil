@@ -5,18 +5,19 @@ import { Ionicons } from '@expo/vector-icons';
 import { Link, RelativePathString } from "expo-router";
 import { SafeAreaView } from "react-native-safe-area-context";
 
-export default function HomeScreen() {
+export default function EditProfile() {
     return (
         <View className={styles.screenBase}>
             <SafeAreaView className="flex-1 mt-3">
-                <View className="flex flex-row justify-between items-center">
+                <View className="flex flex-row justify-between items-center mr-2">
                     <View className="flex flex-row gap-4 mr-5 ml-5 items-center">
-                        <Text className="text-white text-2xl font-black">Mi Perfil</Text>
-                        <Link href={'../profile/editProfile' as RelativePathString} >
-                            <Ionicons name="create-outline" size={30} color="#FFFFFF" className="bg-[#0F0F13] justify-center items-center rounded-4xl p-2 border border-[#262626]" />
-                        </Link>
+                        <Text className="text-white text-2xl font-black">Editar Perfil</Text>
                     </View>
-                    <Ionicons name="settings-outline" size={30} color="#FFFFFF" className="mr-3" />
+                    <Link href="../(tabs)/profile">
+                        <View className="bg-[#211F21] border border-[#595959] rounded-2xl p-2 ">
+                            <Ionicons name="close-outline" size={30} color="#FFFFFF" />
+                        </View>
+                    </Link>
                 </View>
                 <View className="flex justify-center items-center gap-5 h-full mr-4 ml-4">
                     <Ionicons name="person-outline" size={60} color="#FFFFFF" className="mr-3 bg-[#211F21] border border-[#595959] rounded-full p-4" />
@@ -71,6 +72,11 @@ export default function HomeScreen() {
                             </View>
                         </View>
                     </View>
+                    <Link href="../(tabs)/profile">
+                        <View className="bg-[#C8F558] rounded-2xl w-full mr-4 ml-4 items-center justify-center">
+                            <Text className="p-3 font-black">Guardar</Text>
+                        </View>
+                    </Link>
                 </View>
             </SafeAreaView>
         </View >

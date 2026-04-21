@@ -1,4 +1,4 @@
-import { Text, View } from "react-native";
+import { Text, View, Image } from "react-native";
 import React, { useState } from "react";
 import { styles } from "@/src/shared/styles";
 import { MatchesTabs } from "@/src/features/matches/components/MatchesTabs";
@@ -23,23 +23,20 @@ function TabContent({ tab }: TabContentProps) {
 }
 
 export default function HomeScreen() {
-     const [activeTab, setActiveTab] = useState<LeagueTab>('match');
-    return (
-         <View className={styles.screenBase}>
-              
-              <View className="">
-        
-                <Text className={`${styles.titleText} mb-6`}>
-                  Iniciar Sesión
-                </Text>
-        
-                <LeagueTabs
-                  activeTab={activeTab}
-                  setActiveTab={setActiveTab}
-                />
-                <TabContent tab={activeTab} />
-        
-              </View>
-            </View>
-    );
+  const [activeTab, setActiveTab] = useState<LeagueTab>('match');
+  return (
+    <View className={styles.screenBase}>
+      <View className="mt-10">
+        <View className="flex flex-row items-center
+        ">
+          <Image source={require('../../../assets/images/liga.png')} className="w-15 h-15" resizeMode="contain" />
+          <Text className={`${styles.titleText} ml-6`}>2025-2026</Text>
+
+        </View>
+
+        <LeagueTabs activeTab={activeTab} setActiveTab={setActiveTab} />
+        <TabContent tab={activeTab} />
+      </View>
+    </View>
+  );
 }

@@ -68,11 +68,11 @@ export default function TabsLayout() {
 
       {/* Tab Partidos */}
       <Tabs.Screen
-        name="matches"
+        name="statistics"
         options={{
-          title: "Partidos",
+          title: "Estadísticas",
           tabBarIcon: ({ color, size }) => (
-            <Ionicons name="calendar-outline" color={color} size={size} />
+            <Ionicons name="stats-chart-outline" color={color} size={size} />
           ),
         }}
       />

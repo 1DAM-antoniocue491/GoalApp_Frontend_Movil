@@ -41,18 +41,20 @@ export function QuickActionCard({
       style={style}
     >
       {/* Icono circular decorativo */}
-      <View
-        className="h-12 w-12 rounded-full items-center justify-center"
-        style={{ backgroundColor: `${iconColor}15` }} // 15 = ~8% opacity
-      >
-        <Ionicons name={iconName} size={24} color={iconColor} />
+
+      <View className='flex-row gap-3 items-center'>
+        <View
+          className="h-12 w-12 rounded-full items-center justify-center"
+          style={{ backgroundColor: `${iconColor}15` }} // 15 = ~8% opacity
+        >
+          <Ionicons name={iconName} size={24} color={iconColor} />
+        </View>
+
+        {/* Textos */}
+        <Text className="text-white font-semibold text-lg">{title}</Text>
       </View>
 
-      {/* Textos */}
-      <View className="gap-1">
-        <Text className="text-white font-semibold text-lg">{title}</Text>
-        <Text className="text-[#8A9AA4] text-sm">{description}</Text>
-      </View>
+      <Text className="text-[#8A9AA4] text-sm">{description}</Text>
 
       {/* Botón CTA con flecha */}
       <TouchableOpacity

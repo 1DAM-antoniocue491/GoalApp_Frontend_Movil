@@ -48,3 +48,6 @@ app-example
 
 # Mejoras
 /Mejoras.txt
+
+# Ignorar los MD de los componentes
+*.md

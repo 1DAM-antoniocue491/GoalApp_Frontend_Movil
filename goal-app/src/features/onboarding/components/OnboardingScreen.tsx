@@ -17,6 +17,7 @@ import { routes } from '@/src/shared/config/routes';
 import { AppHeader } from '@/src/shared/components/layout/AppHeader';
 import { QuickActionCard } from '@/src/features/onboarding/components/QuickActionCard';
 import { LeagueFilterTabs } from '@/src/features/leagues/components/LeagueFilterTabs';
+
 import { LeagueCard } from '@/src/features/leagues/components/LeagueCard';
 import { EmptyLeaguesState } from '@/src/features/leagues/components/EmptyLeaguesState';
 import { LeaguesSkeleton } from '@/src/features/leagues/components/LeaguesSkeleton';
@@ -228,7 +229,7 @@ export default function OnboardingScreen() {
                 className="font-bold"
                 style={{
                   color: Colors.text.primary,
-                  fontSize: theme.fontSize.xxxl,
+                  fontSize: theme.fontSize.xxl,
                   lineHeight: 36,
                 }}
               >
@@ -346,7 +347,6 @@ export default function OnboardingScreen() {
                       <LeagueCard
                         key={league.id}
                         league={league}
-                        isFavorite={league.isFavorite ?? false}
                         onToggleFavorite={() => handleToggleFavorite(league.id)}
                         onPress={() => handleEnterLeague(league)}
                       />

@@ -2,8 +2,8 @@ import { styles } from "@/src/shared/styles";
 import React, { useState } from "react";
 import { View, Text, Image } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import Squad from "../../matches/all_programmed/squad";
 import { Information } from "./information";
+import { Squad } from "./squad";
 import { TeamTabs } from "@/src/shared/types/auth";
 import { TeamsTabs } from "@/src/features/matches/components/TeamsTabs";
 

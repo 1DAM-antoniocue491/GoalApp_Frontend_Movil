@@ -9,10 +9,13 @@
  * Nota: En producción, esto se persistiría con AsyncStorage o similar.
  */
 
-import React, { useState, useEffect, useCallback } from 'react';
-import { LeagueRole } from '@/src/shared/types/league';
+import React, { useState, useEffect, useCallback } from "react";
+import { LeagueRole } from "@/src/shared/types/league";
 
 export interface ActiveLeagueSession {
+  userName: string;
+  notificationCount?: number;
+  teamName?: string;
   leagueId: string;
   leagueName: string;
   role: LeagueRole;
@@ -37,14 +40,17 @@ const listeners: Set<(state: ActiveLeagueSession | null) => void> = new Set();
  * const { session, setSession, clearSession, hasActiveLeague, getRole } = useActiveLeague();
  */
 export function useActiveLeague(): ActiveLeagueState {
-  const [localState, setLocalState] = React.useState<ActiveLeagueSession | null>(state);
+  const [localState, setLocalState] =
+    React.useState<ActiveLeagueSession | null>(state);
 
   React.useEffect(() => {
     const listener = (newState: ActiveLeagueSession | null) => {
       setLocalState(newState);
     };
     listeners.add(listener);
-    return () => { listeners.delete(listener); };
+    return () => {
+      listeners.delete(listener);
+    };
   }, []);
 
   return {
@@ -81,14 +87,18 @@ export const activeLeagueStore = {
 
 // Hook para obtener el rol actual como string para uso en switch
 export function useActiveLeagueRole(): LeagueRole | null {
-  const [role, setRole] = React.useState<LeagueRole | null>(state?.role ?? null);
+  const [role, setRole] = React.useState<LeagueRole | null>(
+    state?.role ?? null,
+  );
 
   React.useEffect(() => {
     const listener = (newState: ActiveLeagueSession | null) => {
       setRole(newState?.role ?? null);
     };
     listeners.add(listener);
-    return () => { listeners.delete(listener); };
+    return () => {
+      listeners.delete(listener);
+    };
   }, []);
 
   return role;

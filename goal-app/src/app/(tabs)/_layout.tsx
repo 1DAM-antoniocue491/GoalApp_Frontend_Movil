@@ -44,13 +44,13 @@ export default function TabsLayout() {
         }}
       />
 
-      {/* Tab Liga */}
+      {/* Tab calendario */}
       <Tabs.Screen
-        name="league"
+        name="calendar"
         options={{
-          title: "Liga",
+          title: "Calendario",
           tabBarIcon: ({ color, size }) => (
-            <Ionicons name="trophy-outline" color={color} size={size} />
+            <Ionicons name="calendar-outline" color={color} size={size} />
           ),
         }}
       />

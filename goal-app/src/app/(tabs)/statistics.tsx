@@ -8,7 +8,9 @@ import Live from "../matches/Live";
 import Programmed from "../matches/Programmed";
 import Finished from "../matches/Finished";
 
-
+/*
+Todo esto se debe de modificar para que se ajuste a la nueva arquitectura de carpetas y rutas semánticas
+*/ 
 interface TabContentProps {
   tab: MatchesTab;
 }

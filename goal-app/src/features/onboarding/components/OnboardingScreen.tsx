@@ -167,6 +167,8 @@ export default function OnboardingScreen() {
         leagueId: league.id,
         leagueName: league.name,
         role: league.role,
+        userName: '',
+        teamName: undefined
       });
       router.push(routes.private.dashboard);
     },

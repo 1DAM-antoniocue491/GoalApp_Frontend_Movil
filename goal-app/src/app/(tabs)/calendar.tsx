@@ -29,6 +29,9 @@ export default function HomeScreen() {
       <View className="mt-10">
         <View className="flex flex-row items-center
         ">
+
+          {/* Logo de la liga, que se recibio en el formulario del onboarding
+          - debe de existir un despegable de temporadas si existe */}
           <Image source={require('../../../assets/images/liga.png')} className="w-15 h-15" resizeMode="contain" />
           <Text className={`${styles.titleText} ml-6`}>2025-2026</Text>
 

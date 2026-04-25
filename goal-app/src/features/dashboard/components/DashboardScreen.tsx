@@ -48,16 +48,46 @@ export default function DashboardScreen() {
   // Renderizar dashboard segun el rol
   switch (session.role) {
     case 'admin':
-      return <AdminDashboard leagueName={session.leagueName} />;
+      return (
+        <AdminDashboard
+          leagueId={session.leagueId}
+          leagueName={session.leagueName}
+          userName={session.userName}
+          notificationCount={session.notificationCount}
+        />
+      );
 
     case 'coach':
-      return <CoachDashboard leagueName={session.leagueName} />;
+      return (
+        <CoachDashboard
+          leagueId={session.leagueId}
+          leagueName={session.leagueName}
+          userName={session.userName}
+          teamName={session.teamName}
+          notificationCount={session.notificationCount}
+        />
+      );
 
     case 'player':
-      return <PlayerDashboard leagueName={session.leagueName} />;
+      return (
+        <PlayerDashboard
+          leagueId={session.leagueId}
+          leagueName={session.leagueName}
+          userName={session.userName}
+          teamName={session.teamName}
+          notificationCount={session.notificationCount}
+        />
+      );
 
     case 'field_delegate':
-      return <FieldDelegateDashboard leagueName={session.leagueName} />;
+      return (
+        <FieldDelegateDashboard
+          leagueId={session.leagueId}
+          leagueName={session.leagueName}
+          userName={session.userName}
+          notificationCount={session.notificationCount}
+        />
+      );
 
     default:
       return null;

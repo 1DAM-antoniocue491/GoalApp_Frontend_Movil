@@ -7,7 +7,7 @@ export default function Teams() {
   return (
     <View>
       <View className="flex items-center justify-center flex-row border border-[#C8F558] rounded-2xl m-3 p-5 bg-[#161616] shadow-sm shadow-[#C8F558] ">
-        <Link href={'../matches/all_finished/live' as RelativePathString}>
+        <Link href={'../league/teams/team' as RelativePathString}>
         <View className="items-center justify-center">
           <View className="flex flex-row items-center justify-center gap-4">
             <Image source={require('../../../assets/images/betis.png')} className="w-20 h-20" resizeMode="contain" />

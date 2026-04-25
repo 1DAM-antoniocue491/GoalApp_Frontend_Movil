@@ -5,7 +5,7 @@ import { Link, RelativePathString } from "expo-router";
 import { Ionicons } from '@expo/vector-icons';
 export default function Match() {
     return (
-        <View className="mr-3 ml-3 gap-3">
+        <View className="mr-3 ml-3 mt-5 gap-3">
             <View className="flex-row items-center gap-3">
                 <Image source={require('../../../assets/images/betis.png')} className="w-15 h-15" resizeMode="contain" />
                 <Text className="text-white text-3xl font-black">Real Betis Balompié</Text>

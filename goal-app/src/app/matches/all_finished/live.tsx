@@ -28,7 +28,7 @@ export default function Live() {
                 <View className="p-7 justify-center ">
                     <View className="flex flex-row justify-between">
                         <View className="flex flex-row items-center gap-2">
-                            <Link href={'../../(tabs)/league' as RelativePathString}>
+                            <Link href={'../../(tabs)/calendar' as RelativePathString}>
                                 <Ionicons name="chevron-back-circle-outline" size={25} color="#FFFFFF" className="bg-[#0F0F13] justify-center items-center rounded-4xl p-1 border border-[#262626]" />
                             </Link>
                             <Text className="text-3xl font-bold text-white">Partido</Text>

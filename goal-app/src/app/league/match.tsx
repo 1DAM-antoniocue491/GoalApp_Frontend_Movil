@@ -21,7 +21,7 @@ function TabContent({ tab }: TabContentProps) {
 export default function Match() {
     const [activeTab, setActiveTab] = useState<MatchesTab>('live');
     return (
-        <View>
+        <View className="mt-10">
             <MatchesTabs
                 activeTab={activeTab}
                 setActiveTab={setActiveTab}

@@ -27,15 +27,10 @@ export default function HomeScreen() {
   return (
     <View className={styles.screenBase}>
       <View className="mt-10">
-<<<<<<< Updated upstream:goal-app/src/app/(tabs)/calendar.tsx
-        <View className="flex flex-row items-center
-        ">
+        <View className="flex flex-row items-center">
 
           {/* Logo de la liga, que se recibio en el formulario del onboarding
           - debe de existir un despegable de temporadas si existe */}
-=======
-        <View className="flex flex-row items-center">
->>>>>>> Stashed changes:goal-app/src/app/(tabs)/league.tsx
           <Image source={require('../../../assets/images/liga.png')} className="w-15 h-15" resizeMode="contain" />
           <Text className={`${styles.titleText} ml-6`}>2025-2026</Text>
 

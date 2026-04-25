@@ -7,6 +7,32 @@
 export type LeagueRole = 'admin' | 'coach' | 'player' | 'field_delegate';
 
 /**
+ * Categorías de edad de una liga.
+ * Los valores son estables para el backend — no los cambies sin migración.
+ */
+export type LeagueCategory =
+  | 'pre_benjamin'
+  | 'benjamin'
+  | 'alevin'
+  | 'infantil'
+  | 'cadete'
+  | 'juvenil'
+  | 'senior';
+
+/**
+ * Etiquetas legibles por categoría para UI
+ */
+export const CATEGORY_LABELS: Record<LeagueCategory, string> = {
+  pre_benjamin: 'Pre-benjamín (sub-7/8)',
+  benjamin: 'Benjamín (sub-9/10)',
+  alevin: 'Alevín (sub-11/12)',
+  infantil: 'Infantil (sub-13/14)',
+  cadete: 'Cadete (sub-15/16)',
+  juvenil: 'Juvenil (sub-17/18/19)',
+  senior: 'Senior',
+};
+
+/**
  * Estados posibles de una liga
  */
 export type LeagueStatus = 'active' | 'finished';

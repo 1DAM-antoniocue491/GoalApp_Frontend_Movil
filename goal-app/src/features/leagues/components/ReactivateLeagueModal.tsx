@@ -1,10 +1,12 @@
-import React, { memo } from 'react';
+import React, { useRef, useCallback, useEffect, memo } from 'react';
 import {
-  Modal,
-  Pressable,
   View,
   Text,
   TouchableOpacity,
+  Modal,
+  Animated,
+  Easing,
+  Pressable,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { Colors } from '@/src/shared/constants/colors';
@@ -23,127 +25,163 @@ function ReactivateLeagueModalComponent({
   onConfirm,
   onCancel,
 }: ReactivateLeagueModalProps) {
+  const slideAnim = useRef(new Animated.Value(80)).current;
+  const opacityAnim = useRef(new Animated.Value(0)).current;
+
+  useEffect(() => {
+    if (visible) {
+      Animated.parallel([
+        Animated.timing(opacityAnim, {
+          toValue: 1,
+          duration: 220,
+          easing: Easing.out(Easing.cubic),
+          useNativeDriver: true,
+        }),
+        Animated.timing(slideAnim, {
+          toValue: 0,
+          duration: 280,
+          easing: Easing.out(Easing.back(1.1)),
+          useNativeDriver: true,
+        }),
+      ]).start();
+    } else {
+      Animated.parallel([
+        Animated.timing(opacityAnim, {
+          toValue: 0,
+          duration: 180,
+          useNativeDriver: true,
+        }),
+        Animated.timing(slideAnim, {
+          toValue: 80,
+          duration: 200,
+          useNativeDriver: true,
+        }),
+      ]).start();
+    }
+  }, [visible, opacityAnim, slideAnim]);
+
   return (
-    <Modal visible={visible} transparent animationType="fade">
-      {/* Overlay general */}
-      <Pressable
-        onPress={onCancel}
+    <Modal transparent visible={visible} animationType="none" statusBarTranslucent>
+      <Animated.View
         style={{
           flex: 1,
-          backgroundColor: 'rgba(0,0,0,0.7)',
-          justifyContent: 'center',
-          paddingHorizontal: 20,
+          justifyContent: 'flex-end',
+          backgroundColor: 'rgba(0,0,0,0.65)',
+          opacity: opacityAnim,
         }}
       >
-        {/* Caja del modal */}
-        <Pressable
-          onPress={(e) => e.stopPropagation()}
+        <Pressable style={{ flex: 1 }} onPress={onCancel} />
+
+        <Animated.View
           style={{
-            borderRadius: 24,
+            transform: [{ translateY: slideAnim }],
+            backgroundColor: Colors.bg.surface1,
+            borderTopLeftRadius: 32,
+            borderTopRightRadius: 32,
+            paddingHorizontal: 24,
+            paddingTop: 12,
+            paddingBottom: 40,
             borderWidth: 1,
             borderColor: Colors.bg.surface2,
-            backgroundColor: Colors.bg.surface1,
-            padding: 20,
           }}
         >
-          {/* Icono decorativo */}
+          {/* Handle */}
           <View
-            className="w-14 h-14 rounded-full items-center justify-center mb-4"
             style={{
-              backgroundColor: `${Colors.brand.primary}14`,
+              width: 40,
+              height: 4,
+              borderRadius: 2,
+              backgroundColor: Colors.bg.surface2,
+              alignSelf: 'center',
+              marginBottom: 28,
+            }}
+          />
+
+          {/* Icon */}
+          <View
+            style={{
+              height: 72,
+              width: 72,
+              borderRadius: 36,
+              alignItems: 'center',
+              justifyContent: 'center',
+              alignSelf: 'center',
+              marginBottom: 20,
+              backgroundColor: `${Colors.brand.primary}18`,
+              borderWidth: 1,
+              borderColor: `${Colors.brand.primary}30`,
             }}
           >
-            <Ionicons
-              name="refresh-outline"
-              size={26}
-              color={Colors.brand.primary}
-            />
+            <Ionicons name="refresh" size={34} color={Colors.brand.primary} />
           </View>
 
-          {/* Título */}
           <Text
             style={{
               color: Colors.text.primary,
-              fontSize: theme.fontSize.xxl,
-              lineHeight: 30,
+              fontSize: 22,
               fontWeight: '700',
+              lineHeight: 28,
+              textAlign: 'center',
+              marginBottom: 12,
             }}
           >
-            Reactivar liga
+            Reactivar Liga
           </Text>
 
-          {/* Descripción */}
           <Text
             style={{
               color: Colors.text.secondary,
               fontSize: 15,
               lineHeight: 22,
-              marginTop: 10,
+              textAlign: 'center',
+              marginBottom: 32,
+              paddingHorizontal: 8,
             }}
           >
-            Vas a reactivar la liga{' '}
-            <Text style={{ color: Colors.text.primary, fontWeight: '700' }}>
+            ¿Estás seguro que deseas reactivar{' '}
+            <Text style={{ color: Colors.text.primary, fontWeight: '600' }}>
               {leagueName}
             </Text>
-            . La liga volverá a aparecer como activa y conservará toda su
-            información.
+            ? Todos los miembros anteriores volverán a tener acceso inmediato.
           </Text>
 
-          {/* Botones */}
-          <View
+          {/* Buttons */}
+          <TouchableOpacity
+            activeOpacity={0.88}
+            onPress={onConfirm}
             style={{
-              marginTop: 24,
+              height: 58,
+              borderRadius: 18,
+              alignItems: 'center',
+              justifyContent: 'center',
+              backgroundColor: Colors.brand.primary,
+              marginBottom: 12,
               flexDirection: 'row',
-              justifyContent: 'flex-end',
-              gap: 12,
+              gap: 8,
             }}
           >
-            <TouchableOpacity
-              onPress={onCancel}
-              activeOpacity={0.9}
-              style={{
-                height: 48,
-                paddingHorizontal: 18,
-                borderRadius: 14,
-                justifyContent: 'center',
-                backgroundColor: Colors.bg.surface2,
-              }}
-            >
-              <Text
-                style={{
-                  color: Colors.text.secondary,
-                  fontSize: 15,
-                  fontWeight: '600',
-                }}
-              >
-                Cancelar
-              </Text>
-            </TouchableOpacity>
+            <Ionicons name="refresh-outline" size={20} color="#0A0A0C" />
+            <Text style={{ color: '#0A0A0C', fontSize: 16, fontWeight: '700' }}>
+              Sí, reactivar liga
+            </Text>
+          </TouchableOpacity>
 
-            <TouchableOpacity
-              onPress={onConfirm}
-              activeOpacity={0.9}
-              style={{
-                height: 48,
-                paddingHorizontal: 18,
-                borderRadius: 14,
-                justifyContent: 'center',
-                backgroundColor: Colors.brand.primary,
-              }}
-            >
-              <Text
-                style={{
-                  color: Colors.bg.base,
-                  fontSize: 15,
-                  fontWeight: '700',
-                }}
-              >
-                Reactivar liga
-              </Text>
-            </TouchableOpacity>
-          </View>
-        </Pressable>
-      </Pressable>
+          <TouchableOpacity
+            activeOpacity={0.7}
+            onPress={onCancel}
+            style={{
+              height: 52,
+              borderRadius: 18,
+              alignItems: 'center',
+              justifyContent: 'center',
+            }}
+          >
+            <Text style={{ color: Colors.text.secondary, fontSize: 16, fontWeight: '500' }}>
+              Cancelar
+            </Text>
+          </TouchableOpacity>
+        </Animated.View>
+      </Animated.View>
     </Modal>
   );
 }

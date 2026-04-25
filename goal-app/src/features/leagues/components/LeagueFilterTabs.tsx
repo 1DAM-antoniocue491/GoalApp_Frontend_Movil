@@ -1,53 +1,71 @@
-/**
- * LeagueFilterTabs - Chips horizontales para filtrar ligas
- *
- * Permite filtrar por: Todas, Activas, Finalizadas, Favoritas
- * con diseño de pills que se pueden desplazar horizontalmente.
- */
-
-import React from 'react';
-import { View, Text, TouchableOpacity, ScrollView } from 'react-native';
+import React, { useMemo, memo } from 'react';
+import { Text, TouchableOpacity, ScrollView } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
 import { LeagueFilter } from '@/src/shared/types/league';
+import { Colors } from '@/src/shared/constants/colors';
+import { theme } from '@/src/shared/styles/theme';
 
 interface LeagueFilterTabsProps {
-  /** Filtro actualmente seleccionado */
   selectedFilter: LeagueFilter;
-  /** Callback cuando se selecciona un filtro */
   onSelectFilter: (filter: LeagueFilter) => void;
 }
 
-/**
- * Configuración de cada filtro
- */
-const FILTERS: { key: LeagueFilter; label: string }[] = [
-  { key: 'all', label: 'Todas' },
-  { key: 'active', label: 'Activas' },
-  { key: 'finished', label: 'Finalizadas' },
-  { key: 'favorites', label: 'Favoritas' },
-];
+const FILTERS: {
+  key: LeagueFilter;
+  label: string;
+  icon: keyof typeof Ionicons.glyphMap;
+}[] = [
+    { key: 'all', label: 'Todas', icon: 'grid-outline' },
+    { key: 'active', label: 'Activas', icon: 'time-outline' },
+    { key: 'finished', label: 'Finalizadas', icon: 'flag-outline' },
+    { key: 'favorites', label: 'Favoritas', icon: 'star-outline' },
+  ];
 
-export function LeagueFilterTabs({ selectedFilter, onSelectFilter }: LeagueFilterTabsProps) {
+function LeagueFilterTabsComponent({
+  selectedFilter,
+  onSelectFilter,
+}: LeagueFilterTabsProps) {
+  const filters = useMemo(() => FILTERS, []);
+
   return (
     <ScrollView
       horizontal
       showsHorizontalScrollIndicator={false}
-      className="mb-4"
       contentContainerStyle={{ gap: 8 }}
     >
-      {FILTERS.map(({ key, label }) => {
+      {filters.map(({ key, label, icon }) => {
         const isActive = selectedFilter === key;
 
         return (
           <TouchableOpacity
             key={key}
             onPress={() => onSelectFilter(key)}
-            className={`
-              px-4 py-2 rounded-full border
-              ${isActive ? 'bg-[#C4F135] border-[#C4F135]' : 'bg-[#1D1C22] border-[#2A2A35]'}
-            `}
+            activeOpacity={0.9}
+            className="px-3 h-12 rounded-full border flex-row items-center"
+            style={{
+              backgroundColor: isActive ? Colors.brand.primary : Colors.bg.surface1,
+              borderColor: isActive ? Colors.brand.primary : Colors.bg.surface2,
+              shadowColor: isActive ? Colors.brand.primary : 'transparent',
+              shadowOpacity: isActive ? 0.16 : 0,
+              shadowRadius: 10,
+              shadowOffset: { width: 0, height: 5 },
+              elevation: isActive ? 2 : 0,
+            }}
           >
+            <Ionicons
+              name={icon}
+              size={14}
+              color={isActive ? Colors.bg.base : Colors.text.secondary}
+              style={{ marginRight: theme.spacing.sm }}
+            />
+
             <Text
-              className={`text-sm font-medium ${isActive ? 'text-black font-semibold' : 'text-[#8A9AA4]'}`}
+              style={{
+                color: isActive ? Colors.bg.base : Colors.text.secondary,
+                fontSize: theme.fontSize.sm - 1,
+                lineHeight: 12,
+                fontWeight: isActive ? '600' : '500',
+              }}
             >
               {label}
             </Text>
@@ -57,3 +75,5 @@ export function LeagueFilterTabs({ selectedFilter, onSelectFilter }: LeagueFilte
     </ScrollView>
   );
 }
+
+export const LeagueFilterTabs = memo(LeagueFilterTabsComponent);

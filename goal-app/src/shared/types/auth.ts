@@ -34,6 +34,10 @@ export type StatisticTabs = "statistics" | "alignment";
 export type ProgrammedTabs = "previousMeeting" | "squad";
 
 
-// ProgrammedTabs necesita saber son los botones que permiten saber
+// StatisticTeamsandPlayersTabs necesita saber son los botones que permiten saber
 // cuál tab está activa de par.
 export type StatisticTeamsandPlayersTabs = "teams" | "players";
+
+// ProgrammedTabs necesita saber son los botones que permiten saber
+// cuál tab está activa de par.
+export type TeamTabs = "information" | "squad";

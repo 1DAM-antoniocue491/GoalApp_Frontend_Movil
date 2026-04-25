@@ -7,7 +7,7 @@ import { Link, RelativePathString } from "expo-router";
 
 export default function Programmed() {
     return (
-        <View>
+        <View className="mt-5">
             <View className="flex flex-row pl-5">
                 <Text className="bg-[#C8F558] font-bold px-3 py-1 rounded">Jornada 10</Text>
                 <View className="h-px bg-[#C8F558] w-full mt-8" />

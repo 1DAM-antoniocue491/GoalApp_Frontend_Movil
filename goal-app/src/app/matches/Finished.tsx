@@ -7,7 +7,7 @@ import { Link, RelativePathString } from "expo-router";
 
 export default function Finished() {
     return (
-        <View>
+        <View className="mt-5">
             <View className="flex flex-row pl-5">
                 <Text className="bg-[#C8F558] font-bold px-3 py-1 rounded">Jornada 10</Text>
                 <View className="h-px bg-[#C8F558] w-full mt-8" />
@@ -18,7 +18,6 @@ export default function Finished() {
                         <View className="flex flex-col items-center">
                             <Image source={require('../../../assets/images/betis.png')} className="w-15 h-15" resizeMode="contain" />
                             <Text className="text-white font-black">Real Betis</Text>
-                            <Text className="text-[#ADAEA9] text-xs">Cucho Hernández 61' 70'</Text>
                         </View>
                         <View className="flex flex-col items-center">
                             <View className="flex flex-row gap-3">
@@ -30,7 +29,7 @@ export default function Finished() {
                         <View className="flex flex-col items-center">
                             <Image source={require('../../../assets/images/realMadrid.png')} className="w-15 h-15" resizeMode="contain" />
                             <Text className="text-white font-black">Real Madrid</Text>
-                            <Text className="text-[#ADAEA9] text-xs">Kyliam Mbappé 10'</Text>
+                           
                         </View>
                     </View>
                 </Link>

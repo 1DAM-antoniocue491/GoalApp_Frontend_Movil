@@ -25,7 +25,7 @@ export default function Team() {
     return (
         <View className={styles.screenBase}>
             <SafeAreaView className="flex-1">
-                 <Link href={'../../(tabs)/league' as RelativePathString} className="m-3">
+                 <Link href={'../../(tabs)/calendar' as RelativePathString} className="m-3">
                     <View className="bg-[#0F0F13] justify-center items-center rounded-4xl p-1 border border-[#262626]">
                         <Ionicons name="chevron-back-circle-outline" size={25} color="#FFFFFF"/>
                     </View>

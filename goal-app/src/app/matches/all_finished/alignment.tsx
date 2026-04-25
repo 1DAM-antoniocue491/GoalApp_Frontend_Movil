@@ -9,7 +9,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 
 export default function HomeScreen() {
     return (
-        <SafeAreaView className="flex-1">
+        <SafeAreaView className="flex-1 mt-5">
             <ScrollView>
                 <View className="flex flex-row justify-between">
                     <View className="flex flex-col ml-8 ">

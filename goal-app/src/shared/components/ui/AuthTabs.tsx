@@ -6,6 +6,7 @@ import {
     View, TouchableOpacity, Text
 } from "react-native";
 import { useRouter } from 'expo-router';
+import { routes } from "../../config/routes";
 
 
 interface AuthTabsProps {
@@ -21,7 +22,7 @@ export function AuthTabs({ activeTab }: AuthTabsProps) {
         <View className={styles.tabContainer}>
             <TouchableOpacity
                 className={activeTab === 'login' ? styles.tabActive : styles.tabInactive}
-                onPress={() => router.push('/auth/login')}
+                onPress={() => router.push(routes.public.auth.login)}
             // Cambiamos a push, se sobreescribe una encima de otra para reducir el flash.
             >
                 <Text className={activeTab === 'login' ? styles.tabActiveText : styles.tabInactiveText}>
@@ -31,7 +32,7 @@ export function AuthTabs({ activeTab }: AuthTabsProps) {
 
             <TouchableOpacity
                 className={activeTab === 'register' ? styles.tabActive : styles.tabInactive}
-                onPress={() => router.push('/auth/register')}
+                onPress={() => router.push(routes.public.auth.register)}
             >
                 <Text className={activeTab === 'register' ? styles.tabActiveText : styles.tabInactiveText}>
                     Registrarse

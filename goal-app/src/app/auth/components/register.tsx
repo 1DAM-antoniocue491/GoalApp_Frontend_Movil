@@ -23,7 +23,7 @@ import { Button } from '@/src/shared/components/ui/Button';
 import type { RegisterForm } from '@/src/shared/types/auth';
 
 // Helper mock para crear usuario
-import { createUser } from '@/src/features/auth/services/authService';
+import { createUser } from '@/src/app/auth/services/authService';
 
 export default function RegisterScreen() {
     // Router para navegación

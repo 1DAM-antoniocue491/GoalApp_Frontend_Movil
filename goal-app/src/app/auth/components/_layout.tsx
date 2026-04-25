@@ -40,6 +40,11 @@ export default function AuthLayout() {
 
             {/* Pantalla de registro */}
             <Stack.Screen name="register" />
+
+            {/* Flujo de recuperación de contraseña */}
+            <Stack.Screen name="forgot-password" />
+            <Stack.Screen name="check-email" />
+            <Stack.Screen name="reset-password" />
         </Stack>
     );
 }

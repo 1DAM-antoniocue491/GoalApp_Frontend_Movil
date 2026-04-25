@@ -7,7 +7,7 @@
  */
 
 import React, { useState } from 'react';
-import { Text, Alert } from 'react-native';
+import { Text, Alert, TouchableOpacity } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 
@@ -23,7 +23,7 @@ import { Button } from '@/src/shared/components/ui/Button';
 import type { LoginForm } from '@/src/shared/types/auth';
 
 // Helpers y datos mock para validar credenciales
-import { validateCredentials } from '@/src/features/auth/services/authService';
+import { validateCredentials } from '@/src/app/auth/services/authService';
 import { GENERIC_PASSWORD } from '@/src/mocks/data';
 
 export default function LoginScreen() {
@@ -110,10 +110,16 @@ export default function LoginScreen() {
                 placeholder="••••••••"
             />
 
-            {/* Acción secundaria */}
-            <Text className="self-end text-[#18A2FB] text-sm">
-                ¿Olvidó la contraseña?
-            </Text>
+            {/* Acción secundaria — navega al flujo de recuperación */}
+            <TouchableOpacity
+                onPress={() => router.push(routes.public.auth.forgotPassword)}
+                className="self-end"
+                hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+            >
+                <Text className="text-[#18A2FB] text-sm">
+                    ¿Olvidó la contraseña?
+                </Text>
+            </TouchableOpacity>
         </AuthScreenLayout>
     );
 }

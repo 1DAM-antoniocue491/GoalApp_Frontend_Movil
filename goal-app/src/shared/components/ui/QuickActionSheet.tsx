@@ -36,6 +36,12 @@ interface QuickAction {
 interface QuickActionSheetProps {
     visible: boolean;
     onClose: () => void;
+    /** Callback que dispara la apertura del modal Nuevo Partido desde el layout padre */
+    onAddMatch?: () => void;
+    /** Callback que dispara la apertura del modal Nuevo Equipo desde el layout padre */
+    onAddTeam?: () => void;
+    /** Callback que dispara la apertura del modal Crear Calendario desde el layout padre */
+    onCreateCalendar?: () => void;
 }
 
 // ─── Constantes de animación ─────────────────────────────────────────────────
@@ -45,7 +51,7 @@ const SHEET_HEIGHT = 420; // altura aproximada del sheet
 
 // ─── Componente ──────────────────────────────────────────────────────────────
 
-export function QuickActionSheet({ visible, onClose }: QuickActionSheetProps) {
+export function QuickActionSheet({ visible, onClose, onAddMatch, onAddTeam, onCreateCalendar }: QuickActionSheetProps) {
     const router = useRouter();
 
     // Valores animados
@@ -92,7 +98,11 @@ export function QuickActionSheet({ visible, onClose }: QuickActionSheetProps) {
             icon: 'football-outline',
             iconColor: Colors.brand.primary,
             iconBg: 'rgba(200,245,88,0.12)',
-            onPress: () => navigate(routes.private.tabs.add),
+            // Cierra el sheet primero; el layout abre el modal tras la animación de cierre
+            onPress: () => {
+                onClose();
+                setTimeout(() => onAddMatch?.(), 220);
+            },
         },
         {
             id: 'calendar',
@@ -101,7 +111,11 @@ export function QuickActionSheet({ visible, onClose }: QuickActionSheetProps) {
             icon: 'calendar-outline',
             iconColor: Colors.brand.secondary,
             iconBg: 'rgba(0,180,216,0.12)',
-            onPress: () => navigate(routes.private.tabs.calendar),
+            // Cierra el sheet primero; el layout abre el modal tras la animación de cierre
+            onPress: () => {
+                onClose();
+                setTimeout(() => onCreateCalendar?.(), 220);
+            },
         },
         {
             id: 'team',
@@ -110,16 +124,21 @@ export function QuickActionSheet({ visible, onClose }: QuickActionSheetProps) {
             icon: 'people-outline',
             iconColor: Colors.brand.accent,
             iconBg: 'rgba(24,162,251,0.12)',
-            onPress: () => navigate(routes.private.tabs.add),
+            // Cierra el sheet primero; el layout abre el modal tras la animación de cierre
+            onPress: () => {
+                onClose();
+                setTimeout(() => onAddTeam?.(), 220);
+            },
         },
         {
             id: 'users',
-            label: 'Añadir usuarios',
-            hint: 'Invita a tu equipo',
+            label: 'Gestionar usuarios',
+            hint: 'Añade o elimina miembros del equipo',
             icon: 'person-add-outline',
             iconColor: Colors.semantic.success,
             iconBg: 'rgba(50,215,75,0.12)',
-            onPress: () => navigate(routes.private.tabs.add),
+            // Navega a la pantalla de Usuarios y roles
+            onPress: () => navigate(routes.private.league.users),
         },
     ];
 

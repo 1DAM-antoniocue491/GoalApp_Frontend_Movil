@@ -6,15 +6,16 @@
  * y redirigir directamente al onboarding o tabs.
  */
 
-import { Redirect, RelativePathString } from "expo-router";
+import { Redirect } from "expo-router";
 import React from "react";
 import { SafeAreaProvider } from 'react-native-safe-area-context';
+import { routes } from '@/src/shared/config/routes';
 
 export default function Index() {
   // Redirigir al flujo de auth (login/registro)
   return (
     <SafeAreaProvider>
-      <Redirect href={('../auth') as RelativePathString} />
-    </SafeAreaProvider>
+      <Redirect href={routes.public.auth.login} />
+    </SafeAreaProvider >
   );
 }

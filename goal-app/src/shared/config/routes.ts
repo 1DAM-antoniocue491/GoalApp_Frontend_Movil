@@ -2,17 +2,13 @@ export const routes = {
   public: {
     landing: "/",
 
-    // Compatibilidad antigua
-    login: "/auth/login",
-    register: "/auth/register",
-
     // Estructura nueva
     auth: {
-      login: "/auth/login",
-      register: "/auth/register",
-      forgotPassword: "/auth/forgot-password",
-      checkEmail: "/auth/check-email",
-      resetPassword: "/auth/reset-password",
+      login: "/auth/components/login",
+      register: "/auth/components/register",
+      forgotPassword: "/auth/components/forgot-password",
+      checkEmail: "/auth/components/check-email",
+      resetPassword: "/auth/components/reset-password",
     },
   },
 

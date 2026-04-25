@@ -14,6 +14,9 @@ import Ionicons from "@expo/vector-icons/Ionicons";
 import React, { useState } from "react";
 import { TouchableOpacity, View } from "react-native";
 import { QuickActionSheet } from '@/src/shared/components/ui/QuickActionSheet';
+import { CreateTeamModal } from '@/src/features/teams/components/modals/CreateTeamModal';
+import { CreateCalendarModal } from '@/src/features/calendar/components/modals/CreateCalendarModal';
+import { CreateManualMatchModal } from '@/src/features/calendar/components/modals/CreateManualMatchModal';
 import { Colors } from "@/src/shared/constants/colors";
 
 function PlusTabButton(props: any) {
@@ -44,6 +47,11 @@ function PlusTabButton(props: any) {
 
 export default function TabsLayout() {
   const [sheetOpen, setSheetOpen] = useState(false);
+  // Estos estados viven aquí porque los Modal de RN deben montarse fuera
+  // de <Tabs> para superponerse correctamente a la tab bar
+  const [createMatchOpen, setCreateMatchOpen] = useState(false);
+  const [createTeamOpen, setCreateTeamOpen] = useState(false);
+  const [createCalendarOpen, setCreateCalendarOpen] = useState(false);
 
   return (
     // Fragment para que el Modal pueda renderizarse fuera del árbol de Tabs
@@ -128,15 +136,49 @@ export default function TabsLayout() {
       </Tabs>
 
       {/*
-       * El QuickActionSheet DEBE estar FUERA de <Tabs>.
-       * Los Modales de React Native necesitan estar en la raíz del árbol de
-       * componentes para superponerse correctamente a toda la UI, incluyendo
-       * la tab bar. Dentro de <Tabs> quedan "atrapados" por el navegador
-       * y no se renderizan encima de la barra.
+       * QuickActionSheet y CreateTeamModal DEBEN estar FUERA de <Tabs>.
+       * Los Modal de RN necesitan estar en la raíz del árbol para superponerse
+       * a toda la UI, incluyendo la tab bar. Dentro de <Tabs> quedan atrapados.
        */}
       <QuickActionSheet
         visible={sheetOpen}
         onClose={() => setSheetOpen(false)}
+        onAddMatch={() => setCreateMatchOpen(true)}
+        onAddTeam={() => setCreateTeamOpen(true)}
+        onCreateCalendar={() => setCreateCalendarOpen(true)}
+      />
+
+      {/* Modal Nuevo Partido */}
+      <CreateManualMatchModal
+        visible={createMatchOpen}
+        onClose={() => setCreateMatchOpen(false)}
+        onSubmit={(data) => {
+          // TODO: conectar con calendarService cuando esté disponible
+          console.log('Nuevo partido:', data);
+          setCreateMatchOpen(false);
+        }}
+      />
+
+      {/* Modal Nuevo Equipo */}
+      <CreateTeamModal
+        visible={createTeamOpen}
+        onClose={() => setCreateTeamOpen(false)}
+        onSubmit={(data) => {
+          // TODO: conectar con teamsService cuando esté disponible
+          console.log('Nuevo equipo:', data);
+          setCreateTeamOpen(false);
+        }}
+      />
+
+      {/* Modal Crear Calendario */}
+      <CreateCalendarModal
+        visible={createCalendarOpen}
+        onClose={() => setCreateCalendarOpen(false)}
+        onSubmit={(data) => {
+          // TODO: conectar con calendarService cuando esté disponible
+          console.log('Nuevo calendario:', data);
+          setCreateCalendarOpen(false);
+        }}
       />
     </>
   );

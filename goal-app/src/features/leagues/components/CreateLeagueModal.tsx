@@ -75,6 +75,18 @@ interface CreateLeagueModalProps {
   visible: boolean;
   onConfirm: (data: CreateLeagueForm) => void;
   onCancel: () => void;
+  /**
+   * 'create' (por defecto): modal para nueva liga.
+   * 'edit': modal para editar una liga existente.
+   * Controla título, CTA e inicialización del formulario.
+   */
+  mode?: 'create' | 'edit';
+  /**
+   * Valores previos de la liga en modo edición.
+   * Se fusionan sobre DEFAULT_FORM al abrirse el modal.
+   * Solo se leen en el momento de apertura (visible true).
+   */
+  initialValues?: Partial<CreateLeagueForm>;
 }
 
 // ---------------------------------------------------------------------------
@@ -206,12 +218,26 @@ function StepperField({ label, value, onIncrement, onDecrement }: StepperFieldPr
 // Modal principal
 // ---------------------------------------------------------------------------
 
-function CreateLeagueModalComponent({ visible, onConfirm, onCancel }: CreateLeagueModalProps) {
+function CreateLeagueModalComponent({
+  visible,
+  onConfirm,
+  onCancel,
+  mode = 'create',
+  initialValues,
+}: CreateLeagueModalProps) {
   /**
    * Estado del formulario.
    * Aquí vive toda la configuración de la liga antes de confirmar.
    */
   const [form, setForm] = useState<CreateLeagueForm>(DEFAULT_FORM);
+
+  /**
+   * Ref para capturar initialValues en el momento exacto de apertura del modal
+   * sin necesidad de incluirlo en el array de dependencias del useEffect
+   * (evita que cambie la referencia de objeto en cada render).
+   */
+  const initialValuesRef = useRef<Partial<CreateLeagueForm> | undefined>(initialValues);
+  initialValuesRef.current = initialValues;
 
   /**
    * Estado visual para mostrar spinner mientras:
@@ -232,7 +258,15 @@ function CreateLeagueModalComponent({ visible, onConfirm, onCancel }: CreateLeag
    */
   useEffect(() => {
     if (visible) {
-      setForm(DEFAULT_FORM);
+      /**
+       * En modo edición, fusionamos DEFAULT_FORM con los valores previos de la liga.
+       * En modo creación, siempre partimos del formulario vacío.
+       */
+      setForm(
+        mode === 'edit'
+          ? { ...DEFAULT_FORM, ...initialValuesRef.current }
+          : DEFAULT_FORM
+      );
 
       Animated.parallel([
         Animated.timing(opacityAnim, {
@@ -451,7 +485,8 @@ function CreateLeagueModalComponent({ visible, onConfirm, onCancel }: CreateLeag
                     fontWeight: '700',
                   }}
                 >
-                  Crear nueva liga
+                  {/* Título diferenciado según modo crear o editar */}
+                  {mode === 'edit' ? 'Editar liga' : 'Crear nueva liga'}
                 </Text>
 
                 <TouchableOpacity
@@ -574,37 +609,64 @@ function CreateLeagueModalComponent({ visible, onConfirm, onCancel }: CreateLeag
                   </View>
                 </View>
               ) : (
-                // Estado sin imagen: zona de subida — nunca queda vacío
+                /**
+                 * Estado sin imagen: fallback visual con shield-outline,
+                 * coherente con LeagueCrest en LeagueCard.
+                 * Toda el área es tappable para abrir el picker.
+                 * Nunca queda vacío ni parece un estado roto.
+                 */
                 <TouchableOpacity
                   onPress={handlePickImage}
+                  activeOpacity={0.75}
                   style={{
-                    height: 110,
-                    width: 110,
-                    borderRadius: 24,
-                    borderWidth: 1.5,
-                    borderStyle: 'dashed',
-                    borderColor: Colors.bg.surface2,
-                    alignItems: 'center',
-                    justifyContent: 'center',
                     alignSelf: 'center',
+                    alignItems: 'center',
                     marginBottom: 28,
-                    backgroundColor: Colors.bg.base,
-                    gap: theme.spacing.sm,
                   }}
                 >
-                  <Ionicons
-                    name="cloud-upload-outline"
-                    size={28}
-                    color={Colors.text.disabled}
-                  />
-                  <Text
+                  {/* Shield: mismo patrón que LeagueCrest — sin logo = icono de liga */}
+                  <View
                     style={{
-                      color: Colors.text.disabled,
-                      fontSize: 13,
+                      width: 110,
+                      height: 110,
+                      borderRadius: 24,
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      backgroundColor: Colors.bg.base,
+                      borderWidth: 1,
+                      borderColor: Colors.bg.surface2,
                     }}
                   >
-                    Subir logo
-                  </Text>
+                    <Ionicons
+                      name="shield-outline"
+                      size={44}
+                      color={Colors.text.disabled}
+                    />
+                  </View>
+
+                  {/* Hint de subida: discreto, debajo del shield */}
+                  <View
+                    style={{
+                      flexDirection: 'row',
+                      alignItems: 'center',
+                      gap: 4,
+                      marginTop: 8,
+                    }}
+                  >
+                    <Ionicons
+                      name="cloud-upload-outline"
+                      size={13}
+                      color={Colors.brand.accent}
+                    />
+                    <Text
+                      style={{
+                        color: Colors.brand.accent,
+                        fontSize: theme.fontSize.xs,
+                      }}
+                    >
+                      Subir logo
+                    </Text>
+                  </View>
                 </TouchableOpacity>
               )}
 
@@ -803,8 +865,9 @@ function CreateLeagueModalComponent({ visible, onConfirm, onCancel }: CreateLeag
                   gap: theme.spacing.sm,
                 }}
               >
+                {/* Icono y label del CTA cambian según modo crear o editar */}
                 <Ionicons
-                  name="add-circle-outline"
+                  name={mode === 'edit' ? 'save-outline' : 'add-circle-outline'}
                   size={20}
                   color="#0A0A0C"
                   style={{ opacity: isValid ? 1 : 0.5 }}
@@ -818,7 +881,7 @@ function CreateLeagueModalComponent({ visible, onConfirm, onCancel }: CreateLeag
                     opacity: isValid ? 1 : 0.5,
                   }}
                 >
-                  Crear liga
+                  {mode === 'edit' ? 'Guardar cambios' : 'Crear liga'}
                 </Text>
               </TouchableOpacity>
             </View>

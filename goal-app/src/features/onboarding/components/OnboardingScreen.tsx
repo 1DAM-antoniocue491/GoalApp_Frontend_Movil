@@ -23,7 +23,7 @@ import { EmptyLeaguesState } from '@/src/features/leagues/components/EmptyLeague
 import { LeaguesSkeleton } from '@/src/features/leagues/components/LeaguesSkeleton';
 import { ReactivateLeagueModal } from '@/src/features/leagues/components/ReactivateLeagueModal';
 import { JoinLeagueModal } from '@/src/features/leagues/components/JoinLeagueModal';
-import { CreateLeagueModal } from '@/src/features/leagues/components/CreateLeagueModal';
+import { CreateLeagueModal, type CreateLeagueForm } from '@/src/features/leagues/components/CreateLeagueModal';
 
 import { LeagueItem, LeagueFilter } from '@/src/shared/types/league';
 import {
@@ -77,6 +77,12 @@ export default function OnboardingScreen() {
   const [reactivateTarget, setReactivateTarget] = useState<LeagueItem | null>(null);
   const [showJoinModal, setShowJoinModal] = useState(false);
   const [showCreateModal, setShowCreateModal] = useState(false);
+  /**
+   * Liga seleccionada para edición.
+   * Cuando es distinto de null, se abre CreateLeagueModal en modo 'edit'.
+   * La apertura se controla desde LeagueCard → onPressSettings (solo admins).
+   */
+  const [editTarget, setEditTarget] = useState<LeagueItem | null>(null);
 
   const headerAnim = useRef(new Animated.Value(0)).current;
   const actionsAnim = useRef(new Animated.Value(0)).current;
@@ -209,6 +215,52 @@ export default function OnboardingScreen() {
     setShowCreateModal(false);
     Alert.alert('¡Liga creada!', `La liga "${data.name}" ha sido creada correctamente.`);
   }, []);
+
+  /**
+   * Abre el modal de edición con la liga seleccionada.
+   * Solo llega aquí si el rol es admin (la card ya lo filtra visualmente).
+   */
+  const handlePressSettings = useCallback((league: LeagueItem) => {
+    setEditTarget(league);
+  }, []);
+
+  /**
+   * Valores iniciales para el modal de edición.
+   * Mapeamos los campos disponibles en LeagueItem → CreateLeagueForm.
+   * Los campos sin equivalente (category, steppers) quedan en sus defaults.
+   */
+  const editInitialValues = useMemo<Partial<CreateLeagueForm>>(() => {
+    if (!editTarget) return {};
+    // La temporada llega como "2025/26" → extraemos el año de inicio
+    const seasonStartYear = parseInt(editTarget.season.split('/')[0], 10) || new Date().getFullYear();
+    return {
+      name: editTarget.name,
+      seasonStartYear,
+      logoUrl: editTarget.crestUrl ?? null,
+    };
+  }, [editTarget]);
+
+  /**
+   * Confirma la edición: actualiza el nombre, temporada y logo en el listado local.
+   * En producción, aquí se llamará al servicio real de actualización.
+   */
+  const handleEditConfirm = useCallback((data: CreateLeagueForm) => {
+    if (!editTarget) return;
+    setLeagues((prev) =>
+      prev.map((l) =>
+        l.id === editTarget.id
+          ? {
+            ...l,
+            name: data.name,
+            season: `${data.seasonStartYear}/${String(data.seasonStartYear + 1).slice(2)}`,
+            // Priorizamos URI local (recién seleccionada), luego URL remota
+            crestUrl: data.logoUri ?? data.logoUrl ?? l.crestUrl,
+          }
+          : l
+      )
+    );
+    setEditTarget(null);
+  }, [editTarget]);
 
   const handleClearSearch = useCallback(() => setSearchTerm(''), []);
 
@@ -345,12 +397,14 @@ export default function OnboardingScreen() {
                 {/* League List or Empty Filter State */}
                 {filteredLeagues.length > 0 ? (
                   <View className="gap-5 mt-5">
+                    {/* onPressSettings solo es visible para admins — LeagueCard ya lo filtra por rol */}
                     {filteredLeagues.map((league) => (
                       <LeagueCard
                         key={league.id}
                         league={league}
                         onToggleFavorite={() => handleToggleFavorite(league.id)}
                         onPress={() => handleEnterLeague(league)}
+                        onPressSettings={handlePressSettings}
                       />
                     ))}
                   </View>
@@ -396,10 +450,24 @@ export default function OnboardingScreen() {
         onCancel={() => setShowJoinModal(false)}
       />
 
+      {/* Modal crear liga — modo 'create' por defecto */}
       <CreateLeagueModal
         visible={showCreateModal}
         onConfirm={handleCreateConfirm}
         onCancel={() => setShowCreateModal(false)}
+      />
+
+      {/**
+       * Modal editar liga — reutiliza CreateLeagueModal en modo 'edit'.
+       * Se abre desde LeagueCard → onPressSettings (solo admins).
+       * initialValues precarga nombre, temporada y logo de la liga seleccionada.
+       */}
+      <CreateLeagueModal
+        mode="edit"
+        visible={editTarget !== null}
+        initialValues={editInitialValues}
+        onConfirm={handleEditConfirm}
+        onCancel={() => setEditTarget(null)}
       />
     </View >
   );

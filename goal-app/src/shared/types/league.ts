@@ -79,11 +79,24 @@ export const ROLE_LABELS: Record<LeagueRole, string> = {
 };
 
 /**
- * Mapeo de roles a colores semánticos para UI
+ * Mapeo de roles a colores de texto para UI
  */
 export const ROLE_COLORS: Record<LeagueRole, string> = {
   admin: '#FFD60A',      // amarillo/dorado
   coach: '#18A2FB',      // azul/cian
-  field_delegate: '#D454F5', // morado/fucsia
-  player: '#32D74B',     // verde
+  field_delegate: '#D946EF', // morado/fucsia
+  player: '#20E3B2',     // verde agua
+};
+
+/**
+ * Fondos semitransparentes del badge de rol.
+ * Son versiones oscuras de ROLE_COLORS adaptadas al fondo dark de la app.
+ * Centralizados aquí para que cualquier pantalla que muestre badges de rol
+ * use los mismos valores sin hardcodearlos.
+ */
+export const ROLE_BG_COLORS: Record<LeagueRole, string> = {
+  admin: '#4B3B05',
+  coach: '#0A3E66',
+  field_delegate: '#4B0F4D',
+  player: '#0E4A3D',
 };

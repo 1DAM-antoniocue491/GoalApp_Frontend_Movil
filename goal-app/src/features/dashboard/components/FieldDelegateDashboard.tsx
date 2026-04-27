@@ -12,16 +12,18 @@
  *
  * El field_delegate es el "árbitro/delegado" que controla el partido en campo.
  * Tiene acceso operativo al partido pero no a la gestión administrativa de la liga.
+ *
+ * SHELL:
+ * SafeAreaView, StatusBar, WelcomeBlock, loading y error están centralizados
+ * en DashboardLayout. FieldDelegateDashboard solo se preocupa de sus secciones.
  */
 
 import React from 'react';
-import { View, ScrollView, Text, StatusBar, TouchableOpacity } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
-import { Ionicons } from '@expo/vector-icons';
+import { View } from 'react-native';
 
 import { useDashboardData } from '@/src/shared/hooks/usedashboarddata';
 import { getDashboardPermissions } from '../services/dashboardService';
-import { WelcomeBlock } from './WelcomeBlock';
+import { DashboardLayout } from './DashboardLayout';
 import { LiveMatchCard } from './LiveMatchCard';
 import { UpcomingMatchesSection } from './UpcomingMatchesSection';
 
@@ -57,35 +59,17 @@ export function FieldDelegateDashboard({
   };
 
   return (
-    <SafeAreaView style={{ flex: 1, backgroundColor: '#0F0F13' }} edges={['top']}>
-      <StatusBar barStyle="light-content" backgroundColor="#0F0F13" />
-
-      <WelcomeBlock
-        userName={userName}
-        leagueName={leagueName}
-        role="field_delegate"
-        notificationCount={notificationCount}
-      />
-
-      {isLoading && (
-        <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}>
-          <Ionicons name="football-outline" size={32} color="#52525B" />
-        </View>
-      )}
-
-      {isError && !isLoading && (
-        <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}>
-          <TouchableOpacity onPress={refetch}>
-            <Text style={{ color: '#C4F135' }}>Error — pulsa para reintentar</Text>
-          </TouchableOpacity>
-        </View>
-      )}
-
-      {data && !isLoading && !isError && (
-        <ScrollView
-          contentContainerStyle={{ paddingBottom: 32 }}
-          showsVerticalScrollIndicator={false}
-        >
+    <DashboardLayout
+      userName={userName}
+      leagueName={leagueName}
+      role="field_delegate"
+      notificationCount={notificationCount}
+      isLoading={isLoading}
+      isError={isError}
+      onRetry={refetch}
+    >
+      {data && (
+        <>
           {/* El field_delegate tiene acceso operativo completo al partido en vivo */}
           {data.liveMatch && (
             <View style={{ marginTop: 16 }}>
@@ -104,8 +88,8 @@ export function FieldDelegateDashboard({
             permissions={permissions}
             onStartMatch={handleStartMatch}
           />
-        </ScrollView>
+        </>
       )}
-    </SafeAreaView>
+    </DashboardLayout>
   );
 }

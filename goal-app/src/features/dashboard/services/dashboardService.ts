@@ -93,6 +93,40 @@ export function getDashboardPermissions(
       };
 
     case "player":
+      return {
+        canRegisterEvent: false,
+        canViewLineups: true,
+        canStartMatch: false,
+        canEndMatch: false,
+        canManageSquad: false,
+        canEditMatch: false,
+        canViewLeagueMetrics: false,
+        canViewProgressMetrics: false,
+      };
+
+    /**
+     * Observer tiene caso explícito aunque sus permisos sean idénticos a player hoy.
+     * Motivo: cuando la feature Statistics llegue, player mostrará <PlayerStatsBlock>
+     * y observer NO. Tenerlos separados desde aquí evita mezclarlos en ese momento.
+     */
+    case "observer":
+      return {
+        canRegisterEvent: false,
+        canViewLineups: true,
+        canStartMatch: false,
+        canEndMatch: false,
+        canManageSquad: false,
+        canEditMatch: false,
+        canViewLeagueMetrics: false,
+        canViewProgressMetrics: false,
+      };
+
+    /**
+     * default no hereda permisos de ningún rol conocido.
+     * Un rol desconocido o malformado debe recibir el mínimo seguro,
+     * no los permisos de player de forma silenciosa.
+     * canViewLineups: true porque es la acción de consulta más básica.
+     */
     default:
       return {
         canRegisterEvent: false,
@@ -118,6 +152,7 @@ export function getRoleLabel(role: LeagueRole): string {
     coach: "Entrenador",
     player: "Jugador",
     field_delegate: "Delegado",
+    observer: "Observador",
   };
   return labels[role] ?? role;
 }
@@ -129,6 +164,7 @@ export function getRoleGreeting(role: LeagueRole): string {
     coach: "Panel del Entrenador",
     player: "Panel del Jugador",
     field_delegate: "Panel del Delegado",
+    observer: "Panel del Observador",
   };
   return greetings[role] ?? "Panel";
 }

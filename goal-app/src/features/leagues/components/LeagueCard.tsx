@@ -7,27 +7,11 @@ import { theme } from '@/src/shared/styles/theme';
 import { StatusDotLabel } from '@/src/shared/components/ui/StatusDotLabel';
 import { RoleBadge } from '@/src/shared/components/ui/RoleBadge';
 import { PrimaryPillButton } from '@/src/shared/components/ui/PrimaryPillButton';
-
 /**
- * Tipos del dominio de liga.
- * Si ya los tienes en shared/types/league.ts,
- * mantén allí la source of truth y elimina esta duplicidad.
+ * Tipos importados desde shared/types/league — fuente de verdad única.
+ * No se duplican aquí para evitar divergencias entre la card y el resto de la app.
  */
-export type LeagueRole = 'admin' | 'coach' | 'player' | 'field_delegate';
-export type LeagueStatus = 'active' | 'finished';
-
-export interface LeagueItem {
-  id: string;
-  name: string;
-  season: string;
-  status: LeagueStatus;
-  role: LeagueRole;
-  isFavorite: boolean;
-  teamName?: string;
-  teamsCount: number;
-  crestUrl?: string | null;
-  canReactivate?: boolean;
-}
+import type { LeagueRole, LeagueItem } from '@/src/shared/types/league';
 
 interface LeagueCardProps {
   league: LeagueItem;
@@ -39,46 +23,58 @@ interface LeagueCardProps {
 /**
  * Configuración visual de cada rol.
  *
- * Aquí centralizamos:
- * - label
- * - color de fondo del badge
- * - color del texto
- * - icono
+ * Alineada con UserRowCard.ROLE_CONFIG para mantener consistencia visual
+ * en toda la app. RoleBadge es la única fuente de verdad visual del rol:
+ * no se definen colores, iconos ni labels fuera de este mapa.
  *
- * Esto evita repetir reglas visuales del rol por toda la UI.
+ * Claves bgColor/textColor coinciden con las props de RoleBadge
+ * para evitar renombrados intermedios.
+ *
+ * Colores: rgba() con transparencia baja, igual que UserRowCard,
+ * para mantener el estilo premium dark sin fondos opacos.
+ *
+ * field_delegate conserva el label "Delegado de campo" porque en el
+ * contexto de liga ese rol es más específico que el "Delegado" de usuarios.
+ * Icono y colores sí son idénticos al delegate de UserRowCard.
  */
 const ROLE_CONFIG: Record<
   LeagueRole,
   {
     label: string;
-    bg: string;
-    text: string;
+    bgColor: string;
+    textColor: string;
     icon: keyof typeof Ionicons.glyphMap;
   }
 > = {
   admin: {
-    label: 'Admin',
-    bg: '#4B3B05',
-    text: Colors.semantic.warning,
-    icon: 'shield-checkmark-outline',
+    label: 'Administrador',
+    bgColor: 'rgba(200,245,88,0.15)',
+    textColor: Colors.brand.primary,
+    icon: 'shield-outline',
   },
   coach: {
     label: 'Entrenador',
-    bg: '#0A3E66',
-    text: Colors.brand.accent,
-    icon: 'people-outline',
+    bgColor: 'rgba(0,180,216,0.15)',
+    textColor: Colors.brand.secondary,
+    icon: 'ribbon-outline',
   },
   field_delegate: {
     label: 'Delegado de campo',
-    bg: '#4B0F4D',
-    text: '#D946EF',
-    icon: 'ellipse-outline',
+    bgColor: 'rgba(255,214,10,0.15)',
+    textColor: Colors.semantic.warning,
+    icon: 'clipboard-outline',
   },
   player: {
     label: 'Jugador',
-    bg: '#0E4A3D',
-    text: '#20E3B2',
+    bgColor: 'rgba(24,162,251,0.15)',
+    textColor: Colors.brand.accent,
     icon: 'football-outline',
+  },
+  observer: {
+    label: 'Observador',
+    bgColor: 'rgba(148,163,184,0.15)',
+    textColor: '#94A3B8',
+    icon: 'eye-outline',
   },
 };
 
@@ -165,11 +161,8 @@ function LeagueCrest({ crestUrl }: { crestUrl?: string | null }) {
 }
 
 /**
- * Bloque de información secundaria.
- *
- * Ejemplos:
- * - Mi equipo
- * - Equipos en la liga
+ * Bloque de información secundaria (icono + label + valor).
+ * Ocupa el espacio disponible dentro del flex-row padre.
  */
 function InfoStatRow({
   icon,
@@ -181,7 +174,7 @@ function InfoStatRow({
   value: string | number;
 }) {
   return (
-    <View className="flex-1 justify-between">
+    <View style={{ flex: 1 }}>
       <Text
         style={{
           color: Colors.text.secondary,
@@ -193,7 +186,7 @@ function InfoStatRow({
         {label}
       </Text>
 
-      <View className="flex-row items-center ">
+      <View className="flex-row items-center">
         <Ionicons
           name={icon}
           size={16}
@@ -217,6 +210,42 @@ function InfoStatRow({
   );
 }
 
+/** Descriptor de un bloque de info secundaria en la card. */
+interface CardInfoBlock {
+  icon: keyof typeof Ionicons.glyphMap;
+  label: string;
+  value: string | number;
+}
+
+/**
+ * Determina qué bloques de información mostrar según el rol del usuario.
+ *
+ * Reglas de negocio:
+ * - admin / observer → solo ven total de equipos. No pertenecen a un equipo concreto.
+ * - coach / player / field_delegate → ven su equipo asignado + total de equipos.
+ */
+function getLeagueCardInfoBlocks(league: LeagueItem): CardInfoBlock[] {
+  const teamsBlock: CardInfoBlock = {
+    icon: 'people-outline',
+    label: 'Equipos',
+    value: league.teamsCount,
+  };
+
+  if (league.role === 'admin' || league.role === 'observer') {
+    return [teamsBlock];
+  }
+
+  // coach / player / field_delegate tienen equipo asignado
+  return [
+    {
+      icon: 'shield-outline',
+      label: 'Mi equipo',
+      value: league.teamName ?? 'Sin asignar',
+    },
+    teamsBlock,
+  ];
+}
+
 function LeagueCardComponent({
   league,
   onPress,
@@ -224,7 +253,7 @@ function LeagueCardComponent({
   onPressSettings,
 }: LeagueCardProps) {
   /**
-   * Flags derivados del estado de la liga.
+   * Flags derivados del estado de la <liga className="7"></liga>
    */
   const isFinished = league.status === 'finished';
   const canReactivate = !!league.canReactivate;
@@ -235,6 +264,13 @@ function LeagueCardComponent({
    * Configuración visual del rol actual.
    */
   const roleConfig = ROLE_CONFIG[league.role];
+
+  /**
+   * Bloques de información secundaria condicionados al rol.
+   * La función encapsula todas las reglas de qué mostrar —
+   * el JSX se limita a renderizar sin if/else embebidos.
+   */
+  const infoBlocks = getLeagueCardInfoBlocks(league);
 
   return (
     <View
@@ -269,10 +305,15 @@ function LeagueCardComponent({
           favorito arriba derecha */}
       <View className="flex-row items-start justify-between mb-3">
         <View className="flex-row items-center">
+          {/*
+           * RoleBadge recibe directamente bgColor/textColor de ROLE_CONFIG,
+           * que ya usa las mismas claves que las props del componente.
+           * No hay transformación intermedia ni estilos externos.
+           */}
           <RoleBadge
             label={roleConfig.label}
-            bgColor={roleConfig.bg}
-            textColor={roleConfig.text}
+            bgColor={roleConfig.bgColor}
+            textColor={roleConfig.textColor}
             icon={roleConfig.icon}
           />
 
@@ -345,27 +386,38 @@ function LeagueCardComponent({
               color={isFinished ? Colors.semantic.error : Colors.semantic.success}
             />
           </View>
+
+          {/*
+       * Información secundaria según rol.
+       * getLeagueCardInfoBlocks decide qué bloques mostrar:
+       * - admin → solo "Equipos"
+       * - resto → "Mi equipo" + "Equipos"
+       * Cada bloque ocupa espacio igual gracias al flex:1 de InfoStatRow.
+       */}
+          <View
+            style={{
+              flexDirection: 'row',
+              gap: 12,
+              marginVertical: 10,
+              paddingTop: 5,
+              borderTopWidth: 1, borderTopColor: Colors.bg.surface2
+            }}
+          >
+            {infoBlocks.map((block) => (
+              <InfoStatRow
+                key={block.label}
+                icon={block.icon}
+                label={block.label}
+                value={block.value}
+              />
+            ))}
+          </View>
         </View>
+
+
       </View>
 
-      {/* Información secundaria en dos columnas */}
-      <View className="flex-row mb-6">
-        <View className="flex-1 pr-3">
-          <InfoStatRow
-            icon="shield-outline"
-            label="Mi equipo"
-            value={league.teamName ?? 'Sin asignar'}
-          />
-        </View>
 
-        <View>
-          <InfoStatRow
-            icon="people-outline"
-            label="Equipos en la liga"
-            value={league.teamsCount}
-          />
-        </View>
-      </View>
 
       {/* Acción principal:
           - Entrar si activa

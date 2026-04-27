@@ -25,6 +25,7 @@ export { AdminDashboard } from "./AdminDashboard";
 export { CoachDashboard } from "./CoachDashboard";
 export { PlayerDashboard } from "./PlayerDashboard";
 export { FieldDelegateDashboard } from "./FieldDelegateDashboard";
+export { ObserverDashboard } from "./ObserverDashboard";
 
 // ── Tipos (para componentes que consumen datos del dashboard externamente) ──
 export type {

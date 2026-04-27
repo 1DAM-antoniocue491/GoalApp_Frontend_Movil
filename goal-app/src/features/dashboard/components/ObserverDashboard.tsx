@@ -1,24 +1,22 @@
 /**
- * CoachDashboard.tsx
+ * ObserverDashboard.tsx
  *
- * Dashboard para el rol `coach` (entrenador).
+ * Dashboard para el rol `observer` (observador).
  *
- * DIFERENCIAS CON ADMIN:
- * - No ve las métricas generales de la liga (canViewLeagueMetrics = false)
- * - No ve las tarjetas de progreso (canViewProgressMetrics = false)
- * - En partidos en vivo: solo puede ver plantillas (canRegisterEvent = false)
- * - En próximos: puede gestionar convocatoria pero NO iniciar (canStartMatch = false)
- *   → Nota: canManageSquad = true, pero el botón de convocatoria se implementa
- *     en la feature Matches cuando esté lista.
+ * DIFERENCIAS CON PLAYER:
+ * - No pertenece a un equipo → no hay prop `teamName`
+ * - No tendrá bloque de estadísticas personales cuando llegue feature Statistics
+ *   → el bloque "Mis estadísticas" es exclusivo del rol `player`
+ * - Permisos idénticos a player hoy, pero separados intencionalmente
+ *   para que la divergencia futura no requiera tocar PlayerDashboard
  *
- * DATOS:
- * Usa el mismo hook `useDashboardData` que el admin.
- * En el futuro, si el backend devuelve datos distintos por rol,
- * solo hay que actualizar el hook sin tocar este componente.
+ * PERMISOS (observer):
+ * - canViewLineups: true  → puede ver plantillas
+ * - todo lo demás: false  → solo lectura, sin acciones operativas
  *
  * SHELL:
  * SafeAreaView, StatusBar, WelcomeBlock, loading y error están centralizados
- * en DashboardLayout. CoachDashboard solo se preocupa de sus secciones.
+ * en DashboardLayout. ObserverDashboard solo se preocupa de sus secciones.
  */
 
 import React from 'react';
@@ -34,11 +32,10 @@ import { UpcomingMatchesSection } from './UpcomingMatchesSection';
 // Props
 // ---------------------------------------------------------------------------
 
-interface CoachDashboardProps {
+interface ObserverDashboardProps {
   leagueName: string;
   leagueId: string;
   userName: string;
-  teamName?: string;
   notificationCount?: number;
 }
 
@@ -46,25 +43,20 @@ interface CoachDashboardProps {
 // Componente
 // ---------------------------------------------------------------------------
 
-export function CoachDashboard({
+export function ObserverDashboard({
   leagueName,
   leagueId,
   userName,
-  teamName,
   notificationCount = 0,
-}: CoachDashboardProps) {
+}: ObserverDashboardProps) {
   const { data, isLoading, isError, refetch } = useDashboardData(leagueId);
-  // Permisos del rol coach — distintos a admin
-  const permissions = getDashboardPermissions('coach');
-
-  // El equipo del entrenador se muestra en el subtítulo del WelcomeBlock
-  const displayLeagueName = teamName ? `${teamName} · ${leagueName}` : leagueName;
+  const permissions = getDashboardPermissions('observer');
 
   return (
     <DashboardLayout
       userName={userName}
-      leagueName={displayLeagueName}
-      role="coach"
+      leagueName={leagueName}
+      role="observer"
       notificationCount={notificationCount}
       isLoading={isLoading}
       isError={isError}
@@ -72,21 +64,22 @@ export function CoachDashboard({
     >
       {data && (
         <>
-          {/* Partido en vivo: el coach solo puede ver plantillas */}
+          {/* Partido en vivo: el observador solo puede ver plantillas */}
           {data.liveMatch && (
             <View style={{ marginTop: 16 }}>
               <LiveMatchCard
                 match={data.liveMatch}
                 permissions={permissions}
-                // onRegisterEvent y onEndMatch no se pasan: coach no los usa
+                // Sin callbacks de acción: observer no registra eventos ni finaliza
               />
             </View>
           )}
 
-          {/* Próximos: el coach puede gestionar convocatoria pero no iniciar */}
+          {/* Próximos partidos: solo consulta, sin botones de acción */}
           <UpcomingMatchesSection
             matches={data.upcomingMatches}
             permissions={permissions}
+            // onStartMatch no se pasa: observer no puede iniciar partidos
           />
         </>
       )}

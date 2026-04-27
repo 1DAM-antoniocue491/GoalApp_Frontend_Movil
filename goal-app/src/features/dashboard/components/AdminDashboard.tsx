@@ -17,37 +17,19 @@
  * Los sub-componentes no saben si los datos vienen de mock o API.
  * Solo conocen su prop contract.
  *
- * ESTADOS VISUALES:
- * ✅ Loading   → skeletons animados
- * ✅ Error     → pantalla de error con retry
- * ✅ Sin live  → la sección "EN VIVO" simplemente no se renderiza
- * ✅ Sin próximos → UpcomingMatchesSection muestra su propio empty state
- * ✅ Con datos → layout completo
- *
- * POR QUÉ SafeAreaView EN LUGAR DE View:
- * La tab bar inferior de Expo Router ya gestiona el safe area inferior,
- * pero el notch/isla dinámica superior necesita SafeAreaView aquí.
+ * SHELL:
+ * SafeAreaView, StatusBar, WelcomeBlock, loading y error están centralizados
+ * en DashboardLayout. AdminDashboard solo se preocupa de sus secciones.
  */
 
 import React from 'react';
-import {
-  View,
-  Text,
-  ScrollView,
-  StatusBar,
-  TouchableOpacity,
-  ActivityIndicator,
-} from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { View } from 'react-native';
 import { useRouter } from 'expo-router';
-import { Ionicons } from '@expo/vector-icons';
 
-import { useActiveLeague } from '@/src/state/activeLeague/activeLeagueStore';
 import { useDashboardData } from '@/src/shared/hooks/usedashboarddata';
 import { getDashboardPermissions } from '../services/dashboardService';
 import { routes } from '@/src/shared/config/routes';
-
-import { WelcomeBlock } from './WelcomeBlock';
+import { DashboardLayout } from './DashboardLayout';
 import { LeagueMetrics } from './LeagueMetrics';
 import { LiveMatchCard } from './LiveMatchCard';
 import { UpcomingMatchesSection } from './UpcomingMatchesSection';
@@ -65,83 +47,6 @@ interface AdminDashboardProps {
   userName: string;
   /** Número de notificaciones no leídas */
   notificationCount?: number;
-}
-
-// ---------------------------------------------------------------------------
-// Estado de carga (skeleton simplificado)
-// ---------------------------------------------------------------------------
-
-function DashboardSkeleton() {
-  return (
-    <View style={{ paddingHorizontal: 16, paddingTop: 20, gap: 16 }}>
-      {/* Skeleton de métricas */}
-      {[...Array(2)].map((_, row) => (
-        <View key={row} style={{ flexDirection: 'row', gap: 12 }}>
-          {[...Array(2)].map((_, col) => (
-            <View
-              key={col}
-              style={{
-                flex: 1,
-                height: 110,
-                backgroundColor: '#1C1C22',
-                borderRadius: 12,
-                opacity: 0.6,
-              }}
-            />
-          ))}
-        </View>
-      ))}
-      {/* Skeleton de tarjeta live */}
-      <View
-        style={{ height: 200, backgroundColor: '#1C1C22', borderRadius: 20, opacity: 0.6 }}
-      />
-      {/* Skeleton de partidos próximos */}
-      {[...Array(3)].map((_, i) => (
-        <View
-          key={i}
-          style={{ height: 80, backgroundColor: '#1C1C22', borderRadius: 12, opacity: 0.4 }}
-        />
-      ))}
-    </View>
-  );
-}
-
-// ---------------------------------------------------------------------------
-// Estado de error con retry
-// ---------------------------------------------------------------------------
-
-function DashboardError({ onRetry }: { onRetry: () => void }) {
-  return (
-    <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', padding: 24 }}>
-      <Ionicons name="cloud-offline-outline" size={52} color="#52525B" />
-      <Text style={{ color: '#FFFFFF', fontSize: 18, fontWeight: '600', marginTop: 16 }}>
-        Error al cargar el dashboard
-      </Text>
-      <Text
-        style={{ color: '#A1A1AA', fontSize: 14, textAlign: 'center', marginTop: 8 }}
-      >
-        Revisa tu conexión y vuelve a intentarlo.
-      </Text>
-      <TouchableOpacity
-        onPress={onRetry}
-        style={{
-          marginTop: 24,
-          backgroundColor: '#C4F135',
-          paddingHorizontal: 24,
-          paddingVertical: 12,
-          borderRadius: 999,
-          flexDirection: 'row',
-          alignItems: 'center',
-          gap: 8,
-        }}
-      >
-        <Ionicons name="refresh-outline" size={16} color="#0F0F13" />
-        <Text style={{ color: '#0F0F13', fontWeight: '700', fontSize: 14 }}>
-          Reintentar
-        </Text>
-      </TouchableOpacity>
-    </View>
-  );
 }
 
 // ---------------------------------------------------------------------------
@@ -187,42 +92,26 @@ export function AdminDashboard({
   // ── Render ──
 
   return (
-    <SafeAreaView
-      style={{ flex: 1, backgroundColor: '#0F0F13' }}
-      // edges: 'top' porque la tab bar inferior ya gestiona el safe area inferior
-      edges={['top']}
+    <DashboardLayout
+      userName={userName}
+      leagueName={leagueName}
+      role="admin"
+      notificationCount={notificationCount}
+      isLoading={isLoading}
+      isError={isError}
+      onRetry={refetch}
     >
-      <StatusBar barStyle="light-content" backgroundColor="#0F0F13" />
-
-      {/* WelcomeBlock siempre visible, incluso en loading/error */}
-      <WelcomeBlock
-        userName={userName}
-        leagueName={leagueName}
-        role="admin"
-        notificationCount={notificationCount}
-      />
-
-      {/* ── Estado: cargando ── */}
-      {isLoading && (
-        <ScrollView showsVerticalScrollIndicator={false}>
-          <DashboardSkeleton />
-        </ScrollView>
-      )}
-
-      {/* ── Estado: error ── */}
-      {isError && !isLoading && (
-        <DashboardError onRetry={refetch} />
-      )}
-
-      {/* ── Estado: datos listos ── */}
-      {data && !isLoading && !isError && (
-        <ScrollView
-          style={{ flex: 1 }}
-          contentContainerStyle={{ paddingBottom: 32 }}
-          showsVerticalScrollIndicator={false}
-        >
+      {/*
+        data se null-chequea aquí porque DashboardLayout no conoce el tipo
+        de datos de cada rol. Cuando data es null (antes de la primera carga)
+        este bloque se omite y el layout sigue mostrando el skeleton.
+      */}
+      {data && (
+        <>
           {/* ── Métricas 2×2 (solo admin: canViewLeagueMetrics) ── */}
-          <LeagueMetrics metrics={data.metrics} />
+          {permissions.canViewLeagueMetrics && (
+            <LeagueMetrics metrics={data.metrics} />
+          )}
 
           {/* ── Partido en vivo (si existe) ── */}
           {data.liveMatch && (
@@ -247,8 +136,8 @@ export function AdminDashboard({
           {permissions.canViewProgressMetrics && (
             <ProgressMetrics metrics={data.metrics} />
           )}
-        </ScrollView>
+        </>
       )}
-    </SafeAreaView>
+    </DashboardLayout>
   );
 }

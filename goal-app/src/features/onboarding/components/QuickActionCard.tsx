@@ -1,69 +1,202 @@
 /**
- * QuickActionCard - Cards de acciones rápidas para la pantalla de inicio
+ * QuickActionCard - Card de acción rápida para el onboarding y otras pantallas.
  *
- * Se usa para las cards de "Crear nueva liga" y "Unirme a una liga"
- * con diseño premium, icono circular decorativo y botón CTA.
+ * Soporta dos variantes visuales:
+ * - 'default': layout vertical con descripción y CTA a ancho completo.
+ *              Para acciones principales que merecen jerarquía propia.
+ * - 'compact': layout horizontal en una sola fila.
+ *              Para espacios reducidos o listados de acciones secundarias.
+ *
+ * @example
+ * <QuickActionCard
+ *   iconName="add"
+ *   iconColor={Colors.brand.primary}
+ *   title="Crear nueva liga"
+ *   description="Configura tu competición y empieza a gestionarla"
+ *   ctaText="Crear liga"
+ *   onPress={handleCreate}
+ * />
+ *
+ * <QuickActionCard variant="compact" ... />
  */
 
-import React from 'react';
-import { View, Text, TouchableOpacity, ViewStyle } from 'react-native';
+import React, { memo } from 'react';
+import { View, Text, ViewStyle } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { Colors } from '@/src/shared/constants/colors';
+import { theme } from '@/src/shared/styles/theme';
+import { PrimaryPillButton } from '@/src/shared/components/ui/PrimaryPillButton';
 
 interface QuickActionCardProps {
-  /** Icono a mostrar (nombre de Ionicons) */
+  /** Nombre del icono de Ionicons */
   iconName: keyof typeof Ionicons.glyphMap;
-  /** Color del icono */
+  /** Color del icono y su fondo circular semitransparente. Default: brand.primary */
   iconColor?: string;
-  /** Título principal de la card */
+  /** Título principal de la acción */
   title: string;
-  /** Descripción secundaria */
+  /** Descripción secundaria (máx. 2 líneas en default, 1 en compact) */
   description: string;
   /** Texto del botón CTA */
   ctaText: string;
-  /** Acción al presionar el botón CTA */
+  /** Callback al pulsar el CTA */
   onPress?: () => void;
-  /** Estilo adicional para el contenedor */
+  /**
+   * Variante visual:
+   * - 'default' → vertical, icono + título arriba, descripción, CTA ancho abajo
+   * - 'compact' → horizontal, todo en una sola fila
+   */
+  variant?: 'default' | 'compact';
+  /** Estilo adicional para el contenedor raíz */
   style?: ViewStyle;
 }
 
-export function QuickActionCard({
+// Estilos compartidos entre variantes para evitar repetición
+const CARD_BASE: ViewStyle = {
+  backgroundColor: Colors.bg.surface1,
+  borderRadius: theme.borderRadius.xl,
+  borderWidth: 1,
+  borderColor: Colors.bg.surface2,
+};
+
+function QuickActionCardComponent({
   iconName,
-  iconColor = '#C4F135',
+  iconColor = Colors.brand.primary,
   title,
   description,
   ctaText,
   onPress,
+  variant = 'default',
   style,
 }: QuickActionCardProps) {
-  return (
-    <View
-      className="bg-[#1D1C22] rounded-3xl p-5 gap-4 border border-[#2A2A35]"
-      style={style}
-    >
-      {/* Icono circular decorativo */}
+  // Fondo circular: color de acento al ~9% de opacidad para no sobrecargar
+  const iconBg = `${iconColor}18`;
 
-      <View className='flex-row gap-3 items-center'>
+  if (variant === 'compact') {
+    return (
+      <View
+        style={[
+          CARD_BASE,
+          {
+            flexDirection: 'row',
+            alignItems: 'center',
+            padding: theme.spacing.md,
+            gap: theme.spacing.md,
+          },
+          style,
+        ]}
+      >
+        {/* Icono reducido */}
         <View
-          className="h-12 w-12 rounded-full items-center justify-center"
-          style={{ backgroundColor: `${iconColor}15` }} // 15 = ~8% opacity
+          style={{
+            width: 36,
+            height: 36,
+            borderRadius: 18,
+            backgroundColor: iconBg,
+            alignItems: 'center',
+            justifyContent: 'center',
+          }}
         >
-          <Ionicons name={iconName} size={24} color={iconColor} />
+          <Ionicons name={iconName} size={18} color={iconColor} />
         </View>
 
-        {/* Textos */}
-        <Text className="text-white font-semibold text-lg">{title}</Text>
+        {/* Textos en flex:1 para empujar el CTA al extremo derecho */}
+        <View style={{ flex: 1, gap: 2 }}>
+          <Text
+            style={{
+              color: Colors.text.primary,
+              fontSize: theme.fontSize.sm,
+              fontWeight: '600',
+              lineHeight: 20,
+            }}
+          >
+            {title}
+          </Text>
+          <Text
+            numberOfLines={1}
+            style={{
+              color: Colors.text.secondary,
+              fontSize: theme.fontSize.xs,
+              lineHeight: 16,
+            }}
+          >
+            {description}
+          </Text>
+        </View>
+
+        {/* CTA compacto con ancho mínimo fijo */}
+        <PrimaryPillButton
+          label={ctaText}
+          onPress={onPress}
+          height={34}
+          minWidth={88}
+        />
+      </View>
+    );
+  }
+
+  // Variante default: vertical con más jerarquía
+  return (
+    <View
+      style={[
+        CARD_BASE,
+        {
+          padding: theme.spacing.lg,
+          gap: theme.spacing.sm,
+        },
+        style,
+      ]}
+    >
+      {/* Fila superior: icono + título en la misma línea */}
+      <View style={{ flexDirection: 'row', alignItems: 'center', gap: theme.spacing.md }}>
+        <View
+          style={{
+            width: 40,
+            height: 40,
+            borderRadius: 20,
+            backgroundColor: iconBg,
+            alignItems: 'center',
+            justifyContent: 'center',
+          }}
+        >
+          <Ionicons name={iconName} size={20} color={iconColor} />
+        </View>
+
+        <Text
+          style={{
+            flex: 1,
+            color: Colors.text.primary,
+            fontSize: theme.fontSize.md,
+            fontWeight: '600',
+            lineHeight: 22,
+          }}
+        >
+          {title}
+        </Text>
       </View>
 
-      <Text className="text-[#8A9AA4] text-sm">{description}</Text>
-
-      {/* Botón CTA con flecha */}
-      <TouchableOpacity
-        onPress={onPress}
-        className="flex-row items-center justify-between bg-[#C4F135] rounded-2xl py-3 px-4 mt-1"
+      {/* Descripción: máx. 2 líneas para mantener la card compacta */}
+      <Text
+        numberOfLines={2}
+        style={{
+          color: Colors.text.secondary,
+          fontSize: theme.fontSize.sm,
+          lineHeight: 20,
+        }}
       >
-        <Text className="text-black font-bold text-base">{ctaText}</Text>
-        <Ionicons name="arrow-forward" size={20} color="#000" />
-      </TouchableOpacity>
+        {description}
+      </Text>
+
+      {/* CTA a ancho completo */}
+      <PrimaryPillButton
+        label={ctaText}
+        onPress={onPress}
+        height={44}
+        style={{ marginTop: theme.spacing.xs }}
+      />
     </View>
   );
+}
+
+export function QuickActionCard(props: QuickActionCardProps) {
+  return <QuickActionCardComponent {...props} />;
 }

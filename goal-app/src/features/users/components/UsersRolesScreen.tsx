@@ -15,7 +15,7 @@
  * - Colors, theme (shared)
  */
 
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useRef } from 'react';
 import {
   View,
   Text,
@@ -36,6 +36,8 @@ import { UserRowCard } from './UserRowCard';
 import { InviteUserModal } from './modals/InviteUserModal';
 import { ManageUserModal } from './modals/ManageUserModal';
 import type { LeagueUser, InviteUserFormData, ManageUserFormData } from '../types/users.types';
+import { ScrollEdgeButton } from '@/src/shared/components/navigation/ScrollEdgeButton';
+
 
 // ─── Mock data ─────────────────────────────────────────────────────────────────
 // TODO: reemplazar con hook useLeagueUsers cuando el servicio esté disponible
@@ -95,6 +97,15 @@ export function UsersRolesScreen() {
   const [search, setSearch] = useState('');
   const [inviteOpen, setInviteOpen] = useState(false);
   const [managingUser, setManagingUser] = useState<LeagueUser | null>(null);
+
+  // Ref del ScrollView para que ScrollEdgeButton pueda llamar a scrollTo
+  const scrollRef = useRef<ScrollView>(null);
+  // Posición vertical actual del scroll (actualizada en onScroll)
+  const [scrollY, setScrollY] = useState(0);
+  // Altura total del contenido renderizado (actualizada en onContentSizeChange)
+  const [contentHeight, setContentHeight] = useState(0);
+  // Altura visible del ScrollView (actualizada en onLayout)
+  const [viewportHeight, setViewportHeight] = useState(0);
 
   // Filtrado por búsqueda en nombre o email
   const filteredUsers = useMemo(() => {
@@ -165,9 +176,19 @@ export function UsersRolesScreen() {
       </View>
 
       <ScrollView
-        contentContainerStyle={{ paddingHorizontal: theme.spacing.xl, paddingVertical: theme.spacing.xl }}
+        ref={scrollRef}
+        className="flex-1"
         showsVerticalScrollIndicator={false}
+        contentContainerStyle={{ paddingHorizontal: theme.spacing.xl, paddingVertical: theme.spacing.xl }}
         keyboardShouldPersistTaps="handled"
+
+        // scrollEventThrottle=16 garantiza actualizaciones ~60fps sin saturar el bridge
+        scrollEventThrottle={16}
+        onScroll={(e) => setScrollY(e.nativeEvent.contentOffset.y)}
+        // Capturamos la altura total del contenido para saber cuándo hay scroll real
+        onContentSizeChange={(_, h) => setContentHeight(h)}
+        // Capturamos la altura del área visible para calcular el surplus scrollable
+        onLayout={(e) => setViewportHeight(e.nativeEvent.layout.height)}
       >
         {/* Resumen de métricas */}
         <UsersSummary users={users} />
@@ -208,6 +229,19 @@ export function UsersRolesScreen() {
           </View>
         )}
       </ScrollView>
+
+      {/*
+              ScrollEdgeButton flota fuera del ScrollView para que su position:absolute
+              se resuelva respecto al View padre (flex:1) y no quede enterrado dentro
+              del contenido scrollable.
+            */}
+      <ScrollEdgeButton
+        scrollRef={scrollRef}
+        scrollY={scrollY}
+        contentHeight={contentHeight}
+        viewportHeight={viewportHeight}
+      />
+
 
       {/* ── Modal Invitar usuario ── */}
       <InviteUserModal

@@ -75,10 +75,6 @@ export function WelcomeBlock({
           paddingBottom: 8,
         }}
       >
-        {/* Display 30px / Bold — tipografía del design system */}
-        <Text style={{ color: '#FFFFFF', fontSize: 30, fontWeight: 'bold', lineHeight: 36 }}>
-          Hola, {userName}
-        </Text>
 
         {/* Rol del usuario en la liga actual */}
         <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 6 }}>

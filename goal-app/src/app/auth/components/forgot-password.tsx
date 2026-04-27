@@ -3,6 +3,7 @@
  *
  * El usuario introduce su email y solicita el enlace de recuperación.
  * Al continuar navega a check-email con el email como parámetro.
+ * Conecta con la API real de GoalApp.
  */
 
 import React, { useState } from 'react';
@@ -13,6 +14,7 @@ import {
     KeyboardAvoidingView,
     Platform,
     ScrollView,
+    Alert,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
@@ -25,6 +27,9 @@ import { Button } from '@/src/shared/components/ui/Button';
 import { AppLogo } from '@/src/shared/components/ui/AppLogo';
 import { routes } from '@/src/shared/config/routes';
 
+// Hook de recuperación de contraseña
+import { usePasswordRecovery } from '@/src/app/auth/hooks/usePasswordRecovery';
+
 // Validación básica de formato email
 function isValidEmail(email: string): boolean {
     const trimmed = email.trim();
@@ -35,21 +40,29 @@ export default function ForgotPasswordScreen() {
     const router = useRouter();
     const insets = useSafeAreaInsets();
 
+    // Hook de recuperación
+    const { sendRecoveryEmail, error, isLoading } = usePasswordRecovery();
+
     const [email, setEmail] = useState('');
-    const [isLoading, setIsLoading] = useState(false);
 
     const canSubmit = isValidEmail(email);
 
     async function handleSend() {
         if (!canSubmit) return;
-        setIsLoading(true);
-        // Mock: simula latencia de red
-        await new Promise((r) => setTimeout(r, 800));
-        setIsLoading(false);
-        router.push({
-            pathname: routes.public.auth.resetPassword,
-            params: { email: email.trim() },
-        });
+
+        try {
+            await sendRecoveryEmail(email.trim());
+            // Navegar a check-email tras envío exitoso
+            router.push({
+                pathname: routes.public.auth.checkEmail,
+                params: { email: email.trim() },
+            });
+        } catch (err) {
+            Alert.alert(
+                'Error',
+                error || 'No se pudo enviar el email de recuperación'
+            );
+        }
     }
 
     return (

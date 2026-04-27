@@ -4,6 +4,7 @@
  * Esta pantalla:
  * - Muestra el acceso por email y contraseña
  * - Navega al onboarding al iniciar sesión correctamente
+ * - Conecta con la API real de GoalApp
  */
 
 import React, { useState } from 'react';
@@ -19,16 +20,18 @@ import { FormField } from '@/src/shared/components/ui/FormField';
 import { PasswordField } from '@/src/shared/components/ui/PasswordField';
 import { Button } from '@/src/shared/components/ui/Button';
 
+// Hook de autenticación
+import { useAuth } from '@/src/app/auth/hooks/useAuth';
+
 // Tipado del formulario de login
 import type { LoginForm } from '@/src/shared/types/auth';
-
-// Helpers y datos mock para validar credenciales
-import { validateCredentials } from '@/src/app/auth/services/authService';
-import { GENERIC_PASSWORD } from '@/src/mocks/data';
 
 export default function LoginScreen() {
     // Router de Expo para navegación
     const router = useRouter();
+
+    // Hook de autenticación
+    const { login, error, clearError } = useAuth();
 
     // Estado principal del formulario
     const [form, setForm] = useState<LoginForm>({
@@ -54,23 +57,20 @@ export default function LoginScreen() {
 
         // Activamos loading
         setIsLoading(true);
+        clearError();
 
         try {
-            // Validamos contra los datos mock
-            const user = validateCredentials(form.email, form.password);
+            // Login con API real
+            await login(form.email, form.password);
 
-            // Si el usuario existe, login correcto
-            if (user) {
-                // Usamos replace para evitar apilar login debajo del onboarding
-                // y hacer la navegación más limpia
-                router.replace(routes.private.onboarding);
-            } else {
-                // Si las credenciales son incorrectas, mostramos una alerta
-                Alert.alert(
-                    'Error de inicio de sesión',
-                    `Credenciales inválidas.\n\nUsa una cuenta de prueba:\n• Email: juan@goalapp.com\n• Password: ${GENERIC_PASSWORD}`
-                );
-            }
+            // Si llegamos aquí, el login fue exitoso
+            router.replace(routes.private.onboarding);
+        } catch (err) {
+            // Mostrar error del backend
+            Alert.alert(
+                'Error de inicio de sesión',
+                error || 'Credenciales incorrectas'
+            );
         } finally {
             // Quitamos loading siempre
             setIsLoading(false);

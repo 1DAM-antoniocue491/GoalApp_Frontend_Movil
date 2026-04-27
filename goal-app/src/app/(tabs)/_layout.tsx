@@ -7,6 +7,8 @@
  * - Añadir (abre QuickActionSheet, no navega)
  * - Estadísticas
  * - Perfil
+ *
+ * Protegido con AuthWrapper - requiere autenticación
  */
 
 import { Tabs } from "expo-router";
@@ -18,6 +20,9 @@ import { CreateTeamModal } from '@/src/features/teams/components/modals/CreateTe
 import { CreateCalendarModal } from '@/src/features/calendar/components/modals/CreateCalendarModal';
 import { CreateManualMatchModal } from '@/src/features/calendar/components/modals/CreateManualMatchModal';
 import { Colors } from "@/src/shared/constants/colors";
+
+// Import ProtectedRoute wrapper
+import { ProtectedRoute } from '@/src/components/ProtectedRoute';
 
 function PlusTabButton(props: any) {
   return (
@@ -56,84 +61,86 @@ export default function TabsLayout() {
   return (
     // Fragment para que el Modal pueda renderizarse fuera del árbol de Tabs
     <>
-      <Tabs
-        screenOptions={{
-          headerShown: false,
-          tabBarStyle: {
-            backgroundColor: "#000000",
-            borderTopColor: "#2A2A35",
-            paddingBottom: 40,
-            paddingTop: 8,
-            height: 80,
-          },
-          tabBarActiveTintColor: Colors.brand.primary,
-          tabBarInactiveTintColor: "#9a9ea5",
-          tabBarLabelStyle: {
-            fontSize: 11,
-            fontWeight: "600",
-            marginTop: 4,
-          },
-        }}
-      >
-        {/* Tab Inicio */}
-        <Tabs.Screen
-          name="index"
-          options={{
-            title: "Inicio",
-            tabBarIcon: ({ color, size }) => (
-              <Ionicons name="home-outline" color={color} size={size} />
-            ),
-          }}
-        />
-
-        {/* Tab Calendario */}
-        <Tabs.Screen
-          name="calendar"
-          options={{
-            title: "Calendario",
-            tabBarIcon: ({ color, size }) => (
-              <Ionicons name="calendar-outline" color={color} size={size} />
-            ),
-          }}
-        />
-
-        {/* Tab Añadir — intercepta el tap y abre el sheet, nunca navega */}
-        <Tabs.Screen
-          name="add"
-          listeners={{
-            tabPress: (e) => {
-              e.preventDefault(); // Evita la navegación al tab
-              setSheetOpen(true);
+      <ProtectedRoute>
+        <Tabs
+          screenOptions={{
+            headerShown: false,
+            tabBarStyle: {
+              backgroundColor: "#000000",
+              borderTopColor: "#2A2A35",
+              paddingBottom: 40,
+              paddingTop: 8,
+              height: 80,
+            },
+            tabBarActiveTintColor: Colors.brand.primary,
+            tabBarInactiveTintColor: "#9a9ea5",
+            tabBarLabelStyle: {
+              fontSize: 11,
+              fontWeight: "600",
+              marginTop: 4,
             },
           }}
-          options={{
-            title: "Añadir",
-            tabBarButton: (props) => <PlusTabButton {...props} />,
-          }}
-        />
+        >
+          {/* Tab Inicio */}
+          <Tabs.Screen
+            name="index"
+            options={{
+              title: "Inicio",
+              tabBarIcon: ({ color, size }) => (
+                <Ionicons name="home-outline" color={color} size={size} />
+              ),
+            }}
+          />
 
-        {/* Tab Estadísticas */}
-        <Tabs.Screen
-          name="statistics"
-          options={{
-            title: "Estadísticas",
-            tabBarIcon: ({ color, size }) => (
-              <Ionicons name="stats-chart-outline" color={color} size={size} />
-            ),
-          }}
-        />
+          {/* Tab Calendario */}
+          <Tabs.Screen
+            name="calendar"
+            options={{
+              title: "Calendario",
+              tabBarIcon: ({ color, size }) => (
+                <Ionicons name="calendar-outline" color={color} size={size} />
+              ),
+            }}
+          />
 
-        {/* Tab Perfil */}
-        <Tabs.Screen
-          name="profile"
-          options={{
-            title: "Perfil",
-            tabBarIcon: ({ color, size }) => (
-              <Ionicons name="person-outline" color={color} size={size} />
-            ),
-          }}
-        />
-      </Tabs>
+          {/* Tab Añadir — intercepta el tap y abre el sheet, nunca navega */}
+          <Tabs.Screen
+            name="add"
+            listeners={{
+              tabPress: (e) => {
+                e.preventDefault(); // Evita la navegación al tab
+                setSheetOpen(true);
+              },
+            }}
+            options={{
+              title: "Añadir",
+              tabBarButton: (props) => <PlusTabButton {...props} />,
+            }}
+          />
+
+          {/* Tab Estadísticas */}
+          <Tabs.Screen
+            name="statistics"
+            options={{
+              title: "Estadísticas",
+              tabBarIcon: ({ color, size }) => (
+                <Ionicons name="stats-chart-outline" color={color} size={size} />
+              ),
+            }}
+          />
+
+          {/* Tab Perfil */}
+          <Tabs.Screen
+            name="profile"
+            options={{
+              title: "Perfil",
+              tabBarIcon: ({ color, size }) => (
+                <Ionicons name="person-outline" color={color} size={size} />
+              ),
+            }}
+          />
+        </Tabs>
+      </ProtectedRoute>
 
       {/*
        * QuickActionSheet y CreateTeamModal DEBEN estar FUERA de <Tabs>.

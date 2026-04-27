@@ -2,8 +2,9 @@
  * RegisterScreen - Pantalla de registro
  *
  * Esta pantalla:
- * - Permite crear un usuario mock
+ * - Permite crear un usuario con API real
  * - Anima el mensaje de error de contraseña de forma suave
+ * - Conecta con el backend de GoalApp
  */
 
 import React, { useEffect, useRef, useState } from 'react';
@@ -19,15 +20,18 @@ import { FormField } from '@/src/shared/components/ui/FormField';
 import { PasswordField } from '@/src/shared/components/ui/PasswordField';
 import { Button } from '@/src/shared/components/ui/Button';
 
+// Hook de autenticación
+import { useAuth } from '@/src/app/auth/hooks/useAuth';
+
 // Tipado del formulario de registro
 import type { RegisterForm } from '@/src/shared/types/auth';
-
-// Helper mock para crear usuario
-import { createUser } from '@/src/app/auth/services/authService';
 
 export default function RegisterScreen() {
     // Router para navegación
     const router = useRouter();
+
+    // Hook de autenticación
+    const { register, error, clearError } = useAuth();
 
     // Estado del formulario
     const [form, setForm] = useState<RegisterForm>({
@@ -79,25 +83,30 @@ export default function RegisterScreen() {
 
         // Activamos loading
         setIsLoading(true);
+        clearError();
 
         try {
-            // Creamos el usuario mock
-            const user = createUser(form.name, form.email, form.password);
+            // Registro con API real
+            await register(form.name, form.email, form.password);
 
-            // Si se crea correctamente, notificamos y navegamos
-            if (user) {
-                Alert.alert(
-                    'Registro exitoso',
-                    'Tu cuenta ha sido creada. Redirigiendo al onboarding...',
-                    [
-                        {
-                            text: 'OK',
-                            // Replace para no dejar register detrás en el stack
-                            onPress: () => router.replace(routes.private.onboarding),
-                        },
-                    ]
-                );
-            }
+            // Si llegamos aquí, el registro fue exitoso
+            Alert.alert(
+                'Registro exitoso',
+                'Tu cuenta ha sido creada. Redirigiendo al onboarding...',
+                [
+                    {
+                        text: 'OK',
+                        // Replace para no dejar register detrás en el stack
+                        onPress: () => router.replace(routes.private.onboarding),
+                    },
+                ]
+            );
+        } catch (err) {
+            // Mostrar error del backend
+            Alert.alert(
+                'Error de registro',
+                error || 'No se pudo crear la cuenta'
+            );
         } finally {
             // Quitamos loading siempre
             setIsLoading(false);

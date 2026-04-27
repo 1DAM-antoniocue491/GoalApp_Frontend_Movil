@@ -35,6 +35,9 @@ import { activeLeagueStore } from '@/src/state/activeLeague/activeLeagueStore';
 import { Colors } from '@/src/shared/constants/colors';
 import { theme } from '@/src/shared/styles/theme';
 
+// Import ProtectedRoute para proteger esta pantalla
+import { ProtectedRoute } from '@/src/components/ProtectedRoute';
+
 const COPY = {
   sectionTitle: 'Mis ligas',
   emptyFilterText: 'No se encontraron ligas con los filtros actuales',
@@ -63,7 +66,7 @@ function useFadeUpStyle(animatedValue: Animated.Value) {
   );
 }
 
-export default function OnboardingScreen() {
+function OnboardingScreenContent() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
 
@@ -402,5 +405,14 @@ export default function OnboardingScreen() {
         onCancel={() => setShowCreateModal(false)}
       />
     </View >
+  );
+}
+
+// Export default con ProtectedRoute wrapper
+export default function OnboardingScreen() {
+  return (
+    <ProtectedRoute>
+      <OnboardingScreenContent />
+    </ProtectedRoute>
   );
 }

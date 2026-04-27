@@ -1,36 +1,82 @@
-import type { User } from "@/src/shared/types/user";
-import type { Credential } from "@/src/shared/types/user";
-import { mockUsers, mockCredentials } from "@/src/mocks/data";
+/**
+ * AuthService - Capa de servicio para autenticación
+ *
+ * Conecta con la API real y gestiona la sesión:
+ * - login: autenticar usuario y guardar sesión
+ * - register: crear usuario y hacer login automático
+ * - logout: limpiar sesión
+ */
+
+import { sessionStore } from '@/src/state/session/sessionStore';
+import * as authApi from '@/src/app/auth/api/auth.api';
+import type { AuthUser } from '../types/auth.types';
 
 /**
- * Verifica si las credenciales son válidas
+ * Login con API real
+ *
+ * @param email - Email del usuario
+ * @param password - Contraseña en texto plano
+ * @returns Objeto con success, user (si éxito) o error (si fallo)
  */
-export function validateCredentials(email: string, password: string): User | null {
-  const credential = mockCredentials.find(
-    (c) =>
-      c.email.toLowerCase() === email.toLowerCase() && c.password === password,
-  );
+export async function login(
+  email: string,
+  password: string
+): Promise<{ success: boolean; user?: AuthUser; error?: string }> {
+  try {
+    // 1. Llamar a la API
+    const response = await authApi.login(email, password);
 
-  if (!credential) return null;
+    // 2. Obtener usuario actual con el token
+    const user = await authApi.getCurrentUser(response.access_token);
 
-  const user = mockUsers.find((u) => u.id === credential.userId);
-  return user || null;
+    // 3. Guardar sesión
+    await sessionStore.setSession(
+      response.access_token,
+      response.refresh_token,
+      user
+    );
+
+    return { success: true, user };
+  } catch (error) {
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : 'Error en login',
+    };
+  }
 }
 
 /**
- * Crea un nuevo usuario mock (para registro simulado)
+ * Registro con API real
+ *
+ * @param nombre - Nombre completo del usuario
+ * @param email - Email del usuario
+ * @param password - Contraseña en texto plano
+ * @returns Objeto con success, user (si éxito) o error (si fallo)
  */
-export function createUser(name: string, email: string, password: string): User {
-  const newUser: User = {
-    id: `user-${Date.now()}`,
-    name,
-    email,
-    avatar: undefined,
-    favoriteLeagues: [],
-  };
+export async function register(
+  nombre: string,
+  email: string,
+  password: string
+): Promise<{ success: boolean; user?: AuthUser; error?: string }> {
+  try {
+    // 1. Llamar a la API de registro
+    const response = await authApi.register({ nombre, email, contraseña: password });
 
-  mockUsers.push(newUser);
-  mockCredentials.push({ email, password, userId: newUser.id });
+    // 2. Login automático tras registro
+    return await login(email, password);
+  } catch (error) {
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : 'Error en registro',
+    };
+  }
+}
 
-  return newUser;
+/**
+ * Logout - limpiar sesión
+ *
+ * Limpia el sessionStore y elimina tokens de SecureStore
+ */
+export async function logout(): Promise<void> {
+  await sessionStore.clearSession();
 }

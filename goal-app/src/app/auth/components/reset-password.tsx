@@ -4,6 +4,7 @@
  * El usuario introduce su nueva contraseña y la confirma.
  * Reglas: mínimo 8 caracteres, una mayúscula, un número, confirmación igual.
  * Al guardar correctamente vuelve al login.
+ * Conecta con la API real de GoalApp.
  */
 
 import React, { useState } from 'react';
@@ -17,7 +18,7 @@ import {
     Alert,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { useRouter } from 'expo-router';
+import { useRouter, useLocalSearchParams } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { Colors } from '@/src/shared/constants/colors';
@@ -27,6 +28,9 @@ import { Button } from '@/src/shared/components/ui/Button';
 import { AppLogo } from '@/src/shared/components/ui/AppLogo';
 import { routes } from '@/src/shared/config/routes';
 
+// Hook de recuperación de contraseña
+import { usePasswordRecovery } from '@/src/app/auth/hooks/usePasswordRecovery';
+
 interface PasswordRule {
     label: string;
     passes: boolean;
@@ -35,10 +39,13 @@ interface PasswordRule {
 export default function ResetPasswordScreen() {
     const router = useRouter();
     const insets = useSafeAreaInsets();
+    const { token } = useLocalSearchParams<{ token: string }>();
+
+    // Hook de recuperación
+    const { resetPasswordWithToken, error, isLoading } = usePasswordRecovery();
 
     const [password, setPassword] = useState('');
     const [confirmPassword, setConfirmPassword] = useState('');
-    const [isLoading, setIsLoading] = useState(false);
 
     // Reglas de validación
     const rules: PasswordRule[] = [
@@ -56,21 +63,26 @@ export default function ResetPasswordScreen() {
 
     async function handleSave() {
         if (!allRulesPassed) return;
-        setIsLoading(true);
-        // Mock: simula latencia de red
-        await new Promise((r) => setTimeout(r, 800));
-        setIsLoading(false);
-        Alert.alert(
-            '¡Contraseña actualizada!',
-            'Tu contraseña ha sido cambiada correctamente. Inicia sesión con tu nueva contraseña.',
-            [
-                {
-                    text: 'Ir al login',
-                    // replace limpia el stack del flujo de recuperación
-                    onPress: () => router.replace(routes.public.auth.login),
-                },
-            ]
-        );
+
+        try {
+            await resetPasswordWithToken(token, password);
+            Alert.alert(
+                '¡Contraseña actualizada!',
+                'Tu contraseña ha sido cambiada correctamente. Inicia sesión con tu nueva contraseña.',
+                [
+                    {
+                        text: 'Ir al login',
+                        // replace limpia el stack del flujo de recuperación
+                        onPress: () => router.replace(routes.public.auth.login),
+                    },
+                ]
+            );
+        } catch (err) {
+            Alert.alert(
+                'Error',
+                error || 'No se pudo actualizar la contraseña'
+            );
+        }
     }
 
     return (

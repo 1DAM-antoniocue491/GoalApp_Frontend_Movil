@@ -70,6 +70,12 @@ const ROLE_CONFIG: Record<
     textColor: Colors.brand.accent,
     icon: 'football-outline',
   },
+  observer: {
+    label: 'Observador',
+    bgColor: 'rgba(148,163,184,0.15)',
+    textColor: '#94A3B8',
+    icon: 'eye-outline',
+  },
 };
 
 /**
@@ -215,11 +221,8 @@ interface CardInfoBlock {
  * Determina qué bloques de información mostrar según el rol del usuario.
  *
  * Reglas de negocio:
- * - admin → solo ve total de equipos. Gestiona la liga, no pertenece a un equipo.
+ * - admin / observer → solo ven total de equipos. No pertenecen a un equipo concreto.
  * - coach / player / field_delegate → ven su equipo asignado + total de equipos.
- *
- * Si en el futuro se añade el rol 'observer' a LeagueRole, basta con añadirlo
- * al mismo bloque que admin (sin equipo asignado).
  */
 function getLeagueCardInfoBlocks(league: LeagueItem): CardInfoBlock[] {
   const teamsBlock: CardInfoBlock = {
@@ -228,12 +231,11 @@ function getLeagueCardInfoBlocks(league: LeagueItem): CardInfoBlock[] {
     value: league.teamsCount,
   };
 
-  if (league.role === 'admin') {
-    // Admin ve solo el global de equipos
+  if (league.role === 'admin' || league.role === 'observer') {
     return [teamsBlock];
   }
 
-  // El resto de roles tienen equipo asignado en la liga
+  // coach / player / field_delegate tienen equipo asignado
   return [
     {
       icon: 'shield-outline',
@@ -396,8 +398,8 @@ function LeagueCardComponent({
             style={{
               flexDirection: 'row',
               gap: 12,
-              marginVertical: 14,
-              paddingTop: 5, 
+              marginVertical: 10,
+              paddingTop: 5,
               borderTopWidth: 1, borderTopColor: Colors.bg.surface2
             }}
           >

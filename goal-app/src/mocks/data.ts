@@ -120,8 +120,10 @@ export const mockLeagues: LeagueItem[] = [
     isFavorite: false,
     teamName: "Sevilla FC",
     teamsCount: 8,
-    crestUrl: "https://example.com/crest.png",
-    canReactivate: true,
+    crestUrl:
+      "https://w7.pngwing.com/pngs/517/522/png-transparent-language-russia-512x512-logo-emblem-logo-fictional-character.png",
+    // coach no puede reactivar — canReactivate solo es true para admins
+    canReactivate: false,
   },
   {
     id: "3",
@@ -136,6 +138,29 @@ export const mockLeagues: LeagueItem[] = [
     canReactivate: false,
   },
   {
+    id: "5",
+    name: "Liga Veteranos Sur",
+    season: "2024/25",
+    status: "finished",
+    role: "admin",
+    isFavorite: false,
+    teamsCount: 10,
+    crestUrl: null,
+    // admin puede reactivar ligas finalizadas
+    canReactivate: true,
+  },
+  {
+    id: "6",
+    name: "Supercopa Interregional",
+    season: "2025/26",
+    status: "active",
+    role: "observer",
+    isFavorite: false,
+    teamsCount: 16,
+    crestUrl: null,
+    canReactivate: false,
+  },
+  {
     id: "4",
     name: "Liga Elite",
     season: "2025/26",
@@ -144,7 +169,8 @@ export const mockLeagues: LeagueItem[] = [
     isFavorite: true,
     teamName: "Athletic Club",
     teamsCount: 10,
-    crestUrl: "https://example.com/elite.png",
+    crestUrl:
+      "https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcSV85lmcWqokcEAwxxLGA_L8Y8PbQHgu3jggg&s",
     canReactivate: false,
   },
 ];

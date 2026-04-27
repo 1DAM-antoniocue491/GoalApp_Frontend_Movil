@@ -51,3 +51,23 @@ export function getAllLeagues(): LeagueItem[] {
 export function getLeaguesWithRoles(): LeagueItem[] {
   return mockLeagues;
 }
+
+/**
+ * Reactiva una liga finalizada.
+ * Preserva todos los datos existentes — solo cambia status a 'active'
+ * y desactiva el flag canReactivate.
+ *
+ * Recibe la lista actual de ligas y devuelve la lista actualizada.
+ * Cuando el backend esté disponible, añadir aquí la llamada HTTP
+ * (POST /leagues/:id/reactivate) antes de actualizar el estado local.
+ */
+export function reactivateLeague(
+  leagueId: string,
+  leagues: LeagueItem[]
+): LeagueItem[] {
+  return leagues.map((league) =>
+    league.id === leagueId
+      ? { ...league, status: 'active', canReactivate: false }
+      : league
+  );
+}

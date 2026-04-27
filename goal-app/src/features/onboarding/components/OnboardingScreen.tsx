@@ -2,22 +2,21 @@ import React, { useState, useMemo, useEffect, useRef, useCallback } from 'react'
 import {
   View,
   Text,
-  TextInput,
   ScrollView,
-  TouchableOpacity,
   Alert,
   Animated,
   Easing,
+  TouchableOpacity,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { routes } from '@/src/shared/config/routes';
-import { AppHeader } from '@/src/shared/components/layout/AppHeader';
 import { QuickActionCard } from '@/src/features/onboarding/components/QuickActionCard';
 import { LeagueFilterTabs } from '@/src/features/leagues/components/LeagueFilterTabs';
 
+import { SearchInput } from '@/src/shared/components/ui/SearchInput';
 import { LeagueCard } from '@/src/features/leagues/components/LeagueCard';
 import { EmptyLeaguesState } from '@/src/features/leagues/components/EmptyLeaguesState';
 import { LeaguesSkeleton } from '@/src/features/leagues/components/LeaguesSkeleton';
@@ -27,13 +26,15 @@ import { CreateLeagueModal, type CreateLeagueForm } from '@/src/features/leagues
 
 import { LeagueItem, LeagueFilter } from '@/src/shared/types/league';
 import {
-  getAllLeagues
+  getAllLeagues,
+  reactivateLeague,
 } from '@/src/features/leagues/services/leagueService';
 import { mockUsers } from '@/src/mocks/data';
 import type { User } from '@/src/shared/types/user';
 import { activeLeagueStore } from '@/src/state/activeLeague/activeLeagueStore';
 import { Colors } from '@/src/shared/constants/colors';
 import { theme } from '@/src/shared/styles/theme';
+import { ScrollEdgeButton } from '@/src/shared/components/navigation/ScrollEdgeButton';
 
 const COPY = {
   sectionTitle: 'Mis ligas',
@@ -87,6 +88,15 @@ export default function OnboardingScreen() {
   const headerAnim = useRef(new Animated.Value(0)).current;
   const actionsAnim = useRef(new Animated.Value(0)).current;
   const contentAnim = useRef(new Animated.Value(0)).current;
+
+  // Ref del ScrollView para que ScrollEdgeButton pueda llamar a scrollTo
+  const scrollRef = useRef<ScrollView>(null);
+  // Posición vertical actual del scroll (actualizada en onScroll)
+  const [scrollY, setScrollY] = useState(0);
+  // Altura total del contenido renderizado (actualizada en onContentSizeChange)
+  const [contentHeight, setContentHeight] = useState(0);
+  // Altura visible del ScrollView (actualizada en onLayout)
+  const [viewportHeight, setViewportHeight] = useState(0);
 
   const headerStyle = useFadeUpStyle(headerAnim);
   const actionsStyle = useFadeUpStyle(actionsAnim);
@@ -188,15 +198,10 @@ export default function OnboardingScreen() {
 
   const handleConfirmReactivate = useCallback(() => {
     if (!reactivateTarget) return;
-
-    setLeagues((prev) =>
-      prev.map((league) =>
-        league.id === reactivateTarget.id
-          ? { ...league, status: 'active', canReactivate: false }
-          : league
-      )
-    );
-
+    // reactivateLeague preserva todos los datos de la liga —
+    // solo cambia status a 'active' y desactiva canReactivate.
+    // Sustituir aquí por llamada al backend cuando esté disponible.
+    setLeagues((prev) => reactivateLeague(reactivateTarget.id, prev));
     setReactivateTarget(null);
   }, [reactivateTarget]);
 
@@ -267,18 +272,42 @@ export default function OnboardingScreen() {
   return (
     <View style={{ flex: 1, backgroundColor: Colors.bg.base }}>
       <ScrollView
+        ref={scrollRef}
         className="flex-1"
         showsVerticalScrollIndicator={false}
         contentContainerStyle={{
           paddingBottom: Math.max(insets.bottom + theme.spacing.lg, theme.spacing.xl),
         }}
+        // scrollEventThrottle=16 garantiza actualizaciones ~60fps sin saturar el bridge
+        scrollEventThrottle={16}
+        onScroll={(e) => setScrollY(e.nativeEvent.contentOffset.y)}
+        // Capturamos la altura total del contenido para saber cuándo hay scroll real
+        onContentSizeChange={(_, h) => setContentHeight(h)}
+        // Capturamos la altura del área visible para calcular el surplus scrollable
+        onLayout={(e) => setViewportHeight(e.nativeEvent.layout.height)}
       >
         <View className="px-5">
-          <AppHeader onNotificationPress={() => console.log('Notifications')} />
-
-          {/* Greeting */}
-          <Animated.View style={[{ marginTop: theme.spacing.md }, headerStyle]}>
-            <View style={{ marginBottom: theme.spacing.xxl }}>
+          {/*
+            Encabezado del onboarding.
+            No incluye notificaciones porque en este punto el usuario aún no
+            está dentro de ninguna liga activa — las notificaciones son
+            contextuales a una liga concreta y pertenecen al dashboard.
+            Sí incluye acceso al perfil, que es global y siempre disponible.
+          */}
+          <Animated.View
+            style={[
+              headerStyle,
+              {
+                paddingTop: insets.top + theme.spacing.md,
+                flexDirection: 'row',
+                alignItems: 'flex-start',
+                justifyContent: 'space-between',
+                marginBottom: theme.spacing.xxl,
+              },
+            ]}
+          >
+            {/* Saludo + contexto */}
+            <View style={{ flex: 1 }}>
               <Text
                 className="font-bold"
                 style={{
@@ -305,14 +334,14 @@ export default function OnboardingScreen() {
                     fontWeight: '500',
                   }}
                 >
-                  Primer acceso
+                  Tus ligas
                 </Text>
               </View>
             </View>
           </Animated.View>
 
           {/* Quick Actions */}
-          <Animated.View style={[actionsStyle, { marginBottom: theme.spacing.xxl + 4 }]}>
+          <Animated.View style={[actionsStyle, { marginBottom: theme.spacing.xxl }]}>
             <View className="gap-4">
               <QuickActionCard
                 iconName="add"
@@ -366,26 +395,13 @@ export default function OnboardingScreen() {
                 </Text>
 
                 {/* Search Bar */}
-                <View
-                  className="flex-row items-center rounded-[18px] px-4 h-14 mb-5 border"
-                  style={{
-                    backgroundColor: Colors.bg.surface1,
-                    borderColor: Colors.bg.surface2,
-                  }}
-                >
-                  <Ionicons name="search" size={20} color={Colors.text.disabled} />
-                  <TextInput
-                    className="flex-1 text-white text-base ml-3"
-                    placeholder="Buscar liga..."
-                    placeholderTextColor={Colors.text.disabled}
+                <View className="mb-5">
+                  <SearchInput
                     value={searchTerm}
+                    placeholder="Buscar liga..."
                     onChangeText={setSearchTerm}
+                    onClear={handleClearSearch}
                   />
-                  {searchTerm.length > 0 && (
-                    <TouchableOpacity onPress={handleClearSearch}>
-                      <Ionicons name="close-circle" size={20} color={Colors.text.disabled} />
-                    </TouchableOpacity>
-                  )}
                 </View>
 
                 {/* Filter Tabs */}
@@ -403,7 +419,13 @@ export default function OnboardingScreen() {
                         key={league.id}
                         league={league}
                         onToggleFavorite={() => handleToggleFavorite(league.id)}
-                        onPress={() => handleEnterLeague(league)}
+                        onPress={() =>
+                          // Liga finalizada + admin → abre modal de reactivación.
+                          // Cualquier otro caso → entra en la liga.
+                          league.status === 'finished' && league.canReactivate
+                            ? handleReactivatePress(league)
+                            : handleEnterLeague(league)
+                        }
                         onPressSettings={handlePressSettings}
                       />
                     ))}
@@ -434,6 +456,18 @@ export default function OnboardingScreen() {
           </Animated.View>
         </View>
       </ScrollView >
+
+      {/*
+        ScrollEdgeButton flota fuera del ScrollView para que su position:absolute
+        se resuelva respecto al View padre (flex:1) y no quede enterrado dentro
+        del contenido scrollable.
+      */}
+      <ScrollEdgeButton
+        scrollRef={scrollRef}
+        scrollY={scrollY}
+        contentHeight={contentHeight}
+        viewportHeight={viewportHeight}
+      />
 
       {/* Modals */}
       < ReactivateLeagueModal

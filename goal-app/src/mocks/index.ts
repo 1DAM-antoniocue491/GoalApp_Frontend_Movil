@@ -9,4 +9,4 @@
  * import { validateCredentials } from '@/src/features/auth/services/authService';
  */
 
-export * from './data';
+export * from "@/src/mocks/data";

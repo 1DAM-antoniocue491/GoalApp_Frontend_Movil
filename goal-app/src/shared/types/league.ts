@@ -4,7 +4,7 @@
 /**
  * Roles posibles que puede tener un usuario en una liga
  */
-export type LeagueRole = 'admin' | 'coach' | 'player' | 'field_delegate';
+export type LeagueRole = 'admin' | 'coach' | 'player' | 'field_delegate' | 'observer';
 
 /**
  * Categorías de edad de una liga.
@@ -76,6 +76,7 @@ export const ROLE_LABELS: Record<LeagueRole, string> = {
   coach: 'Entrenador',
   field_delegate: 'Delegado de campo',
   player: 'Jugador',
+  observer: 'Observador',
 };
 
 /**
@@ -86,6 +87,7 @@ export const ROLE_COLORS: Record<LeagueRole, string> = {
   coach: '#18A2FB',      // azul/cian
   field_delegate: '#D946EF', // morado/fucsia
   player: '#20E3B2',     // verde agua
+  observer: '#94A3B8',   // gris azulado
 };
 
 /**
@@ -99,4 +101,5 @@ export const ROLE_BG_COLORS: Record<LeagueRole, string> = {
   coach: '#0A3E66',
   field_delegate: '#4B0F4D',
   player: '#0E4A3D',
+  observer: '#1E2A3A',
 };

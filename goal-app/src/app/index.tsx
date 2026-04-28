@@ -11,6 +11,7 @@ import { Redirect } from 'expo-router';
 import { Loader } from '@/src/shared/components/feedback/Loader';
 import { sessionStore } from '@/src/state/session/sessionStore';
 import { routes } from '@/src/shared/config/routes';
+import React from 'react';
 
 export default function Index() {
   const [isChecking, setIsChecking] = useState(true);

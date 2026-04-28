@@ -27,4 +27,8 @@ export interface AppNotification {
   /** Fecha ISO 8601 */
   createdAt: string;
   leagueId: string;
+  /** Ruta de Expo Router a la que navegar al pulsar la tarjeta */
+  targetRoute?: string;
+  /** Parámetros opcionales para la ruta destino */
+  targetParams?: Record<string, string | number>;
 }

@@ -11,6 +11,7 @@ import { useRouter } from 'expo-router';
 import { useAuth } from '@/src/app/auth/hooks/useAuth';
 import { Loader } from '@/src/shared/components/feedback/Loader';
 import { routes } from '@/src/shared/config/routes';
+import React from 'react';
 
 interface ProtectedRouteProps {
   children: React.ReactNode;

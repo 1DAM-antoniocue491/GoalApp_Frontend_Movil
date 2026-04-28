@@ -18,14 +18,14 @@
  */
 
 // ── Pantalla orquestadora (usada en app/(private)/(tabs)/index.tsx) ──
-export { default as DashboardScreen } from "./DashboardScreen";
+export { default as DashboardScreen } from "@/src/features/dashboard/components/DashboardScreen";
 
 // ── Dashboards por rol (usados en DashboardScreen y en tests) ──
-export { AdminDashboard } from "./AdminDashboard";
-export { CoachDashboard } from "./CoachDashboard";
-export { PlayerDashboard } from "./PlayerDashboard";
-export { FieldDelegateDashboard } from "./FieldDelegateDashboard";
-export { ObserverDashboard } from "./ObserverDashboard";
+export { AdminDashboard } from "@/src/features/dashboard/components/AdminDashboard";
+export { CoachDashboard } from "@/src/features/dashboard/components/CoachDashboard";
+export { PlayerDashboard } from "@/src/features/dashboard/components/PlayerDashboard";
+export { FieldDelegateDashboard } from "@/src/features/dashboard/components/FieldDelegateDashboard";
+export { ObserverDashboard } from "@/src/features/dashboard/components/ObserverDashboard";
 
 // ── Tipos (para componentes que consumen datos del dashboard externamente) ──
 export type {

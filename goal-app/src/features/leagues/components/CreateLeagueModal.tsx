@@ -430,7 +430,7 @@ function CreateLeagueModalComponent({
         <Animated.View
           style={{
             flex: 1,
-            backgroundColor: 'rgba(0,0,0,0.7)',
+            backgroundColor: '#000000b3',
             opacity: opacityAnim,
             justifyContent: 'flex-end',
           }}

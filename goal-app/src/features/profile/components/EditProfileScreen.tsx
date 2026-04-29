@@ -115,9 +115,7 @@ export function EditProfileScreen() {
                                 </View>
                             </Link>
                         </View>
-
                     </View>
-
                 </ScrollView>
             </SafeAreaView>
         </View>

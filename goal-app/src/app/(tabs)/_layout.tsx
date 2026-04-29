@@ -20,6 +20,7 @@ import { CreateTeamModal } from '@/src/features/teams/components/modals/CreateTe
 import { CreateCalendarModal } from '@/src/features/calendar/components/modals/CreateCalendarModal';
 import { CreateManualMatchModal } from '@/src/features/calendar/components/modals/CreateManualMatchModal';
 import { Colors } from "@/src/shared/constants/colors";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 // Import ProtectedRoute wrapper
 import { ProtectedRoute } from '@/src/components/ProtectedRoute';
@@ -57,6 +58,7 @@ export default function TabsLayout() {
   const [createMatchOpen, setCreateMatchOpen] = useState(false);
   const [createTeamOpen, setCreateTeamOpen] = useState(false);
   const [createCalendarOpen, setCreateCalendarOpen] = useState(false);
+  const insets = useSafeAreaInsets();
 
   return (
     // Fragment para que el Modal pueda renderizarse fuera del árbol de Tabs
@@ -68,9 +70,9 @@ export default function TabsLayout() {
             tabBarStyle: {
               backgroundColor: "#000000",
               borderTopColor: "#2A2A35",
-              paddingBottom: 40,
-              paddingTop: 8,
-              height: 80,
+              paddingBottom: insets.bottom + 40,
+              paddingTop: 1,
+              height: 70 + insets.bottom,
             },
             tabBarActiveTintColor: Colors.brand.primary,
             tabBarInactiveTintColor: "#9a9ea5",

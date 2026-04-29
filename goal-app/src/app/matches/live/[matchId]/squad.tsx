@@ -1,3 +1,3 @@
-import { ProgrammedMatchSquadScreen } from '@/src/features/matches/components/screens/ProgrammedMatchSquadScreen';
+import { LiveMatchSquadsScreen } from '@/src/features/matches/components/screens/LiveMatchSquadsScreen';
 
-export default ProgrammedMatchSquadScreen;
+export default LiveMatchSquadsScreen;

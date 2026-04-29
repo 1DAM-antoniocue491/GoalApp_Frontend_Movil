@@ -257,7 +257,7 @@ function SubstitutionModalComponent({ visible, match, onConfirm, onCancel }: Sub
                   color: Colors.text.secondary, fontSize: 12, fontWeight: '600',
                   letterSpacing: 0.5, textTransform: 'uppercase',
                 }}>
-                  Sale *
+                  Sale
                 </Text>
               </View>
               <OptionSelectField
@@ -269,17 +269,6 @@ function SubstitutionModalComponent({ visible, match, onConfirm, onCancel }: Sub
               />
             </View>
 
-            {/* Separador decorativo */}
-            <View style={{ alignItems: 'center' }}>
-              <View style={{
-                width: 32, height: 32, borderRadius: 16,
-                backgroundColor: Colors.bg.surface2,
-                alignItems: 'center', justifyContent: 'center',
-              }}>
-                <Ionicons name="swap-vertical-outline" size={16} color={accentColor} />
-              </View>
-            </View>
-
             {/* Jugador que ENTRA — excluye al que ya está seleccionado en "Sale" */}
             <View>
               <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 8 }}>
@@ -288,7 +277,7 @@ function SubstitutionModalComponent({ visible, match, onConfirm, onCancel }: Sub
                   color: Colors.text.secondary, fontSize: 12, fontWeight: '600',
                   letterSpacing: 0.5, textTransform: 'uppercase',
                 }}>
-                  Entra *
+                  Entra
                 </Text>
               </View>
               <OptionSelectField

@@ -21,6 +21,7 @@
 
 import React from 'react';
 import { View, Text, ScrollView } from 'react-native';
+import { useRouter } from 'expo-router';
 
 import { mockUpcomingMatches } from '@/src/mocks/dashboard.mocks';
 import { getDashboardPermissions } from '@/src/features/dashboard/services/dashboardService';
@@ -28,11 +29,13 @@ import { ProgrammedMatchCard } from '../cards/ProgrammedMatchCard';
 import { Colors } from '@/src/shared/constants/colors';
 import { useMatchActionModals } from '../../hooks/useMatchActionModals';
 import { StartMatchModal } from '../modals/StartMatchModal';
+import { routes } from '@/src/shared/config/routes';
 
 // Placeholder de permisos — reemplazar por getDashboardPermissions(role) del contexto de sesión
 const permissions = getDashboardPermissions('admin');
 
 export function ProgrammedMatchesScreen() {
+    const router = useRouter();
     const { modals, activeStartMatch, openStartMatch, modalProps } = useMatchActionModals();
 
     if (mockUpcomingMatches.length === 0) {
@@ -88,8 +91,7 @@ export function ProgrammedMatchesScreen() {
                             match={match}
                             permissions={permissions}
                             onPress={() => {
-                                // TODO: navegar al detalle del partido programado
-                                // router.push(routes.private.matchRoutes.programmed.detail(match.id) as never)
+                                router.push(routes.private.matchRoutes.programmed.detail(match.id) as never);
                             }}
                             onStartMatch={() =>
                                 openStartMatch({

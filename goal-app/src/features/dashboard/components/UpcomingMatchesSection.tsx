@@ -112,7 +112,7 @@ export function UpcomingMatchesSection({
                     match={match}
                     permissions={permissions}
                     onPress={() => {
-                        // router.push(routes.private.matches.detail(match.id) as never)
+                        router.push(routes.private.matchRoutes.programmed.detail(match.id) as never);
                     }}
                     onStartMatch={() => onStartMatch?.(match.id)}
                 />

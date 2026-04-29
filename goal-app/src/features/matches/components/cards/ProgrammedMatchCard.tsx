@@ -21,10 +21,12 @@
 import React from 'react';
 import { View, Text, TouchableOpacity } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { useRouter } from 'expo-router';
 
 import type { UpcomingMatchData } from '@/src/shared/types/dashboard.types';
 // DashboardPermissions vive en dashboard — esta card la consume como contrato externo
 import type { DashboardPermissions } from '@/src/features/dashboard/services/dashboardService';
+import { routes } from '@/src/shared/config/routes';
 
 // ---------------------------------------------------------------------------
 // Props
@@ -33,7 +35,8 @@ import type { DashboardPermissions } from '@/src/features/dashboard/services/das
 export interface ProgrammedMatchCardProps {
     match: UpcomingMatchData;
     permissions: DashboardPermissions;
-    onPress: () => void;
+    /** Si no se pasa, la card navega al detalle del partido por defecto */
+    onPress?: () => void;
     onStartMatch?: () => void;
 }
 
@@ -107,15 +110,25 @@ export function ProgrammedMatchCard({
     onPress,
     onStartMatch,
 }: ProgrammedMatchCardProps) {
+    const router = useRouter();
     const homeColor = match.homeColor ?? '#A1A1AA';
     const awayColor = match.awayColor ?? '#C4F135';
 
     // Regla de negocio: el partido solo puede iniciarse dentro de la ventana de 1 hora
     const startAllowed = canStartMatchNow(match.day, match.month, match.time);
 
+    // Navegación al detalle: usa callback del padre si existe, si no navega internamente
+    const handleCardPress = () => {
+        if (onPress) {
+            onPress();
+        } else {
+            router.push(routes.private.matchRoutes.programmed.detail(match.id) as never);
+        }
+    };
+
     return (
         <TouchableOpacity
-            onPress={onPress}
+            onPress={handleCardPress}
             activeOpacity={0.75}
             style={{
                 flexDirection: 'row',
@@ -149,45 +162,96 @@ export function ProgrammedMatchCard({
                     {match.round} · {match.venue}
                 </Text>
 
-                {/* Botón Iniciar — solo para roles con canStartMatch */}
-                {permissions.canStartMatch && (
-                    <View style={{ marginTop: 6 }}>
-                        <TouchableOpacity
-                            onPress={(e) => {
-                                e.stopPropagation?.();
-                                if (startAllowed) onStartMatch?.();
-                            }}
-                            disabled={!startAllowed}
-                            style={{
-                                alignSelf: 'flex-start',
-                                flexDirection: 'row',
-                                alignItems: 'center',
-                                gap: 5,
-                                // Color según disponibilidad
-                                backgroundColor: startAllowed ? '#C4F135' : '#2A2A35',
-                                paddingHorizontal: 12,
-                                paddingVertical: 5,
-                                borderRadius: 999,
-                            }}
-                        >
-                            <Ionicons
-                                name="play-circle-outline"
-                                size={13}
-                                color={startAllowed ? '#0F0F13' : '#52525B'}
-                            />
-                            <Text style={{
-                                color: startAllowed ? '#0F0F13' : '#52525B',
-                                fontSize: 12,
-                                fontWeight: '700',
-                            }}>
-                                Iniciar
-                            </Text>
-                        </TouchableOpacity>
-                        {/* Ayuda discreta cuando el partido aún no está en ventana */}
-                        {!startAllowed && (
-                            <Text style={{ color: '#52525B', fontSize: 10, marginTop: 3 }}>
-                                Disponible 1 hora antes
-                            </Text>
+                {/* Botones de acción — visibles según permisos del rol */}
+                {(permissions.canStartMatch || permissions.canManageSquad) && (
+                    <View style={{ marginTop: 6, gap: 6 }}>
+
+                        {/* Iniciar — canStartMatch, solo dentro de la ventana de 1 hora */}
+                        {permissions.canStartMatch && (
+                            <View>
+                                <TouchableOpacity
+                                    onPress={(e) => {
+                                        e.stopPropagation?.();
+                                        if (startAllowed) onStartMatch?.();
+                                    }}
+                                    disabled={!startAllowed}
+                                    style={{
+                                        alignSelf: 'flex-start',
+                                        flexDirection: 'row',
+                                        alignItems: 'center',
+                                        gap: 5,
+                                        backgroundColor: startAllowed ? '#C4F135' : '#2A2A35',
+                                        paddingHorizontal: 12,
+                                        paddingVertical: 5,
+                                        borderRadius: 999,
+                                    }}
+                                >
+                                    <Ionicons
+                                        name="play-circle-outline"
+                                        size={13}
+                                        color={startAllowed ? '#0F0F13' : '#52525B'}
+                                    />
+                                    <Text style={{
+                                        color: startAllowed ? '#0F0F13' : '#52525B',
+                                        fontSize: 12,
+                                        fontWeight: '700',
+                                    }}>
+                                        Iniciar
+                                    </Text>
+                                </TouchableOpacity>
+                                {!startAllowed && (
+                                    <Text style={{ color: '#52525B', fontSize: 10, marginTop: 3 }}>
+                                        Disponible 1 hora antes
+                                    </Text>
+                                )}
+                            </View>
+                        )}
+
+                        {/* Convocatoria + Alineación — canManageSquad (admin, coach) */}
+                        {permissions.canManageSquad && (
+                            <View style={{ flexDirection: 'row', gap: 6 }}>
+                                <TouchableOpacity
+                                    onPress={(e) => {
+                                        e.stopPropagation?.();
+                                        router.push(routes.private.matchRoutes.programmed.convocation(match.id) as never);
+                                    }}
+                                    style={{
+                                        flexDirection: 'row',
+                                        alignItems: 'center',
+                                        gap: 4,
+                                        backgroundColor: '#2A2A35',
+                                        paddingHorizontal: 10,
+                                        paddingVertical: 5,
+                                        borderRadius: 999,
+                                    }}
+                                >
+                                    <Ionicons name="people-outline" size={12} color="#A1A1AA" />
+                                    <Text style={{ color: '#A1A1AA', fontSize: 11, fontWeight: '600' }}>
+                                        Convocatoria
+                                    </Text>
+                                </TouchableOpacity>
+
+                                <TouchableOpacity
+                                    onPress={(e) => {
+                                        e.stopPropagation?.();
+                                        router.push(routes.private.matchRoutes.programmed.lineup(match.id) as never);
+                                    }}
+                                    style={{
+                                        flexDirection: 'row',
+                                        alignItems: 'center',
+                                        gap: 4,
+                                        backgroundColor: '#2A2A35',
+                                        paddingHorizontal: 10,
+                                        paddingVertical: 5,
+                                        borderRadius: 999,
+                                    }}
+                                >
+                                    <Ionicons name="shirt-outline" size={12} color="#A1A1AA" />
+                                    <Text style={{ color: '#A1A1AA', fontSize: 11, fontWeight: '600' }}>
+                                        Alineación
+                                    </Text>
+                                </TouchableOpacity>
+                            </View>
                         )}
                     </View>
                 )}

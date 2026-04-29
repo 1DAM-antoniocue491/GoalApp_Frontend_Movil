@@ -164,17 +164,6 @@ function NotificationCardComponent({
           flexShrink: 0,
         }}
       >
-        {/* Papelera — mobile-first: siempre visible, sin necesidad de hover.
-            El press en este botón no escala al onPress de la tarjeta padre
-            porque TouchableOpacity interno consume el evento. */}
-        <TouchableOpacity
-          onPress={() => onDelete(id)}
-          hitSlop={{ top: 10, bottom: 10, left: 8, right: 8 }}
-          activeOpacity={0.7}
-        >
-          <Ionicons name="trash-outline" size={18} color={Colors.semantic.error} />
-        </TouchableOpacity>
-
         {/* 3 puntos → action sheet con opciones adicionales */}
         <TouchableOpacity
           onPress={() => onOpenMenu(notification)}

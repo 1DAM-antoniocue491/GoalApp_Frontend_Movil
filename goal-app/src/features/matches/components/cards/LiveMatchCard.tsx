@@ -322,18 +322,14 @@ export function LiveMatchCard({
                 <View
                     style={{
                         flexDirection: 'row',
-                        justifyContent: 'space-between',
+                        justifyContent: 'center',
                         marginTop: 16,
                         paddingTop: 14,
                         borderTopWidth: 1,
-                        borderTopColor: 'rgba(255,255,255,0.07)',
+                        borderTopColor: '#ffffff12',
                     }}
                 >
-                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 5 }}>
-                        <Ionicons name="trophy-outline" size={12} color="#A1A1AA" />
-                        <Text style={{ color: '#A1A1AA', fontSize: 12 }}>{match.leagueName}</Text>
-                    </View>
-                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 5 }}>
+                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 5, justifyContent: 'center' }}>
                         <Ionicons name="location-outline" size={12} color="#A1A1AA" />
                         <Text style={{ color: '#A1A1AA', fontSize: 12 }}>{match.venue}</Text>
                     </View>
@@ -359,12 +355,12 @@ export function LiveMatchCard({
                             <ActionButton
                                 label="Ver plantillas"
                                 icon="people-outline"
-                                onPress={() => () => {}} // router.push(routes.private.matches.detail(match.id) as never)}
+                                onPress={() => router.push(routes.private.matchRoutes.live.squad(match.id) as never)}
                             />
                         )}
                         {permissions.canRegisterEvent && (
                             <ActionButton
-                                label="Registrar evento"
+                                label="Añadir evento"
                                 icon="add-circle-outline"
                                 primary
                                 onPress={() => onRegisterEvent?.(match.id)}

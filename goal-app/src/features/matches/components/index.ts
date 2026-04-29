@@ -8,6 +8,11 @@ export { LiveMatchCard } from './cards/LiveMatchCard';
 export { ProgrammedMatchCard } from './cards/ProgrammedMatchCard';
 export { FinishedMatchCard } from './cards/FinishedMatchCard';
 
+// Screens de plantilla/convocatoria/alineación — cada caso de uso tiene su pantalla
+export { LiveMatchSquadsScreen } from './screens/LiveMatchSquadsScreen';
+export { ProgrammedMatchConvocationScreen } from './screens/ProgrammedMatchConvocationScreen';
+export { ProgrammedMatchLineupScreen } from './screens/ProgrammedMatchLineupScreen';
+
 // Modales operativos de partido — reutilizables desde calendar, dashboard y matches
 export { RegisterEventModal } from './modals/RegisterEventModal';
 export { EndMatchModal } from './modals/EndMatchModal';

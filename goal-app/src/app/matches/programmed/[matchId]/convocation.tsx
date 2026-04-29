@@ -1,5 +1,3 @@
-// Compat temporal: usar convocation.tsx como ruta semántica.
-// Este archivo se mantiene mientras haya navegación antigua a /squad.
 import { ProgrammedMatchConvocationScreen } from '@/src/features/matches/components/screens/ProgrammedMatchConvocationScreen';
 
 export default ProgrammedMatchConvocationScreen;

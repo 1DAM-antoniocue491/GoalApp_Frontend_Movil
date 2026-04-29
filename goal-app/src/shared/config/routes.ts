@@ -57,6 +57,11 @@ export const routes = {
       programmed: {
         index: "/matches/programmed",
         detail: (matchId: string) => `/matches/programmed/${matchId}`,
+        /** Ruta semántica de convocatoria — selección de jugadores convocados */
+        convocation: (matchId: string) => `/matches/programmed/${matchId}/convocation`,
+        /** Ruta de alineación — 11 titulares + suplentes desde convocados */
+        lineup: (matchId: string) => `/matches/programmed/${matchId}/lineup`,
+        /** @deprecated usar convocation(). Alias compat mientras haya navegación antigua a /squad */
         squad: (matchId: string) => `/matches/programmed/${matchId}/squad`,
         previousMeetings: (matchId: string) => `/matches/programmed/${matchId}/previous-meetings`,
       },

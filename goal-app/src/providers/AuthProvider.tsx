@@ -18,6 +18,7 @@ interface AuthContextType {
   isAuthenticated: boolean;
   isLoading: boolean;
   error: string | null;
+  token: string | null; 
   login: (email: string, password: string) => Promise<void>;
   register: (nombre: string, email: string, password: string) => Promise<void>;
   logout: () => Promise<void>;
@@ -30,6 +31,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<AuthUser | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [token, setToken] = useState<string | null>(null);
 
   // Inicializar sesión al montar
   useEffect(() => {
@@ -95,6 +97,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       isAuthenticated: !!user,
       isLoading,
       error,
+      token,
       login,
       register,
       logout,

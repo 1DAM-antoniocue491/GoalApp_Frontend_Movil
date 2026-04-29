@@ -23,6 +23,7 @@ import {
   Platform,
   ActivityIndicator,
   Alert,
+  Switch,
 } from 'react-native';
 import { Image } from 'expo-image';
 import * as ImagePicker from 'expo-image-picker';
@@ -33,6 +34,9 @@ import { Colors } from '@/src/shared/constants/colors';
 import { theme } from '@/src/shared/styles/theme';
 import { OptionSelectField, type SelectOption } from '@/src/shared/components/ui/OptionSelectField';
 import { type LeagueCategory, CATEGORY_LABELS } from '@/src/shared/types/league';
+import { createLeague } from '../../dashboard/api/dashboard.api';
+import { useLeague } from '../../dashboard/hooks/useDashboardActions';
+import { useAuth } from '@/src/providers/AuthProvider';
 
 // ---------------------------------------------------------------------------
 // Tipos
@@ -55,6 +59,7 @@ export interface CreateLeagueForm {
   maxPlantilla: number;
   matchMinutes: number;
   maxMatches: number;
+  activa: boolean;
 
   // --- Logo (preparado para flujo de subida real) ---
 
@@ -133,6 +138,7 @@ const DEFAULT_FORM: CreateLeagueForm = {
   logoHash: null,
   logoWidth: null,
   logoHeight: null,
+  activa: false,
 };
 
 // ---------------------------------------------------------------------------
@@ -308,6 +314,9 @@ function CreateLeagueModalComponent({
     },
     []
   );
+
+
+  
 
   /**
    * Limpia todos los campos de logo a la vez.
@@ -808,6 +817,28 @@ function CreateLeagueModalComponent({
                   onDecrement={() =>
                     update('maxMatches', Math.max(1, form.maxMatches - 1))
                   }
+                />
+              </View>
+
+              {/* ── Liga activa ── */}
+              <View className='flex-row items-center '>
+                <Text
+                  style={{
+                    color: Colors.text.secondary,
+                    fontSize: 13,
+                  }}
+                >
+                  Activa Liga
+                </Text>
+
+                <Switch
+                  value={form.activa}
+                  onValueChange={(value) => update('activa', value)}
+                  trackColor={{
+                    false: Colors.bg.surface2,
+                    true: Colors.brand.primary + '55',
+                  }}
+                  thumbColor={form.activa ? Colors.brand.primary : '#f4f3f4'}
                 />
               </View>
             </ScrollView>

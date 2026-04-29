@@ -38,6 +38,9 @@ import { ScrollEdgeButton } from '@/src/shared/components/navigation/ScrollEdgeB
 
 // Import ProtectedRoute para proteger esta pantalla
 import { ProtectedRoute } from '@/src/components/ProtectedRoute';
+import { useLeague } from '../../dashboard/hooks/useDashboardActions';
+import { useAuth } from '@/src/providers/AuthProvider';
+import { sessionStore } from '@/src/state/session';
 
 const COPY = {
   sectionTitle: 'Mis ligas',
@@ -74,6 +77,7 @@ function OnboardingScreenContent() {
   const [isLoading, setIsLoading] = useState(true);
   const [currentUser] = useState<User>(mockUsers[0]);
   const [leagues, setLeagues] = useState<LeagueItem[]>([]);
+  const { createLeague, league } = useLeague();
   const [selectedFilter, setSelectedFilter] = useState<LeagueFilter>('all');
   const [searchTerm, setSearchTerm] = useState('');
 
@@ -105,6 +109,39 @@ function OnboardingScreenContent() {
   const actionsStyle = useFadeUpStyle(actionsAnim);
   const contentStyle = useFadeUpStyle(contentAnim);
 
+
+
+  const [modalVisible, setModalVisible] = useState(false);
+
+  const handleCreate = useCallback(async (form: CreateLeagueForm) => {
+  try {
+    const token = await sessionStore.getToken();
+
+    if (!token) return;
+
+    const created = await createLeague(
+      {
+        nombre: form.name,
+        temporada: String(form.seasonStartYear),
+        categoria: form.category,
+        cantidad_partidos: form.maxMatches,
+        duracion_partido: form.matchMinutes,
+        logo_url: form.logoUrl ?? '',
+        activa: form.activa,
+      },
+      token
+    );
+
+    console.log('🔍 RESPUESTA CREATE LEAGUE:', created);
+
+    const updated = await getAllLeagues();
+    setLeagues(updated);
+
+    setShowCreateModal(false);
+  } catch (error) {
+    console.log('Error creando liga:', error);
+  }
+}, []);
   useEffect(() => {
     Animated.stagger(100, [
       Animated.timing(headerAnim, {
@@ -418,20 +455,9 @@ function OnboardingScreenContent() {
                   <View className="gap-5 mt-5">
                     {/* onPressSettings solo es visible para admins — LeagueCard ya lo filtra por rol */}
                     {filteredLeagues.map((league) => (
-                      <LeagueCard
-                        key={league.id}
-                        league={league}
-                        onToggleFavorite={() => handleToggleFavorite(league.id)}
-                        onPress={() =>
-                          // Liga finalizada + admin → abre modal de reactivación.
-                          // Cualquier otro caso → entra en la liga.
-                          league.status === 'finished' && league.canReactivate
-                            ? handleReactivatePress(league)
-                            : handleEnterLeague(league)
-                        }
-                        onPressSettings={handlePressSettings}
-                      />
+                      <LeagueCard key={league.id} league={league} />
                     ))}
+
                   </View>
                 ) : (
                   <View className="py-10 items-center">
@@ -490,7 +516,7 @@ function OnboardingScreenContent() {
       {/* Modal crear liga — modo 'create' por defecto */}
       <CreateLeagueModal
         visible={showCreateModal}
-        onConfirm={handleCreateConfirm}
+        onConfirm={handleCreate}
         onCancel={() => setShowCreateModal(false)}
       />
 
@@ -506,6 +532,8 @@ function OnboardingScreenContent() {
         onConfirm={handleEditConfirm}
         onCancel={() => setEditTarget(null)}
       />
+
+
     </View >
   );
 }

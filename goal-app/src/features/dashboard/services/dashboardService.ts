@@ -181,3 +181,31 @@ export function formatProgress(current: number, total: number): string {
   if (total === 0) return "0%";
   return `${Math.round((current / total) * 100)}%`;
 }
+
+
+
+
+import { LeagueRequest, LeagueResponse } from "../types/dashboard.actions.types";
+import { sessionStore } from "@/src/state/session/sessionStore";
+import { createLeague } from "../api/dashboard.api";
+export async function createLeagueFlow(
+  data: LeagueRequest
+): Promise<{ success: boolean; league?: LeagueResponse; error?: string }> {
+  try {
+    const token = await sessionStore.getToken();
+
+    if (!token) throw new Error('No hay sesión');
+
+    const league = await createLeague(data, token);
+
+    return {
+      success: true,
+      league,
+    };
+  } catch (error) {
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : 'Error creando liga',
+    };
+  }
+}

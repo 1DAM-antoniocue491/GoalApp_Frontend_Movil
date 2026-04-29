@@ -31,7 +31,7 @@ import { getDashboardPermissions } from '../services/dashboardService';
 import { routes } from '@/src/shared/config/routes';
 import { DashboardLayout } from './DashboardLayout';
 import { LeagueMetrics } from './LeagueMetrics';
-import { LiveMatchCard } from './LiveMatchCard';
+import { LiveMatchCard } from '@/src/features/matches/components/cards/LiveMatchCard';
 import { UpcomingMatchesSection } from './UpcomingMatchesSection';
 import { ProgressMetrics } from './ProgressMetrics';
 

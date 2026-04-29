@@ -1,25 +1,24 @@
+/**
+ * StatisticsTabs.tsx
+ *
+ * Tabs de navegación en la pantalla de estadísticas de liga:
+ * Equipos / Jugadores.
+ *
+ * Movida desde features/matches/components a su feature correcta.
+ */
+
 import { styles } from "@/src/shared/styles";
 import { LeagueStatisticsTabs } from "@/src/shared/types/auth";
-import { router } from "expo-router";
 import React from "react";
-import {
-    View, TouchableOpacity, Text
-} from "react-native";
-import { useRouter } from 'expo-router';
+import { View, TouchableOpacity, Text } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
-
-
 interface StatisticsTabsProps {
-    activeTab: LeagueStatisticsTabs,
+    activeTab: LeagueStatisticsTabs;
     setActiveTab: (tab: LeagueStatisticsTabs) => void;
 }
 
 export function StatisticsTabs({ activeTab, setActiveTab }: StatisticsTabsProps) {
-    const router = useRouter();
-
-    // navegamos entre rutas. Equipos y Jugadores.
-
     return (
         <SafeAreaView className="flex-1 m-3 ">
             <View className="flex flex-col">
@@ -37,7 +36,7 @@ export function StatisticsTabs({ activeTab, setActiveTab }: StatisticsTabsProps)
                     <TouchableOpacity
                         onPress={() => setActiveTab('players')}
                         className={activeTab === 'players' ? styles.tabPartido : styles.tabPartidoInactive}>
-                        <View className="flex flex-row  justify-center p-2 ">
+                        <View className="flex flex-row justify-center p-2">
                             <Text className={activeTab === 'players' ? styles.tabActiveText : styles.tabInactiveText}>
                                 Jugadores
                             </Text>

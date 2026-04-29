@@ -21,6 +21,7 @@ import { Ionicons } from '@expo/vector-icons';
 
 import { formatProgress } from '../services/dashboardService';
 import type { LeagueMetricsData } from '@/src/shared/types/dashboard.types';
+import { Colors } from '@/src/shared/constants/colors';
 
 // ---------------------------------------------------------------------------
 // Sub-componente: barra de progreso animada
@@ -51,7 +52,7 @@ function AnimatedProgressBar({ progress, delay = 0 }: { progress: number; delay?
         <View
             style={{
                 height: 4,
-                backgroundColor: '#2A2A35', // Surface L2 — fondo de la barra vacía
+                backgroundColor: Colors.bg.surface2, // fondo de la barra vacía
                 borderRadius: 999,
                 overflow: 'hidden',
                 marginTop: 10,
@@ -61,7 +62,7 @@ function AnimatedProgressBar({ progress, delay = 0 }: { progress: number; delay?
                 style={{
                     height: '100%',
                     width: widthPercent,
-                    backgroundColor: '#C4F135', // Brand primary
+                    backgroundColor: Colors.brand.primary,
                     borderRadius: 999,
                 }}
             />
@@ -92,7 +93,7 @@ function ProgressCard({ config }: { config: ProgressCardConfig }) {
         <View
             style={{
                 flex: 1,
-                backgroundColor: '#1C1C22', // Surface L1 del design system
+                backgroundColor: Colors.bg.surface1,
                 borderRadius: 12,
                 padding: 14,
             }}
@@ -102,30 +103,30 @@ function ProgressCard({ config }: { config: ProgressCardConfig }) {
                 style={{
                     width: 36,
                     height: 36,
-                    backgroundColor: '#2A2A35', // Surface L2
+                    backgroundColor: Colors.bg.surface2,
                     borderRadius: 10,
                     alignItems: 'center',
                     justifyContent: 'center',
                     marginBottom: 10,
                 }}
             >
-                <Ionicons name={config.icon} size={18} color="#C4F135" />
+                <Ionicons name={config.icon} size={18} color={Colors.brand.primary} />
             </View>
 
             {/* Caption */}
-            <Text style={{ color: '#A1A1AA', fontSize: 12 }}>{config.label}</Text>
+            <Text style={{ color: Colors.text.secondary, fontSize: 12 }}>{config.label}</Text>
 
             {/* Valor actual / total */}
-            <Text style={{ color: '#FFFFFF', fontSize: 24, fontWeight: 'bold', marginTop: 4 }}>
+            <Text style={{ color: Colors.text.primary, fontSize: 24, fontWeight: 'bold', marginTop: 4 }}>
                 {config.current}{' '}
                 {/* El total en color disabled para reducir peso visual */}
-                <Text style={{ color: '#52525B', fontSize: 16, fontWeight: '400' }}>
+                <Text style={{ color: Colors.text.disabled, fontSize: 16, fontWeight: '400' }}>
                     / {config.total}
                 </Text>
             </Text>
 
             {/* Porcentaje con color brand */}
-            <Text style={{ color: '#C4F135', fontSize: 12, fontWeight: '600', marginTop: 2 }}>
+            <Text style={{ color: Colors.brand.primary, fontSize: 12, fontWeight: '600', marginTop: 2 }}>
                 {pctLabel} {config.suffix}
             </Text>
 

@@ -24,7 +24,7 @@ import { View } from 'react-native';
 import { useDashboardData } from '@/src/shared/hooks/usedashboarddata';
 import { getDashboardPermissions } from '../services/dashboardService';
 import { DashboardLayout } from './DashboardLayout';
-import { LiveMatchCard } from './LiveMatchCard';
+import { LiveMatchCard } from '@/src/features/matches/components/cards/LiveMatchCard';
 import { UpcomingMatchesSection } from './UpcomingMatchesSection';
 
 interface FieldDelegateDashboardProps {

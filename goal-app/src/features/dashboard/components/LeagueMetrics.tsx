@@ -21,6 +21,7 @@ import React, { useRef, useEffect } from 'react';
 import { View, Text, Animated } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import type { LeagueMetricsData } from '@/src/shared/types/dashboard.types';
+import { Colors } from '@/src/shared/constants/colors';
 
 // ---------------------------------------------------------------------------
 // Definición interna de cada tarjeta
@@ -68,7 +69,7 @@ function MetricCard({ card, index }: { card: MetricCardConfig; index: number }) 
                 // Anchura del 47% permite 2 columnas con gap de ~12px en un contenedor px-4
                 width: '47%',
                 minHeight: 110,
-                backgroundColor: '#1C1C22', // Surface L1 del design system
+                backgroundColor: Colors.bg.surface1,
                 borderRadius: 12,           // Medium border radius del design system
                 padding: 16,
                 overflow: 'hidden',
@@ -88,7 +89,7 @@ function MetricCard({ card, index }: { card: MetricCardConfig; index: number }) 
                     opacity: 0.08,
                 }}
             >
-                <Ionicons name={card.icon} size={80} color="#C4F135" />
+                <Ionicons name={card.icon} size={80} color={Colors.brand.primary} />
             </View>
 
             {/* ── Badge de icono ── */}
@@ -96,19 +97,19 @@ function MetricCard({ card, index }: { card: MetricCardConfig; index: number }) 
                 style={{
                     width: 36,
                     height: 36,
-                    backgroundColor: '#2A2A35', // Surface L2 del design system
+                    backgroundColor: Colors.bg.surface2,
                     borderRadius: 10,
                     alignItems: 'center',
                     justifyContent: 'center',
                     marginBottom: 12,
                 }}
             >
-                <Ionicons name={card.icon} size={18} color="#C4F135" />
+                <Ionicons name={card.icon} size={18} color={Colors.brand.primary} />
             </View>
 
             {/* ── Caption ── */}
             {/* Caption 12px — tipografía del design system */}
-            <Text style={{ color: '#A1A1AA', fontSize: 12, lineHeight: 16 }}>
+            <Text style={{ color: Colors.text.secondary, fontSize: 12, lineHeight: 16 }}>
                 {card.label}
             </Text>
 
@@ -116,7 +117,7 @@ function MetricCard({ card, index }: { card: MetricCardConfig; index: number }) 
             {/* Display 30px / Bold — tipografía del design system */}
             <Text
                 style={{
-                    color: '#FFFFFF',
+                    color: Colors.text.primary,
                     fontSize: 30,
                     fontWeight: 'bold',
                     lineHeight: 36,

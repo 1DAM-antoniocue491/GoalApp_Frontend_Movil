@@ -46,20 +46,26 @@ export const routes = {
     },
 
     matchRoutes: {
-      live: "/matches/Live",
-      finished: "/matches/Finished",
-      programmed: "/matches/Programmed",
+      index: "/matches",
 
-      allFinished: {
-        alignment: "/matches/all_finished/alignment",
-        live: "/matches/all_finished/live",
-        statistics: "/matches/all_finished/statistics",
+      live: {
+        index: "/matches/live",
+        detail: (matchId: string) => `/matches/live/${matchId}`,
+        squad: (matchId: string) => `/matches/live/${matchId}/squad`,
       },
 
-      allProgrammed: {
-        previousMeetings: "/matches/all_programmed/previousMeetings",
-        programmed: "/matches/all_programmed/programmed",
-        squad: "/matches/all_programmed/squad",
+      programmed: {
+        index: "/matches/programmed",
+        detail: (matchId: string) => `/matches/programmed/${matchId}`,
+        squad: (matchId: string) => `/matches/programmed/${matchId}/squad`,
+        previousMeetings: (matchId: string) => `/matches/programmed/${matchId}/previous-meetings`,
+      },
+
+      finished: {
+        index: "/matches/finished",
+        detail: (matchId: string) => `/matches/finished/${matchId}`,
+        alignment: (matchId: string) => `/matches/finished/${matchId}/alignment`,
+        statistics: (matchId: string) => `/matches/finished/${matchId}/statistics`,
       },
     },
 
@@ -80,16 +86,12 @@ export const routes = {
     template: "/league/teams/team",
   },
 
+  // Alias de conveniencia — apuntan a las mismas rutas que private.matchRoutes
   matches: {
-    live: "/matches/Live",
-    finished: "/matches/Finished",
-    programmed: "/matches/Programmed",
-    allFinishedAlignment: "/matches/all_finished/alignment",
-    allFinishedLive: "/matches/all_finished/live",
-    allFinishedStatistics: "/matches/all_finished/statistics",
-    allProgrammedPreviousMeetings: "/matches/all_programmed/previousMeetings",
-    allProgrammedProgrammed: "/matches/all_programmed/programmed",
-    allProgrammedSquad: "/matches/all_programmed/squad",
+    index: "/matches",
+    live: "/matches/live",
+    programmed: "/matches/programmed",
+    finished: "/matches/finished",
   },
 
   modal: "/modal",

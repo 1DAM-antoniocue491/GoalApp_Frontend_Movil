@@ -1,14 +1,17 @@
+/**
+ * TeamsTabs.tsx
+ *
+ * Tabs de navegación en el detalle de un equipo:
+ * Información / Plantilla.
+ *
+ * Movida desde features/matches/components a su feature correcta.
+ */
+
 import { styles } from "@/src/shared/styles";
-import { AuthTab, LeagueTab, MatchesTab, TeamTabs } from "@/src/shared/types/auth";
-import { router } from "expo-router";
+import { TeamTabs } from "@/src/shared/types/auth";
 import React from "react";
-import {
-    View, TouchableOpacity, Text
-} from "react-native";
-import { useRouter } from 'expo-router';
+import { View, TouchableOpacity, Text } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-
-
 
 interface TeamTabsProps {
     activeTab: TeamTabs;

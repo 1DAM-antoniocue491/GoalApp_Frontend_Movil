@@ -3,13 +3,9 @@ import { View, Text, Image } from "react-native";
 import { LeagueStatisticsTabs } from "@/src/shared/types/auth";
 
 import { styles } from "@/src/shared/styles";
-import { MatchesTabs } from "@/src/features/matches/components/MatchesTabs";
-import Live from "../matches/Live";
-import Programmed from "../matches/Programmed";
-import Finished from "../matches/Finished";
 import Match from "../statistics/match";
 import Players from "../statistics/players";
-import { StatisticsTabs } from "@/src/features/matches/components/StatisticsTabs";
+import { StatisticsTabs } from "@/src/features/statistics/components/StatisticsTabs";
 
 
 /*

@@ -8,7 +8,7 @@
 import React, { useState } from 'react';
 import { View } from 'react-native';
 import { MatchesTab } from '@/src/shared/types/auth';
-import { MatchesTabs } from '@/src/features/matches/components/MatchesTabs';
+import { MatchStatusTabs } from '../tabs/MatchStatusTabs';
 import { LiveMatchesScreen } from './LiveMatchesScreen';
 import { ProgrammedMatchesScreen } from './ProgrammedMatchesScreen';
 import { FinishedMatchesScreen } from './FinishedMatchesScreen';
@@ -28,7 +28,7 @@ export function MatchesHubScreen() {
     const [activeTab, setActiveTab] = useState<MatchesTab>('live');
     return (
         <View className="mt-10">
-            <MatchesTabs
+            <MatchStatusTabs
                 activeTab={activeTab}
                 setActiveTab={setActiveTab}
             />

@@ -12,7 +12,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Link, RelativePathString } from 'expo-router';
 import { styles } from '@/src/shared/styles';
 import { ProgrammedTabs } from '@/src/shared/types/auth';
-import { MatchesProgrammed } from '@/src/features/matches/components/MatchesProgrammed';
+import { ProgrammedMatchDetailTabs } from '../tabs/ProgrammedMatchDetailTabs';
 // Tabs de contenido dentro de la misma pantalla
 import { ProgrammedMatchPreviousMeetingsScreen } from './ProgrammedMatchPreviousMeetingsScreen';
 import { ProgrammedMatchSquadScreen } from './ProgrammedMatchSquadScreen';
@@ -64,7 +64,7 @@ export function ProgrammedMatchDetailScreen() {
                         </View>
                     </View>
                 </View>
-                <MatchesProgrammed activeTab={activeTab} setActiveTab={setActiveTab} />
+                <ProgrammedMatchDetailTabs activeTab={activeTab} setActiveTab={setActiveTab} />
                 <TabContent tab={activeTab} />
             </SafeAreaView>
         </View>

@@ -21,6 +21,7 @@ import { View, Text, Animated } from 'react-native';
 import { DashboardHeader } from '@/src/shared/components/layout/AppHeader';
 import { getRoleLabel } from '../services/dashboardService';
 import type { LeagueRole } from '@/src/shared/types/league';
+import { Colors } from '@/src/shared/constants/colors';
 
 // ---------------------------------------------------------------------------
 // Props
@@ -84,11 +85,11 @@ export function WelcomeBlock({
               width: 5,
               height: 5,
               borderRadius: 999,
-              backgroundColor: '#C4F135',
+              backgroundColor: Colors.brand.primary,
               marginRight: 8,
             }}
           />
-          <Text style={{ color: '#A1A1AA', fontSize: 14 }}>
+          <Text style={{ color: Colors.text.secondary, fontSize: 14 }}>
             {/* getRoleLabel transforma 'field_delegate' → 'Delegado', etc. */}
             {getRoleLabel(role)}
           </Text>

@@ -1,8 +1,14 @@
 /**
- * FinishedMatchLiveScreen
- * Vista detallada de un partido (en directo o finalizado).
- * Muestra marcador, eventos y tabs de estadísticas/alineaciones.
+ * FinishedMatchDetailScreen.tsx
+ *
+ * Vista detallada de un partido finalizado (o en vivo con mismo layout).
+ * Muestra marcador, eventos y tabs de estadísticas/alineación.
+ *
+ * Renombrada desde FinishedMatchLiveScreen para eliminar la ambigüedad
+ * del término "Live" en una pantalla que sirve tanto a finished como a live.
+ *
  * TODO: conectar con datos reales cuando la API esté disponible.
+ * TODO: diferenciar layout live vs finished si divergen en el futuro.
  */
 
 import React, { useState } from 'react';
@@ -12,8 +18,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Link, RelativePathString } from 'expo-router';
 import { styles } from '@/src/shared/styles';
 import { StatisticTabs } from '@/src/shared/types/auth';
-import { MatchesLive } from '@/src/features/matches/components/MatchesLive';
-// Tabs de contenido dentro de la misma pantalla
+import { FinishedMatchDetailTabs } from '../tabs/FinishedMatchDetailTabs';
 import { FinishedMatchStatisticsScreen } from './FinishedMatchStatisticsScreen';
 import { FinishedMatchAlignmentScreen } from './FinishedMatchAlignmentScreen';
 
@@ -27,7 +32,7 @@ function TabContent({ tab }: TabContentProps) {
     return null;
 }
 
-export function FinishedMatchLiveScreen() {
+export function FinishedMatchDetailScreen() {
     const [activeTab, setActiveTab] = useState<StatisticTabs>('statistics');
     return (
         <View className={styles.screenBase}>
@@ -70,7 +75,7 @@ export function FinishedMatchLiveScreen() {
                         </View>
                     </View>
                 </View>
-                <MatchesLive activeTab={activeTab} setActiveTab={setActiveTab} />
+                <FinishedMatchDetailTabs activeTab={activeTab} setActiveTab={setActiveTab} />
                 <TabContent tab={activeTab} />
             </SafeAreaView>
         </View>

@@ -1,41 +1,83 @@
 /**
  * FinishedMatchesScreen
- * Lista de partidos finalizados por jornada.
- * TODO: conectar con datos reales cuando la API esté disponible.
+ *
+ * Histórico de resultados: lista de partidos finalizados por jornada.
+ * Usa FinishedMatchCard como fuente visual única para partidos finalizados.
+ *
+ * DATOS:
+ * Consume mockFinishedMatches mientras la API no esté disponible.
+ * Cuando exista el endpoint, sustituir por un hook tipo useFinishedMatches()
+ * que devuelva FinishedMatchData[].
+ *
+ * NAVEGACIÓN:
+ * El tap en una card debe abrir el detalle completo del partido (FinishedMatchLiveScreen).
+ * La ruta se activa cuando router esté configurado para esta pantalla.
  */
 
 import React from 'react';
-import { Text, View, Image } from 'react-native';
-import { Link, RelativePathString } from 'expo-router';
+import { View, Text, ScrollView } from 'react-native';
+
+import { mockFinishedMatches } from '@/src/mocks/dashboard.mocks';
+import { FinishedMatchCard } from '@/src/features/matches/components/cards/FinishedMatchCard';
+import { Colors } from '@/src/shared/constants/colors';
 
 export function FinishedMatchesScreen() {
+    if (mockFinishedMatches.length === 0) {
+        return (
+            <View style={{ paddingHorizontal: 16, paddingTop: 24, alignItems: 'center' }}>
+                <Text style={{ color: Colors.text.disabled, fontSize: 14 }}>
+                    No hay resultados disponibles
+                </Text>
+            </View>
+        );
+    }
+
     return (
-        <View className="mt-5">
-            <View className="flex flex-row pl-5">
-                <Text className="bg-[#C8F558] font-bold px-3 py-1 rounded">Jornada 10</Text>
-                <View className="h-px bg-[#C8F558] w-full mt-8" />
+        <ScrollView
+            contentContainerStyle={{ paddingBottom: 24 }}
+            showsVerticalScrollIndicator={false}
+        >
+            {/* ── Cabecera de jornada ── */}
+            <View
+                style={{
+                    flexDirection: 'row',
+                    alignItems: 'center',
+                    paddingHorizontal: 20,
+                    paddingTop: 20,
+                    paddingBottom: 12,
+                    gap: 10,
+                }}
+            >
+                <Text
+                    style={{
+                        backgroundColor: Colors.brand.primary,
+                        color: Colors.bg.base,
+                        fontWeight: '700',
+                        fontSize: 12,
+                        paddingHorizontal: 12,
+                        paddingVertical: 4,
+                        borderRadius: 6,
+                        overflow: 'hidden',
+                    }}
+                >
+                    Jornada 10
+                </Text>
+                <View style={{ flex: 1, height: 1, backgroundColor: Colors.bg.surface2 }} />
             </View>
-            <View className="border border-[#C8F558] rounded-2xl m-3 p-5 bg-[#161616] shadow-sm shadow-[#C8F558] justify-between">
-                <Link href={'../matches/all_finished/live' as RelativePathString}>
-                    <View className="flex flex-row justify-between items-center w-full">
-                        <View className="flex flex-col items-center">
-                            <Image source={require('../../../../../assets/images/betis.png')} className="w-15 h-15" resizeMode="contain" />
-                            <Text className="text-white font-black">Real Betis</Text>
-                        </View>
-                        <View className="flex flex-col items-center">
-                            <View className="flex flex-row gap-3">
-                                <Text className="text-white text-4xl font-black">2</Text>
-                                <Text className="text-white text-4xl font-black">-</Text>
-                                <Text className="text-white text-4xl font-black">1</Text>
-                            </View>
-                        </View>
-                        <View className="flex flex-col items-center">
-                            <Image source={require('../../../../../assets/images/realMadrid.png')} className="w-15 h-15" resizeMode="contain" />
-                            <Text className="text-white font-black">Real Madrid</Text>
-                        </View>
-                    </View>
-                </Link>
+
+            {/* ── Tarjetas de resultados ── */}
+            <View style={{ paddingHorizontal: 16 }}>
+                {mockFinishedMatches.map((match) => (
+                    <FinishedMatchCard
+                        key={match.id}
+                        match={match}
+                        onPress={() => {
+                            // TODO: navegar al detalle del partido finalizado
+                            // router.push(routes.private.matchRoutes.allFinished.live as never)
+                        }}
+                    />
+                ))}
             </View>
-        </View>
+        </ScrollView>
     );
 }

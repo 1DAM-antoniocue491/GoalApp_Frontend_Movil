@@ -19,6 +19,7 @@ import type {
   LeagueMetricsData,
   LiveMatchData,
   UpcomingMatchData,
+  FinishedMatchData,
   DashboardData,
 } from "@/src/shared/types/dashboard.types";
 
@@ -102,6 +103,58 @@ export const mockUpcomingMatches: UpcomingMatchData[] = [
     venue: "Civitas Metropolitano",
     homeColor: "#C8102E", // Atlético rojo
     awayColor: "#005999", // Getafe azul — alineado con mockTeams team-6
+  },
+];
+
+// ---------------------------------------------------------------------------
+// Partidos finalizados (histórico de resultados)
+// ---------------------------------------------------------------------------
+
+export const mockFinishedMatches: FinishedMatchData[] = [
+  {
+    id: "finished-1",
+    homeTeam: "Real Betis",
+    awayTeam: "Sevilla FC",
+    homeScore: 2,
+    awayScore: 1,
+    date: "20 Abr",
+    round: "Jornada 10",
+    leagueName: "Liga Sevilla Premier",
+    venue: "Estadio Benito Villamarín",
+    homeShieldLetter: "B",
+    awayShieldLetter: "S",
+    homeColor: "#00A650",
+    awayColor: "#D40E14",
+  },
+  {
+    id: "finished-2",
+    homeTeam: "Athletic Club",
+    awayTeam: "Villarreal CF",
+    homeScore: 0,
+    awayScore: 0,
+    date: "19 Abr",
+    round: "Jornada 10",
+    leagueName: "Liga Sevilla Premier",
+    venue: "Estadio San Mamés",
+    homeShieldLetter: "A",
+    awayShieldLetter: "V",
+    homeColor: "#C8102E",
+    awayColor: "#FFD700",
+  },
+  {
+    id: "finished-3",
+    homeTeam: "Valencia CF",
+    awayTeam: "Atlético Madrid",
+    homeScore: 1,
+    awayScore: 3,
+    date: "18 Abr",
+    round: "Jornada 10",
+    leagueName: "Liga Sevilla Premier",
+    venue: "Estadio de Mestalla",
+    homeShieldLetter: "V",
+    awayShieldLetter: "A",
+    homeColor: "#FF8C00",
+    awayColor: "#C8102E",
   },
 ];
 

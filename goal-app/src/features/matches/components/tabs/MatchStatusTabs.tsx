@@ -1,24 +1,26 @@
+/**
+ * MatchStatusTabs.tsx
+ *
+ * Tabs de navegación entre estados de partido: Directo / Programados / Finalizados.
+ * Usada por MatchesHubScreen para cambiar la vista activa del hub.
+ *
+ * Renombrada desde MatchesTabs para reflejar su propósito real.
+ */
+
 import { styles } from "@/src/shared/styles";
-import { AuthTab, MatchesTab } from "@/src/shared/types/auth";
-import { router } from "expo-router";
+import { MatchesTab } from "@/src/shared/types/auth";
 import React from "react";
-import {
-    View, TouchableOpacity, Text
-} from "react-native";
+import { View, TouchableOpacity, Text } from "react-native";
 import { useRouter } from 'expo-router';
 import { SafeAreaView } from "react-native-safe-area-context";
 
-
-
-interface MatchesTabsProps {
-    activeTab: MatchesTab,
+interface MatchStatusTabsProps {
+    activeTab: MatchesTab;
     setActiveTab: (tab: MatchesTab) => void;
 }
 
-export function MatchesTabs({ activeTab, setActiveTab }: MatchesTabsProps) {
+export function MatchStatusTabs({ activeTab, setActiveTab }: MatchStatusTabsProps) {
     const router = useRouter();
-
-    // navegamos entre rutas. Directo, Programados y Finalizados.
 
     return (
         <SafeAreaView className="flex-1 ">
@@ -35,20 +37,16 @@ export function MatchesTabs({ activeTab, setActiveTab }: MatchesTabsProps) {
                         </View>
                     </TouchableOpacity>
 
-
                     <TouchableOpacity
                         onPress={() => setActiveTab('programmed')}
                         className={activeTab === 'programmed' ? styles.tabStateMatch : styles.tabStateMatchInactive}>
-                        <View className="flex flex-row  justify-center p-2 ">
+                        <View className="flex flex-row justify-center p-2">
                             <Text className={activeTab === 'programmed' ? styles.tabActiveMatchText : styles.tabInactiveMacthText}>
                                 Programados
-
                             </Text>
-
                         </View>
-
                     </TouchableOpacity>
-                   
+
                     <TouchableOpacity
                         onPress={() => setActiveTab('finished')}
                         className={activeTab === 'finished' ? styles.tabStateMatch : styles.tabStateMatchInactive}>
@@ -57,10 +55,8 @@ export function MatchesTabs({ activeTab, setActiveTab }: MatchesTabsProps) {
                                 Finalizados
                             </Text>
                         </View>
-
                     </TouchableOpacity>
                 </View>
-
             </View>
         </SafeAreaView>
     );

@@ -1,24 +1,27 @@
+/**
+ * FinishedMatchDetailTabs.tsx
+ *
+ * Tabs internas del detalle de un partido finalizado (o en vivo):
+ * Estadísticas / Alineación.
+ * Usada por FinishedMatchDetailScreen.
+ *
+ * Renombrada desde MatchesLive para reflejar su propósito real.
+ */
+
 import { styles } from "@/src/shared/styles";
-import { AuthTab, MatchesTab, StatisticTabs } from "@/src/shared/types/auth";
-import { router } from "expo-router";
+import { StatisticTabs } from "@/src/shared/types/auth";
 import React from "react";
-import {
-    View, TouchableOpacity, Text
-} from "react-native";
+import { View, TouchableOpacity, Text } from "react-native";
 import { useRouter } from 'expo-router';
 import { SafeAreaView } from "react-native-safe-area-context";
 
-
-
-interface MatchesLiveTabsProps {
-    activeTab: StatisticTabs,
+interface FinishedMatchDetailTabsProps {
+    activeTab: StatisticTabs;
     setActiveTab: (tab: StatisticTabs) => void;
 }
 
-export function MatchesLive({ activeTab, setActiveTab }: MatchesLiveTabsProps) {
+export function FinishedMatchDetailTabs({ activeTab, setActiveTab }: FinishedMatchDetailTabsProps) {
     const router = useRouter();
-
-    // navegamos entre rutas. Directo, Programados y Finalizados.
 
     return (
         <SafeAreaView className="flex-1 m-3 ">
@@ -34,22 +37,16 @@ export function MatchesLive({ activeTab, setActiveTab }: MatchesLiveTabsProps) {
                         </View>
                     </TouchableOpacity>
 
-
                     <TouchableOpacity
                         onPress={() => setActiveTab('alignment')}
                         className={activeTab === 'alignment' ? styles.tabPartido : styles.tabPartidoInactive}>
-                        <View className="flex flex-row  justify-center p-2 ">
+                        <View className="flex flex-row justify-center p-2">
                             <Text className={activeTab === 'alignment' ? styles.tabActiveText : styles.tabInactiveText}>
                                 Alineación
-
                             </Text>
-
                         </View>
-
                     </TouchableOpacity>
-                   
                 </View>
-
             </View>
         </SafeAreaView>
     );

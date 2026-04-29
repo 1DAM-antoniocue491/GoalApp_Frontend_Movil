@@ -2,10 +2,11 @@
  * LiveMatchCard.tsx
  *
  * Tarjeta hero "EN VIVO" con efecto de estadio mediante gradientes.
+ * Fuente de verdad visual para partidos en vivo en toda la app.
  *
  * RESPONSABILIDAD: Renderizado de un único partido en vivo.
  * Los permisos de acción (registrar evento, finalizar) los recibe como prop
- * desde el padre (AdminDashboard), que los obtiene de dashboardService.
+ * desde el padre, que los obtiene de dashboardService.
  *
  * ACCIONES POR ROL:
  *   admin / field_delegate → muestra botones de acción (registrar evento, finalizar)
@@ -38,7 +39,8 @@ import { useRouter } from 'expo-router';
 
 import { routes } from '@/src/shared/config/routes';
 import type { LiveMatchData } from '@/src/shared/types/dashboard.types';
-import type { DashboardPermissions } from '../services/dashboardService';
+// DashboardPermissions vive en dashboard — esta card la consume como contrato externo
+import type { DashboardPermissions } from '@/src/features/dashboard/services/dashboardService';
 
 // ---------------------------------------------------------------------------
 // Props

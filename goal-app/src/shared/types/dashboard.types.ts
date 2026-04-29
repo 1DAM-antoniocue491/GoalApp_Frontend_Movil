@@ -75,6 +75,27 @@ export interface UpcomingMatchData {
 }
 
 // ---------------------------------------------------------------------------
+// Partido finalizado (tarjeta de histórico de resultados)
+// ---------------------------------------------------------------------------
+
+export interface FinishedMatchData {
+  id: string;
+  homeTeam: string;
+  awayTeam: string;
+  homeScore: number;
+  awayScore: number;
+  /** Fecha formateada para mostrar, ej: "13 Mar" */
+  date: string;
+  round: string;
+  leagueName: string;
+  venue?: string;
+  homeColor?: string;
+  awayColor?: string;
+  homeShieldLetter?: string;
+  awayShieldLetter?: string;
+}
+
+// ---------------------------------------------------------------------------
 // Datos completos del dashboard (forma que devuelve useDashboardData)
 // ---------------------------------------------------------------------------
 

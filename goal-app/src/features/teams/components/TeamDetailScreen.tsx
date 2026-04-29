@@ -11,7 +11,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { Link, RelativePathString } from 'expo-router';
 import { styles } from '@/src/shared/styles';
 import { TeamTabs } from '@/src/shared/types/auth';
-import { TeamsTabs } from '@/src/features/matches/components/TeamsTabs';
+import { TeamsTabs } from './TeamsTabs';
 import { TeamInformationTab } from './TeamInformationTab';
 import { TeamSquadTab } from './TeamSquadTab';
 

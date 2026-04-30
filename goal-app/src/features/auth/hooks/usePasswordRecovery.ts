@@ -8,7 +8,7 @@
  */
 
 import { useState } from 'react';
-import { forgotPassword, resetPassword } from '@/src/app/auth/api/auth.api';
+import { forgotPassword, resetPassword } from '@/src/features/auth/api/auth.api';
 
 interface UsePasswordRecoveryReturn {
   isLoading: boolean;

@@ -25,13 +25,11 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 
 import { useActiveLeague } from '@/src/state/activeLeague/activeLeagueStore';
-import {
-  AdminDashboard,
-  CoachDashboard,
-  PlayerDashboard,
-  FieldDelegateDashboard,
-  ObserverDashboard,
-} from '@/src/features/dashboard/components';
+import { AdminDashboard } from '@/src/features/dashboard/components/AdminDashboard';
+import { CoachDashboard } from '@/src/features/dashboard/components/CoachDashboard';
+import { PlayerDashboard } from '@/src/features/dashboard/components/PlayerDashboard';
+import { FieldDelegateDashboard } from '@/src/features/dashboard/components/FieldDelegateDashboard';
+import { ObserverDashboard } from '@/src/features/dashboard/components/ObserverDashboard';
 
 import { routes } from '@/src/shared/config/routes';
 import { Colors } from '@/src/shared/constants/colors';

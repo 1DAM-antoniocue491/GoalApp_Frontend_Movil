@@ -36,10 +36,10 @@ import { SearchInput } from '@/src/shared/components/ui/SearchInput';
 import { Colors } from '@/src/shared/constants/colors';
 import { theme } from '@/src/shared/styles/theme';
 import { ScrollEdgeButton } from '@/src/shared/components/navigation/ScrollEdgeButton';
-import { NotificationFilterTabs } from './NotificationFilterTabs';
-import { NotificationCard } from './NotificationCard';
-import { useNotifications } from '../hooks/useNotifications';
-import type { AppNotification } from '../types/notifications.types';
+import { NotificationFilterTabs } from '@/src/features/notifications/components/NotificationFilterTabs';
+import { NotificationCard } from '@/src/features/notifications/components/NotificationCard';
+import { useNotifications } from '@/src/features/notifications/hooks/useNotifications';
+import type { AppNotification } from '@/src/features/notifications/types/notifications.types';
 
 // ─── Componente ──────────────────────────────────────────────────────────────
 

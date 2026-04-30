@@ -16,7 +16,7 @@ import type {
   AppNotification,
   NotificationCategory,
   NotificationFilter,
-} from '../types/notifications.types';
+} from '@/src/features/notifications/types/notifications.types';
 
 // Rol del usuario en la liga — extraer del estado global cuando esté disponible
 export type UserRole = 'admin' | 'coach' | 'player' | 'observer' | 'delegate';

@@ -18,7 +18,7 @@
  *     useMatchActionModals();
  *
  *   // Montar los modales al final del return:
- *   <MatchActionModals {...modalProps} />
+ *   <MatchActionModals {@/src/features/matches.modalProps} />
  *
  * PREPARADO PARA API:
  * Los handlers `onGoalConfirm`, `onYellowCardConfirm`, `onRedCardConfirm`,
@@ -28,14 +28,14 @@
 
 import { useState } from 'react';
 
-import type { LiveMatchContext } from '../components/modals/RegisterEventModal';
-import type { LiveMatchSummary, EndMatchData } from '../components/modals/EndMatchModal';
-import type { ProgrammedMatchContext } from '../components/modals/StartMatchModal';
-import type { MatchEventType } from '../components/modals/RegisterEventModal';
-import type { GoalEventData } from '../components/modals/GoalEventModal';
-import type { YellowCardEventData } from '../components/modals/YellowCardModal';
-import type { RedCardEventData } from '../components/modals/RedCardModal';
-import type { SubstitutionEventData } from '../components/modals/SubstitutionModal';
+import type { LiveMatchContext } from '@/src/features/matches/components/modals/RegisterEventModal';
+import type { LiveMatchSummary, EndMatchData } from '@/src/features/matches/components/modals/EndMatchModal';
+import type { ProgrammedMatchContext } from '@/src/features/matches/components/modals/StartMatchModal';
+import type { MatchEventType } from '@/src/features/matches/components/modals/RegisterEventModal';
+import type { GoalEventData } from '@/src/features/matches/components/modals/GoalEventModal';
+import type { YellowCardEventData } from '@/src/features/matches/components/modals/YellowCardModal';
+import type { RedCardEventData } from '@/src/features/matches/components/modals/RedCardModal';
+import type { SubstitutionEventData } from '@/src/features/matches/components/modals/SubstitutionModal';
 
 // ---------------------------------------------------------------------------
 // Tipos del hook
@@ -150,25 +150,25 @@ export function useMatchActionModals() {
 
   const handleGoalConfirm = (data: GoalEventData) => {
     setGoalVisible(false);
-    // TODO: POST /matches/:id/events { type: 'goal', ...data, minute: activeEventMatch?.minute }
+    // TODO: POST /matches/:id/events { type: 'goal', @/src/features/matches.data, minute: activeEventMatch?.minute }
     console.log('[useMatchActionModals] goal confirmed for match:', activeEventMatch?.id, data);
   };
 
   const handleYellowCardConfirm = (data: YellowCardEventData) => {
     setYellowCardVisible(false);
-    // TODO: POST /matches/:id/events { type: 'yellow_card', ...data, minute: activeEventMatch?.minute }
+    // TODO: POST /matches/:id/events { type: 'yellow_card', @/src/features/matches.data, minute: activeEventMatch?.minute }
     console.log('[useMatchActionModals] yellow_card confirmed for match:', activeEventMatch?.id, data);
   };
 
   const handleRedCardConfirm = (data: RedCardEventData) => {
     setRedCardVisible(false);
-    // TODO: POST /matches/:id/events { type: 'red_card', ...data, minute: activeEventMatch?.minute }
+    // TODO: POST /matches/:id/events { type: 'red_card', @/src/features/matches.data, minute: activeEventMatch?.minute }
     console.log('[useMatchActionModals] red_card confirmed for match:', activeEventMatch?.id, data);
   };
 
   const handleSubstitutionConfirm = (data: SubstitutionEventData) => {
     setSubstitutionVisible(false);
-    // TODO: POST /matches/:id/events { type: 'substitution', ...data, minute: activeEventMatch?.minute }
+    // TODO: POST /matches/:id/events { type: 'substitution', @/src/features/matches.data, minute: activeEventMatch?.minute }
     console.log('[useMatchActionModals] substitution confirmed for match:', activeEventMatch?.id, data);
   };
 

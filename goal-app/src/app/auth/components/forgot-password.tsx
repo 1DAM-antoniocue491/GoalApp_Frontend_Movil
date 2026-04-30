@@ -28,7 +28,7 @@ import { AppLogo } from '@/src/shared/components/ui/AppLogo';
 import { routes } from '@/src/shared/config/routes';
 
 // Hook de recuperación de contraseña
-import { usePasswordRecovery } from '@/src/app/auth/hooks/usePasswordRecovery';
+import { usePasswordRecovery } from '@/src/features/auth/hooks/usePasswordRecovery';
 
 // Validación básica de formato email
 function isValidEmail(email: string): boolean {

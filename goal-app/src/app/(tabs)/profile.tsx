@@ -5,7 +5,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { Link, RelativePathString, useRouter } from "expo-router";
 import { SafeAreaView } from "react-native-safe-area-context";
 
-import { useAuth } from '@/src/app/auth/hooks/useAuth';
+import { useAuth } from '@/src/features/auth/hooks/useAuth';
 import { routes } from '@/src/shared/config/routes';
 
 export default function HomeScreen() {
@@ -34,7 +34,7 @@ export default function HomeScreen() {
         <View className={styles.screenBase}>
             <SafeAreaView className="flex-1">
 
-                {/* 🔽 SCROLL */}
+                {/* SCROLL */}
                 <ScrollView
                     showsVerticalScrollIndicator={false}
                     contentContainerStyle={{ paddingBottom: 40 }}
@@ -50,7 +50,7 @@ export default function HomeScreen() {
                             <Ionicons
                                 name="create-outline"
                                 size={26}
-                                color="#C8F558" 
+                                color="#C8F558"
                             />
                         </Link>
                     </View>

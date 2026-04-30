@@ -12,8 +12,7 @@ import { Link, RelativePathString, useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { styles } from '@/src/shared/styles';
 
-import { useAuth } from '@/src/app/auth/hooks/useAuth';
-import { routes } from '@/src/shared/config/routes';
+import { useAuth } from '@/src/features/auth/hooks/useAuth';
 
 export function EditProfileScreen() {
 

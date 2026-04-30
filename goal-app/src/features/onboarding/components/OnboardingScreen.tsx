@@ -23,14 +23,12 @@ import { LeaguesSkeleton } from '@/src/features/leagues/components/LeaguesSkelet
 import { ReactivateLeagueModal } from '@/src/features/leagues/components/ReactivateLeagueModal';
 import { JoinLeagueModal } from '@/src/features/leagues/components/JoinLeagueModal';
 import { CreateLeagueModal, type CreateLeagueForm } from '@/src/features/leagues/components/CreateLeagueModal';
+import type { LigaCreateRequest } from '@/src/features/leagues/types/league.api.types';
 
 import { LeagueItem, LeagueFilter } from '@/src/shared/types/league';
-import {
-  getAllLeagues,
-  reactivateLeague,
-} from '@/src/features/leagues/services/leagueService';
-import { mockUsers } from '@/src/mocks/data';
-import type { User } from '@/src/shared/types/user';
+import { reactivateLeague } from '@/src/features/leagues/services/leagueService';
+import { useLeagues } from '@/src/features/leagues/hooks/useLeagues';
+import { useAuth } from '@/src/providers/AuthProvider';
 import { activeLeagueStore } from '@/src/state/activeLeague/activeLeagueStore';
 import { Colors } from '@/src/shared/constants/colors';
 import { theme } from '@/src/shared/styles/theme';
@@ -71,8 +69,16 @@ function OnboardingScreenContent() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
 
-  const [isLoading, setIsLoading] = useState(true);
-  const [currentUser] = useState<User>(mockUsers[0]);
+  const { user } = useAuth();
+  const {
+    leagues: fetchedLeagues,
+    loading: isLoading,
+    error: leaguesError,
+    refresh,
+    submitting: isCreating,
+    createError,
+    createNewLeague,
+  } = useLeagues();
   const [leagues, setLeagues] = useState<LeagueItem[]>([]);
   const [selectedFilter, setSelectedFilter] = useState<LeagueFilter>('all');
   const [searchTerm, setSearchTerm] = useState('');
@@ -105,6 +111,13 @@ function OnboardingScreenContent() {
   const actionsStyle = useFadeUpStyle(actionsAnim);
   const contentStyle = useFadeUpStyle(contentAnim);
 
+  // Sincronizar ligas cargadas por el hook en el estado local
+  useEffect(() => {
+    if (!isLoading) {
+      setLeagues(fetchedLeagues);
+    }
+  }, [fetchedLeagues, isLoading]);
+
   useEffect(() => {
     Animated.stagger(100, [
       Animated.timing(headerAnim, {
@@ -126,18 +139,14 @@ function OnboardingScreenContent() {
         useNativeDriver: true,
       }),
     ]).start();
-
-    const timer = setTimeout(() => {
-      setLeagues(getAllLeagues());
-      setIsLoading(false);
-    }, 1200);
-
-    return () => clearTimeout(timer);
   }, [actionsAnim, contentAnim, headerAnim]);
 
   const firstName = useMemo(
-    () => currentUser.name.split(' ')[0] ?? currentUser.name,
-    [currentUser.name]
+    () => {
+      if (!user?.nombre) return '';
+      return user.nombre.split(' ')[0] ?? user.nombre;
+    },
+    [user?.nombre]
   );
 
   const filteredLeagues = useMemo(() => {
@@ -218,11 +227,13 @@ function OnboardingScreenContent() {
     Alert.alert('¡Solicitud enviada!', `Código introducido: ${code}. Pronto recibirás acceso a la liga.`);
   }, []);
 
-  // Create league flow
-  const handleCreateConfirm = useCallback((data: any) => {
-    setShowCreateModal(false);
-    Alert.alert('¡Liga creada!', `La liga "${data.name}" ha sido creada correctamente.`);
-  }, []);
+  // Create league flow — el modal entrega LigaCreateRequest listo para el backend
+  const handleCreateConfirm = useCallback(async (data: LigaCreateRequest) => {
+    const result = await createNewLeague({ league: data });
+    if (result) {
+      setShowCreateModal(false);
+    }
+  }, [createNewLeague]);
 
   /**
    * Abre el modal de edición con la liga seleccionada.
@@ -249,20 +260,19 @@ function OnboardingScreenContent() {
   }, [editTarget]);
 
   /**
-   * Confirma la edición: actualiza el nombre, temporada y logo en el listado local.
-   * En producción, aquí se llamará al servicio real de actualización.
+   * Confirma la edición: actualiza estado local con los datos de LigaCreateRequest.
+   * Cuando exista PUT /ligas/{id}, añadir la llamada al servicio aquí.
    */
-  const handleEditConfirm = useCallback((data: CreateLeagueForm) => {
+  const handleEditConfirm = useCallback((data: LigaCreateRequest) => {
     if (!editTarget) return;
     setLeagues((prev) =>
       prev.map((l) =>
         l.id === editTarget.id
           ? {
             ...l,
-            name: data.name,
-            season: `${data.seasonStartYear}/${String(data.seasonStartYear + 1).slice(2)}`,
-            // Priorizamos URI local (recién seleccionada), luego URL remota
-            crestUrl: data.logoUri ?? data.logoUrl ?? l.crestUrl,
+            name: data.nombre,
+            season: data.temporada,
+            crestUrl: data.logo_url ?? l.crestUrl,
           }
           : l
       )
@@ -382,6 +392,27 @@ function OnboardingScreenContent() {
                 </Text>
                 <LeaguesSkeleton count={3} />
               </>
+            ) : leaguesError ? (
+              <View className="py-10 items-center">
+                <Ionicons name="cloud-offline-outline" size={40} color={Colors.text.disabled} />
+                <Text
+                  style={{
+                    color: Colors.text.secondary,
+                    fontSize: theme.fontSize.sm,
+                    lineHeight: 20,
+                    textAlign: 'center',
+                    marginTop: theme.spacing.md,
+                    marginBottom: theme.spacing.md,
+                  }}
+                >
+                  No se pudieron cargar las ligas
+                </Text>
+                <TouchableOpacity onPress={refresh}>
+                  <Text style={{ color: Colors.brand.primary, fontSize: theme.fontSize.sm }}>
+                    Reintentar
+                  </Text>
+                </TouchableOpacity>
+              </View>
             ) : leagues.length === 0 ? (
               <EmptyLeaguesState />
             ) : (
@@ -491,7 +522,9 @@ function OnboardingScreenContent() {
       <CreateLeagueModal
         visible={showCreateModal}
         onConfirm={handleCreateConfirm}
-        onCancel={() => setShowCreateModal(false)}
+        onCancel={() => { if (!isCreating) setShowCreateModal(false); }}
+        submitting={isCreating}
+        submitError={createError}
       />
 
       {/**

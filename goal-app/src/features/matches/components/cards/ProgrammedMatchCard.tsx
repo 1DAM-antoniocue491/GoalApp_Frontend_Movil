@@ -46,8 +46,8 @@ export interface ProgrammedMatchCardProps {
 
 /** Mapa de mes abreviado (ES) → índice JS (0-based) */
 const MONTH_MAP: Record<string, number> = {
-  ENE: 0, FEB: 1, MAR: 2, ABR: 3, MAY: 4, JUN: 5,
-  JUL: 6, AGO: 7, SEP: 8, OCT: 9, NOV: 10, DIC: 11,
+    ENE: 0, FEB: 1, MAR: 2, ABR: 3, MAY: 4, JUN: 5,
+    JUL: 6, AGO: 7, SEP: 8, OCT: 9, NOV: 10, DIC: 11,
 };
 
 /**
@@ -57,23 +57,23 @@ const MONTH_MAP: Record<string, number> = {
  * Asume el año actual; si la fecha ya pasó este año, intenta el siguiente.
  */
 function canStartMatchNow(day: string, month: string, time: string): boolean {
-  if (!day || !month || !time) return false;
-  const monthIndex = MONTH_MAP[month.toUpperCase()];
-  if (monthIndex === undefined) return false;
-  const [hStr, mStr] = time.split(':');
-  const hours = parseInt(hStr, 10);
-  const minutes = parseInt(mStr, 10);
-  if (isNaN(hours) || isNaN(minutes)) return false;
+    if (!day || !month || !time) return false;
+    const monthIndex = MONTH_MAP[month.toUpperCase()];
+    if (monthIndex === undefined) return false;
+    const [hStr, mStr] = time.split(':');
+    const hours = parseInt(hStr, 10);
+    const minutes = parseInt(mStr, 10);
+    if (isNaN(hours) || isNaN(minutes)) return false;
 
-  const now = new Date();
-  const matchDate = new Date(now.getFullYear(), monthIndex, parseInt(day, 10), hours, minutes, 0);
+    const now = new Date();
+    const matchDate = new Date(now.getFullYear(), monthIndex, parseInt(day, 10), hours, minutes, 0);
 
-  // Si ya pasó hace más de 2 horas este año, asumir que es del año siguiente
-  if (matchDate.getTime() < now.getTime() - 2 * 60 * 60 * 1000) {
-    matchDate.setFullYear(now.getFullYear() + 1);
-  }
+    // Si ya pasó hace más de 2 horas este año, asumir que es del año siguiente
+    if (matchDate.getTime() < now.getTime() - 2 * 60 * 60 * 1000) {
+        matchDate.setFullYear(now.getFullYear() + 1);
+    }
 
-  return now.getTime() >= matchDate.getTime() - 60 * 60 * 1000;
+    return now.getTime() >= matchDate.getTime() - 60 * 60 * 1000;
 }
 
 // ---------------------------------------------------------------------------
@@ -201,7 +201,7 @@ export function ProgrammedMatchCard({
                                 </TouchableOpacity>
                                 {!startAllowed && (
                                     <Text style={{ color: '#52525B', fontSize: 10, marginTop: 3 }}>
-                                        Disponible 1 hora antes
+                                        Disponible hasta 1 hora antes
                                     </Text>
                                 )}
                             </View>

@@ -1,1 +1,1 @@
-export * from './sessionStore';
+export * from "@/src/state/session/sessionStore";

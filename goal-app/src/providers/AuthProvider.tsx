@@ -10,8 +10,8 @@
 
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
 import { sessionStore } from '@/src/state/session/sessionStore';
-import { login as apiLogin, register as apiRegister, logout as apiLogout } from '@/src/app/auth/services/authService';
-import type { AuthUser } from '@/src/app/auth/types/auth.types';
+import { login as apiLogin, register as apiRegister, logout as apiLogout } from '@/src/features/auth/services/authService';
+import type { AuthUser } from '@/src/features/auth/types/auth.types';
 
 interface AuthContextType {
   user: AuthUser | null;

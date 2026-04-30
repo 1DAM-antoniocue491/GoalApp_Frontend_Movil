@@ -15,7 +15,7 @@
  * - styles (shared/styles) → inputRow, input, label, inputPlaceholder, inputIcon
  */
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   Modal,
   View,
@@ -37,13 +37,14 @@ import { DateTimePickerField } from '@/src/shared/components/ui/DateTimePickerFi
 
 // ─── Tipos ────────────────────────────────────────────────────────────────────
 
-interface CreateManualMatchFormData {
+export interface CreateManualMatchFormData {
   homeTeamId: string;
   awayTeamId: string;
   delegateId: string;
   date: string;
   time: string;
   stadium: string;
+  round: string;
 }
 
 interface CreateManualMatchModalProps {
@@ -54,6 +55,8 @@ interface CreateManualMatchModalProps {
   teamOptions?: SelectOption[];
   /** Opciones de delegados disponibles en la liga */
   delegateOptions?: SelectOption[];
+  /** Jornada activa — pre-rellena el campo al abrir el modal */
+  defaultRound?: string;
 }
 
 // ─── Constantes ───────────────────────────────────────────────────────────────
@@ -79,6 +82,7 @@ const EMPTY_FORM: CreateManualMatchFormData = {
   date: '',
   time: '',
   stadium: '',
+  round: '',
 };
 
 // ─── Componente ───────────────────────────────────────────────────────────────
@@ -89,8 +93,16 @@ export function CreateManualMatchModal({
   onSubmit,
   teamOptions = DEFAULT_TEAM_OPTIONS,
   delegateOptions = DEFAULT_DELEGATE_OPTIONS,
+  defaultRound = '',
 }: CreateManualMatchModalProps) {
   const [form, setForm] = useState<CreateManualMatchFormData>(EMPTY_FORM);
+
+  // Pre-rellena la jornada cuando se abre el modal
+  useEffect(() => {
+    if (visible) {
+      setForm(prev => ({ ...prev, round: defaultRound }));
+    }
+  }, [visible, defaultRound]);
 
   function handleClose() {
     // Limpia el form al cerrar para que no persista al reabrirse
@@ -229,7 +241,7 @@ export function CreateManualMatchModal({
                 </View>
 
                 {/* ── Estadio ── */}
-                <View className="mb-6">
+                <View className="mb-4">
                   <Text className={styles.label} style={{ marginBottom: 6 }}>
                     Estadio
                   </Text>
@@ -243,6 +255,26 @@ export function CreateManualMatchModal({
                       placeholderTextColor={styles.inputPlaceholder}
                       value={form.stadium}
                       onChangeText={v => setForm(prev => ({ ...prev, stadium: v }))}
+                      returnKeyType="next"
+                    />
+                  </View>
+                </View>
+
+                {/* ── Jornada ── */}
+                <View className="mb-6">
+                  <Text className={styles.label} style={{ marginBottom: 6 }}>
+                    Jornada
+                  </Text>
+                  <View className={styles.inputRow}>
+                    <View className={styles.inputIcon}>
+                      <Ionicons name="list-outline" size={17} color={Colors.text.secondary} />
+                    </View>
+                    <TextInput
+                      className={styles.input}
+                      placeholder="Ej: Jornada 10"
+                      placeholderTextColor={styles.inputPlaceholder}
+                      value={form.round}
+                      onChangeText={v => setForm(prev => ({ ...prev, round: v }))}
                       returnKeyType="done"
                     />
                   </View>

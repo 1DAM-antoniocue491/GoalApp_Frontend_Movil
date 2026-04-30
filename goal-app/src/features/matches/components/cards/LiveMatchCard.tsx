@@ -178,7 +178,7 @@ export function LiveMatchCard({
     return (
         <Pressable
             onPress={handleCardPress}
-            style={{ marginHorizontal: 16, marginTop: 8, borderRadius: 20, overflow: 'hidden' }}
+            style={{ marginHorizontal: 10, marginTop: 8, borderRadius: 20, overflow: 'hidden' }}
         >
             {/* ── Gradiente verde oscuro: efecto cesped/estadio ── */}
             {/*

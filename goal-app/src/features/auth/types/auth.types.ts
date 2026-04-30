@@ -12,15 +12,15 @@
 // ============================================================
 
 export interface LoginRequest {
-  username: string;  // Backend espera 'username' (OAuth2PasswordRequestForm)
+  username: string; // Backend espera 'username' (OAuth2PasswordRequestForm)
   password: string;
 }
 
 export interface LoginResponse {
   access_token: string;
   refresh_token: string;
-  token_type: 'bearer';
-  expires_in: number;  // segundos (ej: 2592000 = 30 días)
+  token_type: "bearer";
+  expires_in: number; // segundos (ej: 2592000 = 30 días)
 }
 
 // ============================================================
@@ -30,7 +30,7 @@ export interface LoginResponse {
 export interface RegisterRequest {
   nombre: string;
   email: string;
-  contraseña: string;  // Backend usa 'contraseña' con ñ
+  contraseña: string; // Backend usa 'contraseña' con ñ
 }
 
 export interface RegisterResponse {

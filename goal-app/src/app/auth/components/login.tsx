@@ -21,7 +21,7 @@ import { PasswordField } from '@/src/shared/components/ui/PasswordField';
 import { Button } from '@/src/shared/components/ui/Button';
 
 // Hook de autenticación
-import { useAuth } from '@/src/app/auth/hooks/useAuth';
+import { useAuth } from '@/src/features/auth/hooks/useAuth';
 
 // Tipado del formulario de login
 import type { LoginForm } from '@/src/shared/types/auth';

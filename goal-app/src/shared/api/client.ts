@@ -5,12 +5,18 @@
  * - Inyección automática de token de autenticación
  * - Timeout configurable
  * - Retry con backoff exponencial para errores 5xx y network
+ * - Refresh automático de token en 401 (un intento)
  * - Manejo de errores con ApiError
  */
 
 import { ENV } from '@/src/shared/constants/env';
 import { setupAuthInterceptor } from './interceptors';
+import { ApiError } from './errors';
+import { sessionStore } from '@/src/state/session/sessionStore';
 import { logger } from '@/src/shared/utils/logger';
+
+// Re-exportar ApiError para que los consumidores no necesiten cambiar sus imports
+export { ApiError } from './errors';
 
 interface RequestOptions {
   method: 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE';
@@ -28,7 +34,7 @@ interface ApiResponse<T> {
  *
  * @example
  * const user = await apiClient.get<User>('/auth/me');
- * const league = await apiClient.post<League>('/leagues', { name: '...' });
+ * const league = await apiClient.post<League>('/ligas/', { nombre: '...' });
  */
 export const apiClient = {
   async get<T>(endpoint: string): Promise<ApiResponse<T>> {
@@ -59,14 +65,55 @@ export const apiClient = {
   },
 };
 
+/**
+ * Intenta renovar el access token usando el refresh token.
+ *
+ * Endpoint: POST /auth/refresh?token=<refresh_token>
+ * Devuelve el nuevo access token o null si el refresh falla.
+ */
+async function tryRefreshToken(): Promise<string | null> {
+  const refreshToken = await sessionStore.getRefreshToken();
+  if (!refreshToken) return null;
+
+  try {
+    const response = await fetch(
+      `${ENV.API_URL}/auth/refresh?token=${encodeURIComponent(refreshToken)}`,
+      { method: 'POST' },
+    );
+
+    if (!response.ok) return null;
+
+    const body = await response.json();
+    const newAccessToken: string | undefined = body.access_token;
+    const newRefreshToken: string = body.refresh_token ?? refreshToken;
+
+    if (!newAccessToken) return null;
+
+    const user = await sessionStore.getUser();
+    if (user) {
+      await sessionStore.setSession(newAccessToken, newRefreshToken, user);
+    }
+
+    logger.info('api/refresh', 'Token renovado correctamente');
+    return newAccessToken;
+  } catch (error) {
+    logger.warn('api/refresh', 'Refresh fallido', {
+      error: error instanceof Error ? error.message : String(error),
+    });
+    return null;
+  }
+}
+
 async function request<T>(
   endpoint: string,
   options: RequestOptions,
   retryCount = 0,
+  // Previene un segundo intento de refresh en la misma cadena de requests
+  retried401 = false,
 ): Promise<ApiResponse<T>> {
   const url = `${ENV.API_URL}${endpoint}`;
 
-  // Obtener headers con token desde interceptor
+  // Headers con token inyectado
   const headers = await setupAuthInterceptor();
 
   // Timeout configurable
@@ -86,6 +133,22 @@ async function request<T>(
     clearTimeout(timeoutId);
 
     if (!response.ok) {
+      // 401 → intentar refresh una sola vez
+      if (response.status === 401 && !retried401) {
+        logger.info('api/401', `Token expirado en ${endpoint}, intentando refresh`);
+
+        const newToken = await tryRefreshToken();
+
+        if (newToken) {
+          // Reintentar la request original con el token nuevo
+          return request<T>(endpoint, options, retryCount, true);
+        }
+
+        // Refresh fallido → limpiar sesión y propagar 401
+        logger.warn('api/401', 'Refresh fallido, limpiando sesión');
+        await sessionStore.clearSession();
+      }
+
       const errorText = await response.text();
       logger.warn('api/response', `${response.status} en ${endpoint}`, {
         status: response.status,
@@ -102,6 +165,18 @@ async function request<T>(
   } catch (error) {
     clearTimeout(timeoutId);
 
+    // AbortError (timeout de AbortController) → error controlado 408
+    // En Hermes (React Native), el DOMException de abort puede NO heredar de Error,
+    // por lo que no se puede usar instanceof Error. Se comprueba name y message directamente.
+    const isAbort =
+      (error != null && (error as { name?: string }).name === 'AbortError') ||
+      (error instanceof Error && error.message === 'Aborted') ||
+      String(error) === 'Aborted';
+
+    if (isAbort) {
+      throw new ApiError(408, 'La petición tardó demasiado. Inténtalo de nuevo.');
+    }
+
     // Reintentar para errores de red o 5xx
     if (error instanceof TypeError || (error instanceof ApiError && error.status >= 500)) {
       if (retryCount < ENV.MAX_RETRIES) {
@@ -113,7 +188,7 @@ async function request<T>(
         // Backoff exponencial: 1s, 2s, 4s
         await new Promise((resolve) => setTimeout(resolve, Math.pow(2, retryCount) * 1000));
 
-        return request<T>(endpoint, options, retryCount + 1);
+        return request<T>(endpoint, options, retryCount + 1, retried401);
       }
     }
 
@@ -141,11 +216,4 @@ async function requestForm<T>(
 
   const data = await response.json();
   return { data, status: response.status };
-}
-
-export class ApiError extends Error {
-  constructor(public status: number, message: string) {
-    super(message);
-    this.name = 'ApiError';
-  }
 }

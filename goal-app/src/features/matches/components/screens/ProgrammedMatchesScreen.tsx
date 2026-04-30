@@ -25,10 +25,10 @@ import { useRouter } from 'expo-router';
 
 import { mockUpcomingMatches } from '@/src/mocks/dashboard.mocks';
 import { getDashboardPermissions } from '@/src/features/dashboard/services/dashboardService';
-import { ProgrammedMatchCard } from '../cards/ProgrammedMatchCard';
+import { ProgrammedMatchCard } from '@/src/features/matches/components/cards/ProgrammedMatchCard';
 import { Colors } from '@/src/shared/constants/colors';
-import { useMatchActionModals } from '../../hooks/useMatchActionModals';
-import { StartMatchModal } from '../modals/StartMatchModal';
+import { useMatchActionModals } from '@/src/features/matches/hooks/useMatchActionModals';
+import { StartMatchModal } from '@/src/features/matches/components/modals/StartMatchModal';
 import { routes } from '@/src/shared/config/routes';
 
 // Placeholder de permisos — reemplazar por getDashboardPermissions(role) del contexto de sesión

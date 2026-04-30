@@ -1,30 +1,39 @@
 // Tabs — fuente de verdad semántica para cada contexto de navegación interna
-export { MatchStatusTabs } from './tabs/MatchStatusTabs';
-export { ProgrammedMatchDetailTabs } from './tabs/ProgrammedMatchDetailTabs';
-export { FinishedMatchDetailTabs } from './tabs/FinishedMatchDetailTabs';
+export { MatchStatusTabs } from "@/src/features/matches/components/tabs/MatchStatusTabs";
+export { ProgrammedMatchDetailTabs } from "@/src/features/matches/components/tabs/ProgrammedMatchDetailTabs";
+export { FinishedMatchDetailTabs } from "@/src/features/matches/components/tabs/FinishedMatchDetailTabs";
 
 // Cards reutilizables — fuente de verdad visual para cada estado de partido
-export { LiveMatchCard } from './cards/LiveMatchCard';
-export { ProgrammedMatchCard } from './cards/ProgrammedMatchCard';
-export { FinishedMatchCard } from './cards/FinishedMatchCard';
+export { LiveMatchCard } from "@/src/features/matches/components/cards/LiveMatchCard";
+export { ProgrammedMatchCard } from "@/src/features/matches/components/cards/ProgrammedMatchCard";
+export { FinishedMatchCard } from "@/src/features/matches/components/cards/FinishedMatchCard";
 
 // Screens de plantilla/convocatoria/alineación — cada caso de uso tiene su pantalla
-export { LiveMatchSquadsScreen } from './screens/LiveMatchSquadsScreen';
-export { ProgrammedMatchConvocationScreen } from './screens/ProgrammedMatchConvocationScreen';
-export { ProgrammedMatchLineupScreen } from './screens/ProgrammedMatchLineupScreen';
+export { LiveMatchSquadsScreen } from "@/src/features/matches/components/screens/LiveMatchSquadsScreen";
+export { ProgrammedMatchConvocationScreen } from "@/src/features/matches/components/screens/ProgrammedMatchConvocationScreen";
+export { ProgrammedMatchLineupScreen } from "@/src/features/matches/components/screens/ProgrammedMatchLineupScreen";
 
 // Modales operativos de partido — reutilizables desde calendar, dashboard y matches
-export { RegisterEventModal } from './modals/RegisterEventModal';
-export { EndMatchModal } from './modals/EndMatchModal';
-export { StartMatchModal } from './modals/StartMatchModal';
-export { GoalEventModal } from './modals/GoalEventModal';
-export { YellowCardModal } from './modals/YellowCardModal';
-export { RedCardModal } from './modals/RedCardModal';
-export { SubstitutionModal } from './modals/SubstitutionModal';
-export type { MatchEventType, LiveMatchContext } from './modals/RegisterEventModal';
-export type { LiveMatchSummary, EndMatchData } from './modals/EndMatchModal';
-export type { ProgrammedMatchContext } from './modals/StartMatchModal';
-export type { GoalEventData } from './modals/GoalEventModal';
-export type { YellowCardEventData } from './modals/YellowCardModal';
-export type { RedCardType, RedCardEventData } from './modals/RedCardModal';
-export type { SubstitutionEventData } from './modals/SubstitutionModal';
+export { RegisterEventModal } from "@/src/features/matches/components/modals/RegisterEventModal";
+export { EndMatchModal } from "@/src/features/matches/components/modals/EndMatchModal";
+export { StartMatchModal } from "@/src/features/matches/components/modals/StartMatchModal";
+export { GoalEventModal } from "@/src/features/matches/components/modals/GoalEventModal";
+export { YellowCardModal } from "@/src/features/matches/components/modals/YellowCardModal";
+export { RedCardModal } from "@/src/features/matches/components/modals/RedCardModal";
+export { SubstitutionModal } from "@/src/features/matches/components/modals/SubstitutionModal";
+export type {
+  MatchEventType,
+  LiveMatchContext,
+} from "@/src/features/matches/components/modals/RegisterEventModal";
+export type {
+  LiveMatchSummary,
+  EndMatchData,
+} from "@/src/features/matches/components/modals/EndMatchModal";
+export type { ProgrammedMatchContext } from "@/src/features/matches/components/modals/StartMatchModal";
+export type { GoalEventData } from "@/src/features/matches/components/modals/GoalEventModal";
+export type { YellowCardEventData } from "@/src/features/matches/components/modals/YellowCardModal";
+export type {
+  RedCardType,
+  RedCardEventData,
+} from "@/src/features/matches/components/modals/RedCardModal";
+export type { SubstitutionEventData } from "@/src/features/matches/components/modals/SubstitutionModal";

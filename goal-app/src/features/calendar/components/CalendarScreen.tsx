@@ -9,7 +9,7 @@
  * - Filtros de estado dentro de la jornada (en vivo / programados / finalizados)
  * - Renderizado de cards según el tipo de partido usando las fuentes de verdad
  * - Menú de acciones de admin (crear calendario, editar calendario, nuevo partido)
- * - Modales conectados: CalendarConfigModal, NewMatchModal
+ * - Modales conectados: CalendarConfigModal, CreateManualMatchModal
  * - Navegación real al detalle de partido según su estado
  *
  * PREPARADO PARA API:
@@ -42,7 +42,7 @@ import { JourneyNavigator } from './JourneyNavigator';
 import { JourneyStatusTabs } from './JourneyStatusTabs';
 import { CalendarActionsMenu } from './CalendarActionsMenu';
 import { CalendarConfigModal } from './modals/CalendarConfigModal';
-import { NewMatchModal } from './modals/NewMatchModal';
+import { CreateManualMatchModal } from './modals/CreateManualMatchModal';
 // Modales operativos de partido — viven en matches para reutilización cross-feature
 import { RegisterEventModal } from '@/src/features/matches/components/modals/RegisterEventModal';
 import { EndMatchModal } from '@/src/features/matches/components/modals/EndMatchModal';
@@ -69,7 +69,7 @@ import {
   getCalendarPermissions,
 } from '../utils/calendarFilters';
 import type { CalendarConfigData } from './modals/CalendarConfigModal';
-import type { NewMatchFormData } from './modals/NewMatchModal';
+import type { CreateManualMatchFormData } from './modals/CreateManualMatchModal';
 
 // ---------------------------------------------------------------------------
 // Mock data — reemplazar por useCalendarData(leagueId) cuando el API esté listo
@@ -540,10 +540,9 @@ export function CalendarScreen() {
     console.log('[CalendarConfigModal] confirmed:', data);
   };
 
-  const handleNewMatchConfirm = (data: NewMatchFormData) => {
+  const handleNewMatchConfirm = (data: CreateManualMatchFormData) => {
     setNewMatchModalVisible(false);
     // TODO: llamar a POST /matches con { ...data, source: 'manual', leagueId }
-    console.log('[NewMatchModal] confirmed:', data);
   };
 
   // ── Navegación al detalle de partido ──
@@ -681,7 +680,7 @@ export function CalendarScreen() {
             filteredMatches.map((match) => {
               if (match.status === 'live') {
                 return (
-                  <View key={match.id} style={{ marginBottom: 4 }}>
+                  <View key={match.id}>
                     <LiveMatchCard
                       match={toLiveData(match)}
                       permissions={dashPerms}
@@ -790,12 +789,12 @@ export function CalendarScreen() {
         onCancel={() => setCalendarModalVisible(false)}
       />
 
-      {/* Modal nuevo partido manual */}
-      <NewMatchModal
+      {/* Modal nuevo partido manual — fuente de verdad única: CreateManualMatchModal */}
+      <CreateManualMatchModal
         visible={newMatchModalVisible}
         defaultRound={activeRound}
-        onConfirm={handleNewMatchConfirm}
-        onCancel={() => setNewMatchModalVisible(false)}
+        onSubmit={handleNewMatchConfirm}
+        onClose={() => setNewMatchModalVisible(false)}
       />
 
       {/* ── Modales operativos de partido — estado gestionado por useMatchActionModals ── */}

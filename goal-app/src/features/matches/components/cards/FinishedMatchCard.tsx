@@ -98,7 +98,7 @@ export function FinishedMatchCard({ match, onPress }: FinishedMatchCardProps) {
                 <View
                     style={{
                         backgroundColor: Colors.bg.surface2,
-                        paddingHorizontal: 8,
+                        paddingHorizontal: 5,
                         paddingVertical: 3,
                         borderRadius: 999,
                     }}

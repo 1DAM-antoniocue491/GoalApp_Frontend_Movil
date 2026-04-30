@@ -6,5 +6,9 @@
  * import { useActiveLeague, activeLeagueStore } from '@/src/state/activeLeague';
  */
 
-export { useActiveLeague, useActiveLeagueRole, activeLeagueStore } from './activeLeagueStore';
-export type { ActiveLeagueSession } from './activeLeagueStore';
+export {
+  useActiveLeague,
+  useActiveLeagueRole,
+  activeLeagueStore,
+} from "@/src/state/activeLeague/activeLeagueStore";
+export type { ActiveLeagueSession } from "@/src/state/activeLeague/activeLeagueStore";

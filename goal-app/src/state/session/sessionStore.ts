@@ -6,14 +6,14 @@
  * - Android: EncryptedSharedPreferences
  */
 
-import * as SecureStore from 'expo-secure-store';
-import type { AuthUser } from '@/src/app/auth/types/auth.types';
+import * as SecureStore from "expo-secure-store";
+import type { AuthUser } from "@/src/features/auth/types/auth.types";
 
 // Claves para SecureStore
 const KEYS = {
-  ACCESS_TOKEN: 'access_token',
-  REFRESH_TOKEN: 'refresh_token',
-  USER: 'user',
+  ACCESS_TOKEN: "access_token",
+  REFRESH_TOKEN: "refresh_token",
+  USER: "user",
 };
 
 // Estado en memoria
@@ -48,7 +48,7 @@ function notifyListeners() {
 export async function setSession(
   accessToken: string,
   refreshToken: string,
-  user: AuthUser
+  user: AuthUser,
 ): Promise<void> {
   try {
     await Promise.all([
@@ -66,7 +66,7 @@ export async function setSession(
 
     notifyListeners();
   } catch (error) {
-    console.error('[SessionStore] Error saving session:', error);
+    console.error("[SessionStore] Error saving session:", error);
     throw error;
   }
 }
@@ -93,7 +93,7 @@ export async function getSession(): Promise<SessionState> {
 
     return state;
   } catch (error) {
-    console.error('[SessionStore] Error getting session:', error);
+    console.error("[SessionStore] Error getting session:", error);
     return state;
   }
 }
@@ -151,7 +151,7 @@ export async function clearSession(): Promise<void> {
 
     notifyListeners();
   } catch (error) {
-    console.error('[SessionStore] Error clearing session:', error);
+    console.error("[SessionStore] Error clearing session:", error);
     throw error;
   }
 }
@@ -167,7 +167,7 @@ export function isAuthenticated(): boolean {
 // HOOK PARA REACT
 // ============================================================
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect } from "react";
 
 /**
  * Hook para consumir la sesión desde componentes React

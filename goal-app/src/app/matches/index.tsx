@@ -1,3 +1,3 @@
-import { MatchesHubScreen } from '@/src/features/matches/components/screens/MatchesHubScreen';
+// import { MatchesHubScreen } from '@/src/features/matches/components/screens/MatchesHubScreen';
 
-export default MatchesHubScreen;
+// export default MatchesHubScreen;

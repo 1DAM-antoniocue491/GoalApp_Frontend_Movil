@@ -16,7 +16,6 @@ import {
   Text,
   ScrollView,
   TouchableOpacity,
-  TextInput,
   StatusBar,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -25,6 +24,7 @@ import { Ionicons } from '@expo/vector-icons';
 
 import { Colors } from '@/src/shared/constants/colors';
 import { theme } from '@/src/shared/styles/theme';
+import { SearchInput } from '@/src/shared/components/ui/SearchInput';
 
 // ---------------------------------------------------------------------------
 // Tipos y mock
@@ -371,36 +371,13 @@ export function ProgrammedMatchConvocationScreen() {
       </View>
 
       {/* ── Buscador ── */}
-      <View
-        style={{
-          flexDirection: 'row',
-          alignItems: 'center',
-          marginHorizontal: 16,
-          marginTop: 12,
-          backgroundColor: Colors.bg.surface1,
-          borderRadius: theme.borderRadius.xl,
-          paddingHorizontal: 12,
-          paddingVertical: 10,
-          gap: 8,
-          borderWidth: 1,
-          borderColor: query.length > 0 ? Colors.brand.primary + '44' : 'transparent',
-        }}
-      >
-        <Ionicons name="search" size={16} color={Colors.text.disabled} />
-        <TextInput
+      <View style={{ marginHorizontal: 16, marginTop: 12 }}>
+        <SearchInput
           value={query}
           onChangeText={setQuery}
+          onClear={() => setQuery('')}
           placeholder="Buscar jugador..."
-          placeholderTextColor={Colors.text.disabled}
-          style={{ flex: 1, color: Colors.text.primary, fontSize: 14, padding: 0 }}
-          returnKeyType="search"
-          autoCorrect={false}
         />
-        {query.length > 0 && (
-          <TouchableOpacity onPress={() => setQuery('')} hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}>
-            <Ionicons name="close-circle" size={16} color={Colors.text.disabled} />
-          </TouchableOpacity>
-        )}
       </View>
 
       {/* ── Lista agrupada por posición ── */}

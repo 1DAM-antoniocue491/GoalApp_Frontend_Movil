@@ -8,7 +8,7 @@
  */
 
 import { sessionStore } from '@/src/state/session/sessionStore';
-import * as authApi from '@/src/app/auth/api/auth.api';
+import * as authApi from '@/src/features/auth/api/auth.api';
 import type { AuthUser } from '../types/auth.types';
 
 /**

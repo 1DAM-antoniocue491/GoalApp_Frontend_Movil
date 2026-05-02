@@ -22,7 +22,7 @@
 import React from 'react';
 import { View } from 'react-native';
 
-import { useDashboardData } from '@/src/shared/hooks/usedashboarddata';
+import { useDashboardData } from '@/src/features/dashboard/hooks';
 import { getDashboardPermissions } from '../services/dashboardService';
 import { DashboardLayout } from './DashboardLayout';
 import { LiveMatchCard } from '@/src/features/matches/components/cards/LiveMatchCard';
@@ -49,7 +49,7 @@ export function ObserverDashboard({
   userName,
   notificationCount = 0,
 }: ObserverDashboardProps) {
-  const { data, isLoading, isError, refetch } = useDashboardData(leagueId);
+  const { data, isLoading, isRefetching, isError, refetch } = useDashboardData(leagueId);
   const permissions = getDashboardPermissions('observer');
 
   return (
@@ -59,6 +59,7 @@ export function ObserverDashboard({
       role="observer"
       notificationCount={notificationCount}
       isLoading={isLoading}
+      isRefetching={isRefetching}
       isError={isError}
       onRetry={refetch}
     >

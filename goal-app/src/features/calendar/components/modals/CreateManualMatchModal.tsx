@@ -51,29 +51,19 @@ interface CreateManualMatchModalProps {
   visible: boolean;
   onClose: () => void;
   onSubmit: (data: CreateManualMatchFormData) => void;
-  /** Opciones de equipos disponibles en la liga */
+  /** Opciones de equipos reales de la liga */
   teamOptions?: SelectOption[];
   /** Opciones de delegados disponibles en la liga */
   delegateOptions?: SelectOption[];
   /** Jornada activa — pre-rellena el campo al abrir el modal */
   defaultRound?: string;
+  /** Error del servicio para mostrar dentro del modal */
+  error?: string;
+  /** Indica que la llamada API está en curso */
+  isSubmitting?: boolean;
 }
 
 // ─── Constantes ───────────────────────────────────────────────────────────────
-
-// Mocks temporales hasta conectar con el servicio real
-const DEFAULT_TEAM_OPTIONS: SelectOption[] = [
-  { value: 'team_1', label: 'Real Madrid CF' },
-  { value: 'team_2', label: 'FC Barcelona' },
-  { value: 'team_3', label: 'Atlético de Madrid' },
-  { value: 'team_4', label: 'Sevilla FC' },
-];
-
-const DEFAULT_DELEGATE_OPTIONS: SelectOption[] = [
-  { value: 'del_1', label: 'Carlos Martínez' },
-  { value: 'del_2', label: 'Ana García' },
-  { value: 'del_3', label: 'Luis Rodríguez' },
-];
 
 const EMPTY_FORM: CreateManualMatchFormData = {
   homeTeamId: '',
@@ -91,11 +81,14 @@ export function CreateManualMatchModal({
   visible,
   onClose,
   onSubmit,
-  teamOptions = DEFAULT_TEAM_OPTIONS,
-  delegateOptions = DEFAULT_DELEGATE_OPTIONS,
+  teamOptions = [],
+  delegateOptions = [],
   defaultRound = '',
+  error,
+  isSubmitting = false,
 }: CreateManualMatchModalProps) {
   const [form, setForm] = useState<CreateManualMatchFormData>(EMPTY_FORM);
+  const [validationError, setValidationError] = useState<string | undefined>(undefined);
 
   // Pre-rellena la jornada cuando se abre el modal
   useEffect(() => {
@@ -105,12 +98,35 @@ export function CreateManualMatchModal({
   }, [visible, defaultRound]);
 
   function handleClose() {
-    // Limpia el form al cerrar para que no persista al reabrirse
+    // Limpia form y errores al cerrar para que no persistan al reabrirse
     setForm(EMPTY_FORM);
+    setValidationError(undefined);
     onClose();
   }
 
   function handleSubmit() {
+    // Validaciones de cliente antes de llamar al servicio
+    if (!form.homeTeamId) {
+      setValidationError('Selecciona el equipo local');
+      return;
+    }
+    if (!form.awayTeamId) {
+      setValidationError('Selecciona el equipo visitante');
+      return;
+    }
+    if (form.homeTeamId === form.awayTeamId) {
+      setValidationError('El equipo local y visitante deben ser distintos');
+      return;
+    }
+    if (!form.date) {
+      setValidationError('La fecha es obligatoria');
+      return;
+    }
+    if (!form.time) {
+      setValidationError('La hora es obligatoria');
+      return;
+    }
+    setValidationError(undefined);
     onSubmit(form);
   }
 
@@ -175,12 +191,25 @@ export function CreateManualMatchModal({
                 style={{
                   color: Colors.text.secondary,
                   fontSize: theme.fontSize.sm,
-                  marginBottom: theme.spacing.xl,
+                  marginBottom: (validationError || error) ? theme.spacing.sm : theme.spacing.xl,
                   lineHeight: 20,
                 }}
               >
                 Partido manual — puedes elegir todos los datos del encuentro.
               </Text>
+
+              {/* Error de validación o de API */}
+              {(validationError || error) && (
+                <Text
+                  style={{
+                    color: '#F87171',
+                    fontSize: theme.fontSize.sm,
+                    marginBottom: theme.spacing.lg,
+                  }}
+                >
+                  {validationError ?? error}
+                </Text>
+              )}
 
               <ScrollView
                 showsVerticalScrollIndicator={false}
@@ -285,10 +314,20 @@ export function CreateManualMatchModal({
               {/* ── Footer ── */}
               <View className="flex-row gap-3">
                 <View style={{ flex: 1 }}>
-                  <Button label="Cancelar" variant="secondary" onPress={handleClose} />
+                  <Button
+                    label="Cancelar"
+                    variant="secondary"
+                    onPress={handleClose}
+                    disabled={isSubmitting}
+                  />
                 </View>
                 <View style={{ flex: 1 }}>
-                  <Button label="Guardar partido" variant="primary" onPress={handleSubmit} />
+                  <Button
+                    label={isSubmitting ? 'Guardando...' : 'Guardar partido'}
+                    variant="primary"
+                    onPress={handleSubmit}
+                    disabled={isSubmitting}
+                  />
                 </View>
               </View>
 

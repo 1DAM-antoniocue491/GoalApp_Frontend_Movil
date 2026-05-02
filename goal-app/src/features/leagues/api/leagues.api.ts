@@ -6,7 +6,15 @@
  */
 
 import { apiClient } from '@/src/shared/api/client';
-import type { LigaConRolResponse, LigaConfiguracionRequest, LigaCreateRequest, LigaResponse } from '../types/league.api.types';
+import type {
+  LigaConRolResponse,
+  LigaConfiguracionRequest,
+  LigaCreateRequest,
+  LigaResponse,
+  LigaUpdateRequest,
+  LeagueConfigResponse,
+  UpdateLeagueConfigRequest,
+} from '../types/league.api.types';
 
 /**
  * GET /usuarios/me/ligas
@@ -47,12 +55,44 @@ export async function setLeagueConfig(
 }
 
 /**
+ * GET /ligas/{liga_id}/configuracion
+ * Obtiene la configuración actual de la liga.
+ */
+export async function getLeagueConfig(ligaId: number): Promise<LeagueConfigResponse> {
+  const response = await apiClient.get<LeagueConfigResponse>(`/ligas/${ligaId}/configuracion`);
+  return response.data;
+}
+
+/**
  * PUT /ligas/{liga_id}/configuracion
  * Actualiza la configuración de una liga que ya tiene configuración.
+ * Acepta campos parciales (UpdateLeagueConfigRequest).
+ * LigaConfiguracionRequest (campos requeridos) es asignable a este tipo.
  */
 export async function updateLeagueConfig(
   ligaId: number,
-  body: LigaConfiguracionRequest,
-): Promise<void> {
-  await apiClient.put(`/ligas/${ligaId}/configuracion`, body);
+  body: UpdateLeagueConfigRequest,
+): Promise<LeagueConfigResponse> {
+  const response = await apiClient.put<LeagueConfigResponse>(`/ligas/${ligaId}/configuracion`, body);
+  return response.data;
+}
+
+/**
+ * PUT /ligas/{liga_id}
+ * Actualiza datos básicos de la liga (nombre, temporada, estado, etc.).
+ */
+export async function updateLeague(
+  ligaId: number,
+  body: LigaUpdateRequest,
+): Promise<LigaResponse> {
+  const response = await apiClient.put<LigaResponse>(`/ligas/${ligaId}`, body);
+  return response.data;
+}
+
+/**
+ * DELETE /ligas/{liga_id}
+ * Elimina una liga y todos sus datos asociados. Solo admins.
+ */
+export async function deleteLeague(ligaId: number): Promise<void> {
+  await apiClient.delete(`/ligas/${ligaId}`);
 }

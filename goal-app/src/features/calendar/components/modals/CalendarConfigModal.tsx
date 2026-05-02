@@ -58,6 +58,10 @@ interface CalendarConfigModalProps {
   mode: 'create' | 'edit';
   /** Datos iniciales para rellenar el formulario en modo edición */
   initialData?: Partial<CalendarConfigData>;
+  /** Error devuelto por la API — se muestra dentro del modal sin cerrarlo */
+  error?: string;
+  /** Si true, muestra spinner en el botón principal */
+  isSubmitting?: boolean;
   onConfirm: (data: CalendarConfigData) => void;
   onCancel: () => void;
 }
@@ -230,6 +234,8 @@ function CalendarConfigModalComponent({
   visible,
   mode,
   initialData,
+  error,
+  isSubmitting = false,
   onConfirm,
   onCancel,
 }: CalendarConfigModalProps) {
@@ -427,16 +433,33 @@ function CalendarConfigModalComponent({
 
             {/* Botones fuera del scroll para que siempre sean visibles */}
             <View style={{ paddingHorizontal: 24, paddingTop: 20, gap: 10 }}>
+              {/* Error de API — visible sin cerrar el modal */}
+              {!!error && (
+                <View
+                  style={{
+                    backgroundColor: `${Colors.semantic.error}18`,
+                    borderRadius: 10,
+                    borderWidth: 1,
+                    borderColor: Colors.semantic.error,
+                    paddingHorizontal: 14,
+                    paddingVertical: 10,
+                  }}
+                >
+                  <Text style={{ color: Colors.semantic.error, fontSize: 13, fontWeight: '500' }}>
+                    {error}
+                  </Text>
+                </View>
+              )}
               <TouchableOpacity
                 onPress={handleConfirm}
                 activeOpacity={0.88}
-                disabled={!isValid}
+                disabled={!isValid || isSubmitting}
                 style={{
                   height: 56,
                   borderRadius: 18,
                   alignItems: 'center',
                   justifyContent: 'center',
-                  backgroundColor: isValid ? Colors.brand.primary : Colors.bg.surface2,
+                  backgroundColor: isValid && !isSubmitting ? Colors.brand.primary : Colors.bg.surface2,
                   flexDirection: 'row',
                   gap: 8,
                 }}
@@ -444,16 +467,16 @@ function CalendarConfigModalComponent({
                 <Ionicons
                   name={isCreate ? 'calendar' : 'checkmark-circle'}
                   size={18}
-                  color={isValid ? Colors.bg.base : Colors.text.disabled}
+                  color={isValid && !isSubmitting ? Colors.bg.base : Colors.text.disabled}
                 />
                 <Text
                   style={{
-                    color: isValid ? Colors.bg.base : Colors.text.disabled,
+                    color: isValid && !isSubmitting ? Colors.bg.base : Colors.text.disabled,
                     fontSize: 16,
                     fontWeight: '700',
                   }}
                 >
-                  {isCreate ? 'Crear calendario' : 'Guardar cambios'}
+                  {isSubmitting ? 'Creando…' : isCreate ? 'Crear calendario' : 'Guardar cambios'}
                 </Text>
               </TouchableOpacity>
 

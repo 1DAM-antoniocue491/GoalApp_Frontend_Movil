@@ -11,10 +11,9 @@
  * - Gestionar navegación de alto nivel (registrar evento, finalizar partido)
  *
  * PATRÓN DE DATOS:
- * AdminDashboard → useDashboardData → (hoy) mockDashboardData
- *                                   → (futuro) API real vía TanStack Query
+ * AdminDashboard → useDashboardData → fetchDashboardData → API real
  *
- * Los sub-componentes no saben si los datos vienen de mock o API.
+ * Los sub-componentes no saben de dónde vienen los datos.
  * Solo conocen su prop contract.
  *
  * SHELL:
@@ -26,7 +25,7 @@ import React from 'react';
 import { View } from 'react-native';
 import { useRouter } from 'expo-router';
 
-import { useDashboardData } from '@/src/shared/hooks/usedashboarddata';
+import { useDashboardData } from '@/src/features/dashboard/hooks';
 import { getDashboardPermissions } from '../services/dashboardService';
 import { routes } from '@/src/shared/config/routes';
 import { DashboardLayout } from './DashboardLayout';
@@ -69,8 +68,8 @@ export function AdminDashboard({
 }: AdminDashboardProps) {
   const router = useRouter();
 
-  // Datos del dashboard desde el hook (mock hoy, API mañana)
-  const { data, isLoading, isError, refetch } = useDashboardData(leagueId);
+  // Datos del dashboard desde el hook — API real vía fetchDashboardData
+  const { data, isLoading, isRefetching, isError, refetch } = useDashboardData(leagueId);
 
   // Permisos del rol admin — calculados una sola vez en el padre
   // para pasarlos a todos los hijos que los necesiten
@@ -127,6 +126,7 @@ export function AdminDashboard({
       role="admin"
       notificationCount={notificationCount}
       isLoading={isLoading}
+      isRefetching={isRefetching}
       isError={isError}
       onRetry={refetch}
     >

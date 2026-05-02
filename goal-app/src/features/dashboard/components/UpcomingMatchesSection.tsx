@@ -91,10 +91,13 @@ export function UpcomingMatchesSection({
                     Próximos partidos
                 </Text>
 
-                {/* Enlace "Ver calendario" → navega a la tab de calendario */}
+                {/* Enlace "Ver calendario" → abre Calendario con filtro Programados activo */}
                 <TouchableOpacity
                     onPress={() => {
-                        // router.push(routes.private.tabs.calendar as never)
+                        router.push({
+                            pathname: routes.private.tabs.calendar as never,
+                            params: { filter: 'programmed' },
+                        } as never);
                     }}
                     style={{ flexDirection: 'row', alignItems: 'center', gap: 3 }}
                 >

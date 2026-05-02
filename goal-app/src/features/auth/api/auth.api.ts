@@ -19,8 +19,10 @@ import type {
   PasswordResetResponse,
   AuthUser,
 } from '../types/auth.types';
+import { ENV } from '@/src/shared/constants/env';
 
-const BASE_URL = 'https://goalapp-backend-j2cx.onrender.com/api/v1';
+// Fuente única de verdad — misma URL que el resto de la app (ENV.API_URL)
+const BASE_URL = ENV.API_URL;
 
 /**
  * LOGIN - POST /api/v1/auth/login

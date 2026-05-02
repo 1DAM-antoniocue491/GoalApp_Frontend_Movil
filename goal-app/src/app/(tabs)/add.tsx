@@ -3,12 +3,10 @@
  *
  * Pantalla placeholder — NUNCA se renderiza en la práctica.
  *
- * El tap del tab "add" es interceptado en _layout.tsx con `e.preventDefault()`,
- * lo que abre el QuickActionSheet sin navegar a esta ruta. Este archivo existe
- * únicamente porque Expo Router requiere un archivo por cada Tabs.Screen
- * registrado; si se elimina, el router lanza un warning en consola.
- *
- * Toda la lógica del sheet vive en _layout.tsx.
+ * El tap del tab "+" es interceptado en _layout.tsx con `e.preventDefault()`,
+ * lo que navega directamente a /league/users sin renderizar esta pantalla.
+ * Este archivo existe únicamente porque Expo Router requiere un archivo por
+ * cada Tabs.Screen registrado; si se elimina, el router lanza un warning.
  */
 import React from 'react';
 import { View } from 'react-native';

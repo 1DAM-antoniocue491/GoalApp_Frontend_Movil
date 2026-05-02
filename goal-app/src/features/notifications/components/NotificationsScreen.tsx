@@ -27,6 +27,8 @@ import {
     TouchableOpacity,
     Modal,
     Alert,
+    ActivityIndicator,
+    RefreshControl,
     StyleSheet,
 } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -51,14 +53,18 @@ export function NotificationsScreen() {
     const {
         notifications,
         unreadCount,
+        isLoading,
+        isRefreshing,
+        error,
+        refresh,
         activeFilter,
         setActiveFilter,
         search,
         setSearch,
         availableCategories,
         markAsRead,
-        remove,
         markAllAsRead,
+        deleteNotification,
     } = useNotifications('admin');
 
     // Notificación objetivo del action sheet (⋮ o long press)
@@ -118,7 +124,7 @@ export function NotificationsScreen() {
 
     function handleDelete() {
         if (!actionTarget) return;
-        remove(actionTarget.id);
+        deleteNotification(actionTarget.id);
         setActionTarget(null);
     }
 
@@ -189,7 +195,42 @@ export function NotificationsScreen() {
                 </TouchableOpacity>
             </View>
 
+            {/* ── Estado de carga inicial ── */}
+            {isLoading && (
+                <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}>
+                    <ActivityIndicator size="large" color={Colors.brand.primary} />
+                </View>
+            )}
+
+            {/* ── Estado de error ── */}
+            {!isLoading && error && (
+                <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', padding: 24 }}>
+                    <Ionicons name="alert-circle-outline" size={48} color={Colors.semantic.error} />
+                    <Text style={{ color: Colors.text.secondary, fontSize: theme.fontSize.sm, marginTop: 12, textAlign: 'center' }}>
+                        {error}
+                    </Text>
+                    <TouchableOpacity
+                        onPress={refresh}
+                        activeOpacity={0.8}
+                        style={{
+                            marginTop: 16,
+                            paddingHorizontal: 20,
+                            paddingVertical: 10,
+                            backgroundColor: Colors.bg.surface1,
+                            borderRadius: theme.borderRadius.lg,
+                            borderWidth: 1,
+                            borderColor: Colors.bg.surface2,
+                        }}
+                    >
+                        <Text style={{ color: Colors.text.primary, fontSize: theme.fontSize.sm }}>
+                            Reintentar
+                        </Text>
+                    </TouchableOpacity>
+                </View>
+            )}
+
             {/* ── Contenido scrollable ── */}
+            {!isLoading && !error && (
             <ScrollView
                 ref={scrollRef}
                 className="flex-1"
@@ -199,6 +240,14 @@ export function NotificationsScreen() {
                 onScroll={e => setScrollY(e.nativeEvent.contentOffset.y)}
                 onContentSizeChange={(_, h) => setContentHeight(h)}
                 onLayout={e => setViewportHeight(e.nativeEvent.layout.height)}
+                refreshControl={
+                    <RefreshControl
+                        refreshing={isRefreshing}
+                        onRefresh={refresh}
+                        tintColor={Colors.brand.primary}
+                        colors={[Colors.brand.primary]}
+                    />
+                }
             >
                 {/* Buscador */}
                 <View
@@ -239,12 +288,12 @@ export function NotificationsScreen() {
                 {/* Lista de tarjetas o empty state */}
                 <View style={{ paddingHorizontal: theme.spacing.xl, paddingBottom: theme.spacing.xxl }}>
                     {notifications.length > 0 ? (
-                        notifications.map(notification => (
+                        notifications.map((notification, index) => (
                             <NotificationCard
-                                key={notification.id}
+                                key={notification.id || `notification-${index}`}
                                 notification={notification}
                                 onPress={handleCardPress}
-                                onDelete={remove}
+                                onDelete={deleteNotification}
                                 onOpenMenu={setActionTarget}
                             />
                         ))
@@ -268,6 +317,7 @@ export function NotificationsScreen() {
                     )}
                 </View>
             </ScrollView>
+            )}
 
             {/* Botón flotante de scroll — fuera del ScrollView para posicionamiento correcto */}
             <ScrollEdgeButton

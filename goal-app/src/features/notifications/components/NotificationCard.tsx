@@ -4,7 +4,6 @@
  * Tarjeta premium dark de una notificación.
  *
  * Comportamiento mobile-first (sin hover):
- * - Papelera siempre visible → elimina directamente sin confirmar
  * - Botón ⋮ siempre visible → abre action sheet con opciones
  * - onLongPress sobre la tarjeta → mismo action sheet
  *
@@ -20,29 +19,35 @@ import { Colors } from '@/src/shared/constants/colors';
 import { theme } from '@/src/shared/styles/theme';
 import type { AppNotification, NotificationCategory } from '../types/notifications.types';
 
-// Icono de Ionicons por categoría
+// Icono Ionicons por categoría (incluye 'all' como fallback)
 const CATEGORY_ICON: Record<NotificationCategory, keyof typeof Ionicons.glyphMap> = {
-  live: 'pulse-outline',
-  teams: 'people-outline',
-  statistics: 'stats-chart-outline',
-  results: 'trophy-outline',
-  maintenance: 'construct-outline',
-  players: 'person-outline',
-  league: 'football-outline',
+  all:      'notifications-outline',
+  matches:  'radio-outline',
+  results:  'trophy-outline',
+  teams:    'people-outline',
+  players:  'person-outline',
+  stats:    'stats-chart-outline',
+  league:   'shield-outline',
+  roles:    'key-outline',
+  events:   'football-outline',
+  system:   'construct-outline',
 };
 
-// Color de acento del icono por categoría
+// Color de acento por categoría
 const CATEGORY_COLOR: Record<NotificationCategory, string> = {
-  live: Colors.semantic.error,    // rojo → urgencia en vivo
-  results: Colors.brand.primary,     // lima → resultado finalizado
-  teams: Colors.brand.secondary,   // azul claro → equipos
-  statistics: Colors.brand.accent,      // azul → estadísticas
-  maintenance: Colors.semantic.warning,  // amarillo → aviso de sistema
-  players: Colors.text.secondary,    // gris neutro → jugadores
-  league: Colors.brand.primary,     // lima → noticias de liga
+  all:      Colors.text.secondary,
+  matches:  Colors.semantic.error,
+  results:  Colors.brand.primary,
+  teams:    Colors.brand.secondary,
+  players:  Colors.text.secondary,
+  stats:    Colors.brand.accent,
+  league:   Colors.brand.primary,
+  roles:    Colors.semantic.warning,
+  events:   Colors.semantic.error,
+  system:   Colors.semantic.warning,
 };
 
-/** Formatea fecha ISO a texto relativo simple (ej: "hace 3h") */
+/** Formatea fecha ISO a texto relativo simple */
 function formatRelative(iso: string): string {
   const diff = Date.now() - new Date(iso).getTime();
   const minutes = Math.floor(diff / 60000);
@@ -55,11 +60,8 @@ function formatRelative(iso: string): string {
 
 interface NotificationCardProps {
   notification: AppNotification;
-  /** Pulsar la tarjeta: marca como leída y navega a targetRoute */
   onPress: (notification: AppNotification) => void;
-  /** Elimina sin confirmar — la papelera es siempre visible (mobile-first, sin hover) */
   onDelete: (id: string) => void;
-  /** Abre el action sheet con más opciones (marcar leída, eliminar) */
   onOpenMenu: (notification: AppNotification) => void;
 }
 
@@ -70,8 +72,8 @@ function NotificationCardComponent({
   onOpenMenu,
 }: NotificationCardProps) {
   const { id, title, body, category, isRead, createdAt } = notification;
-  const iconName = CATEGORY_ICON[category];
-  const accentColor = CATEGORY_COLOR[category];
+  const iconName = CATEGORY_ICON[category] ?? 'notifications-outline';
+  const accentColor = CATEGORY_COLOR[category] ?? Colors.text.secondary;
 
   return (
     <TouchableOpacity
@@ -80,13 +82,12 @@ function NotificationCardComponent({
       onLongPress={() => onOpenMenu(notification)}
       delayLongPress={400}
       style={{
-        // style: fondo y borde cambian según isRead — no representable solo con className
         backgroundColor: isRead ? Colors.bg.surface1 : Colors.bg.surface2,
         borderRadius: theme.borderRadius.xl,
         borderWidth: 1,
         borderColor: isRead
           ? Colors.bg.surface2
-          : Colors.brand.primary + '40', // 25% opacidad del verde lima
+          : Colors.brand.primary + '40',
         marginBottom: theme.spacing.md,
         padding: theme.spacing.lg,
         flexDirection: 'row',
@@ -94,7 +95,7 @@ function NotificationCardComponent({
         gap: theme.spacing.md,
       }}
     >
-      {/* Punto indicador de no leído — izquierda del icono */}
+      {/* Punto indicador de no leído */}
       {!isRead && (
         <View
           style={{
@@ -109,13 +110,12 @@ function NotificationCardComponent({
         />
       )}
 
-      {/* Icono de categoría con fondo tintado */}
+      {/* Icono de categoría */}
       <View
         style={{
           width: 40,
           height: 40,
           borderRadius: theme.borderRadius.lg,
-          // style: color de fondo derivado del acento de categoría con 10% opacidad
           backgroundColor: accentColor + '1A',
           alignItems: 'center',
           justifyContent: 'center',
@@ -125,13 +125,12 @@ function NotificationCardComponent({
         <Ionicons name={iconName} size={20} color={accentColor} />
       </View>
 
-      {/* Texto: título, cuerpo, timestamp */}
+      {/* Texto */}
       <View style={{ flex: 1 }}>
         <Text
           style={{
             color: Colors.text.primary,
             fontSize: theme.fontSize.sm,
-            // Título en bold cuando no está leída para reforzar jerarquía
             fontWeight: isRead ? '400' : '700',
             marginBottom: 3,
           }}
@@ -155,16 +154,8 @@ function NotificationCardComponent({
         </Text>
       </View>
 
-      {/* Acciones: papelera (siempre visible) + menú 3 puntos */}
-      <View
-        style={{
-          flexDirection: 'row',
-          alignItems: 'center',
-          gap: theme.spacing.xs,
-          flexShrink: 0,
-        }}
-      >
-        {/* 3 puntos → action sheet con opciones adicionales */}
+      {/* Menú 3 puntos */}
+      <View style={{ flexDirection: 'row', alignItems: 'center', gap: theme.spacing.xs, flexShrink: 0 }}>
         <TouchableOpacity
           onPress={() => onOpenMenu(notification)}
           hitSlop={{ top: 10, bottom: 10, left: 8, right: 8 }}

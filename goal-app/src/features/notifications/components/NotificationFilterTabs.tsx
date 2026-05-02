@@ -4,7 +4,6 @@
  * Scroll horizontal de chips de categoría.
  * El chip "Todas" siempre aparece primero.
  * Solo se muestran las categorías accesibles para el rol actual.
- * El chip activo usa fondo brand.primary con texto negro (igual que pills de onboarding).
  */
 
 import React, { memo } from 'react';
@@ -13,20 +12,20 @@ import { Colors } from '@/src/shared/constants/colors';
 import { theme } from '@/src/shared/styles/theme';
 import type { NotificationCategory, NotificationFilter } from '../types/notifications.types';
 
-// Etiquetas visibles por valor de filtro
 const FILTER_LABELS: Record<NotificationFilter, string> = {
-  all:         'Todas',
-  live:        'En vivo',
-  teams:       'Equipos',
-  statistics:  'Estadísticas',
-  results:     'Resultados',
-  maintenance: 'Mantenimiento',
-  players:     'Jugadores',
-  league:      'Liga',
+  all:      'Todas',
+  matches:  'Partidos',
+  results:  'Resultados',
+  teams:    'Equipos',
+  players:  'Jugadores',
+  stats:    'Estadísticas',
+  league:   'Liga',
+  roles:    'Roles',
+  events:   'Eventos',
+  system:   'Sistema',
 };
 
 interface NotificationFilterTabsProps {
-  /** Categorías habilitadas para el rol del usuario */
   available: NotificationCategory[];
   active: NotificationFilter;
   onChange: (filter: NotificationFilter) => void;
@@ -37,7 +36,6 @@ function NotificationFilterTabsComponent({
   active,
   onChange,
 }: NotificationFilterTabsProps) {
-  // 'all' siempre visible al inicio + categorías del rol
   const filters: NotificationFilter[] = ['all', ...available];
 
   return (
@@ -58,7 +56,6 @@ function NotificationFilterTabsComponent({
             onPress={() => onChange(filter)}
             activeOpacity={0.8}
             style={{
-              // style: colores y dimensiones dinámicas según estado activo
               backgroundColor: isActive ? Colors.brand.primary : Colors.bg.surface1,
               borderRadius: theme.borderRadius.full,
               borderWidth: 1,
@@ -75,7 +72,7 @@ function NotificationFilterTabsComponent({
                 fontWeight: isActive ? '700' : '400',
               }}
             >
-              {FILTER_LABELS[filter]}
+              {FILTER_LABELS[filter] ?? filter}
             </Text>
           </TouchableOpacity>
         );

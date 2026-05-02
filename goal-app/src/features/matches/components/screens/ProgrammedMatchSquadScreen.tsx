@@ -5,13 +5,18 @@
  */
 
 import React from 'react';
-import { ScrollView, Text, View, Image } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { View, Text } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
+import { Colors } from '@/src/shared/constants/colors';
 
+/** Plantilla / convocatoria de los equipos para el partido programado */
 export function ProgrammedMatchSquadScreen() {
-    return (
-        <SafeAreaView className="flex-1">
-            <Text>Hola desde ProgrammedMatchSquadScreen.tsx</Text>
-        </SafeAreaView>
-    );
+  return (
+    <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', padding: 40 }}>
+      <Ionicons name="shirt-outline" size={36} color={Colors.text.disabled} />
+      <Text style={{ color: Colors.text.disabled, fontSize: 14, marginTop: 12, textAlign: 'center' }}>
+        Plantilla disponible próximamente
+      </Text>
+    </View>
+  );
 }

@@ -66,6 +66,8 @@ export interface LeagueItem {
   crestUrl?: string | null;
   /** Si el usuario tiene permisos para reactivar la liga (solo para finalizadas) */
   canReactivate?: boolean;
+  /** Categoría de la liga tal como la devuelve el backend (string libre) */
+  categoria?: string;
 }
 
 /**

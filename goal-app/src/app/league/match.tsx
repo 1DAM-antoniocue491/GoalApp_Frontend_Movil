@@ -1,3 +1,8 @@
-// import { MatchesHubScreen } from '@/src/features/matches/components/screens/MatchesHubScreen';
+import React from 'react';
+import { View } from 'react-native';
 
-// export default MatchesHubScreen;
+// Placeholder — ruta /league/match reservada para detalle de partido.
+// La pantalla real se conectará cuando el flujo de partido esté implementado.
+export default function MatchPlaceholder() {
+  return <View style={{ flex: 1, backgroundColor: '#0F0F13' }} />;
+}

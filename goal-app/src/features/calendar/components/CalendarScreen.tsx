@@ -2,25 +2,13 @@
  * CalendarScreen.tsx
  *
  * Pantalla principal del calendario de la liga.
- *
- * Gestiona:
- * - Estado de la vista (sin equipos / sin calendario / con calendario)
- * - Navegación entre jornadas
- * - Filtros de estado dentro de la jornada (en vivo / programados / finalizados)
- * - Renderizado de cards según el tipo de partido usando las fuentes de verdad
- * - Menú de acciones de admin (crear calendario, editar calendario, nuevo partido)
- * - Modales conectados: CalendarConfigModal, CreateManualMatchModal
- * - Navegación real al detalle de partido según su estado
- *
- * PREPARADO PARA API:
- * Sustituir `MOCK_JOURNEYS` y `viewState` por una llamada real desde
- * un hook como `useCalendarData(leagueId)` cuando el backend esté listo.
+ * Datos reales vía useCalendarData → calendarService → calendar.api.
  */
 
-import React, { useRef, useState } from 'react';
-import { View, Text, ScrollView, Pressable } from 'react-native';
+import React, { useRef, useState, useEffect } from 'react';
+import { View, Text, ScrollView, Pressable, ActivityIndicator, RefreshControl } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { useRouter } from 'expo-router';
+import { useRouter, useLocalSearchParams } from 'expo-router';
 
 import { Colors } from '@/src/shared/constants/colors';
 import { theme } from '@/src/shared/styles/theme';
@@ -34,6 +22,21 @@ import { FinishedMatchCard } from '@/src/features/matches/components/cards/Finis
 
 // Permisos para las cards (contrato de dashboardService)
 import { getDashboardPermissions } from '@/src/features/dashboard/services/dashboardService';
+
+// Pantallas de equipos y clasificación — reutilizadas como contenido de tab
+import { TeamsScreen } from '@/src/features/teams/components/TeamsScreen';
+import { ClassificationScreen } from '@/src/features/teams/components/ClassificationScreen';
+
+// Sesión activa y hook de datos del calendario
+import { useActiveLeague } from '@/src/state/activeLeague/activeLeagueStore';
+import { useCalendarData } from '../hooks/useCalendar';
+import { calendarService } from '../services/calendarService';
+
+// Equipos reales de la liga — para el selector de CreateManualMatchModal
+import { useTeamsByLeague } from '@/src/features/teams/hooks/useTeams';
+
+// Service de partidos — crear partido manual
+import { createManualMatchService } from '@/src/features/matches/services/matchesService';
 
 // Componentes propios del módulo
 import { CalendarHeader } from './CalendarHeader';
@@ -56,11 +59,10 @@ import { useMatchActionModals } from '@/src/features/matches/hooks/useMatchActio
 
 // Tipos y utilidades
 import type {
-  CalendarJourney,
   CalendarMainTab,
   CalendarMatch,
   CalendarMatchStatus,
-  CalendarViewState,
+  CalendarRole,
   JourneyStatusFilter,
 } from '../types/calendar.types';
 import {
@@ -71,106 +73,6 @@ import {
 import type { CalendarConfigData } from './modals/CalendarConfigModal';
 import type { CreateManualMatchFormData } from './modals/CreateManualMatchModal';
 
-// ---------------------------------------------------------------------------
-// Mock data — reemplazar por useCalendarData(leagueId) cuando el API esté listo
-// ---------------------------------------------------------------------------
-
-const MOCK_VIEW_STATE: CalendarViewState = 'has_calendar';
-
-const MOCK_JOURNEYS: CalendarJourney[] = [
-  {
-    id: 'j10',
-    number: 10,
-    matches: [
-      {
-        id: 'j10-m1',
-        homeTeam: 'Real Betis',
-        awayTeam: 'Sevilla FC',
-        status: 'live',
-        source: 'automatic',
-        homeScore: 2,
-        awayScore: 1,
-        minute: 68,
-        round: 'Jornada 10',
-        venue: 'Estadio Benito Villamarín',
-        leagueName: 'Liga Sevilla Premier',
-        homeColor: '#00A650',
-        awayColor: '#D40E14',
-        homeShieldLetter: 'B',
-        awayShieldLetter: 'S',
-      },
-      {
-        id: 'j10-m2',
-        homeTeam: 'Athletic Club',
-        awayTeam: 'Real Sociedad',
-        status: 'programmed',
-        source: 'automatic',
-        day: '24',
-        month: 'MAY',
-        time: '18:00',
-        round: 'Jornada 10',
-        venue: 'Estadio San Mamés',
-        leagueName: 'Liga Sevilla Premier',
-        homeColor: '#C8102E',
-        awayColor: '#0057A8',
-      },
-      {
-        id: 'j10-m3',
-        homeTeam: 'Valencia CF',
-        awayTeam: 'Atlético Madrid',
-        status: 'finished',
-        source: 'automatic',
-        homeScore: 1,
-        awayScore: 3,
-        date: '18 Abr',
-        round: 'Jornada 10',
-        venue: 'Estadio de Mestalla',
-        leagueName: 'Liga Sevilla Premier',
-        homeColor: '#FF8C00',
-        awayColor: '#C8102E',
-        homeShieldLetter: 'V',
-        awayShieldLetter: 'A',
-      },
-    ],
-  },
-  {
-    id: 'j11',
-    number: 11,
-    matches: [
-      {
-        id: 'j11-m1',
-        homeTeam: 'Villarreal CF',
-        awayTeam: 'Valencia CF',
-        status: 'programmed',
-        // Partido manual — no se sobreescribirá al generar el calendario automático
-        source: 'manual',
-        day: '25',
-        month: 'MAY',
-        time: '20:30',
-        round: 'Jornada 11',
-        venue: 'Estadio de la Cerámica',
-        leagueName: 'Liga Sevilla Premier',
-        homeColor: '#FFD700',
-        awayColor: '#FF8C00',
-      },
-      {
-        id: 'j11-m2',
-        homeTeam: 'Atlético Madrid',
-        awayTeam: 'Getafe CF',
-        status: 'programmed',
-        source: 'automatic',
-        day: '26',
-        month: 'MAY',
-        time: '19:00',
-        round: 'Jornada 11',
-        venue: 'Civitas Metropolitano',
-        leagueName: 'Liga Sevilla Premier',
-        homeColor: '#C8102E',
-        awayColor: '#005999',
-      },
-    ],
-  },
-];
 
 // ---------------------------------------------------------------------------
 // Adaptadores CalendarMatch → tipos de cada card
@@ -443,22 +345,51 @@ function ManualMatchBadge() {
 
 export function CalendarScreen() {
   const router = useRouter();
+  // Param opcional desde navegación externa (ej: Dashboard > "Ver calendario")
+  const { filter: filterParam } = useLocalSearchParams<{ filter?: string }>();
 
-  // ── Datos ──
-  // TODO: reemplazar por datos reales de useCalendarData(leagueId)
-  const viewState: CalendarViewState = MOCK_VIEW_STATE;
-  const journeys = MOCK_JOURNEYS;
+  // ── Sesión y liga activa ──
+  const { session } = useActiveLeague();
+  const ligaId = session?.leagueId ? Number(session.leagueId) : 0;
+  const leagueName = session?.leagueName ?? '–';
+  const role = (session?.role ?? 'observer') as CalendarRole;
+
+  // ── Datos reales del calendario ──
+  const {
+    journeys,
+    viewState,
+    isLoading: isLoadingJourneys,
+    isRefetching: isRefetchingJourneys,
+    refetch: refetchJourneys,
+  } = useCalendarData(ligaId, leagueName);
+
+  // ── Equipos reales de la liga para el selector de partido manual ──
+  const { data: teamsData } = useTeamsByLeague(ligaId);
+  // Mapeados a SelectOption para el modal
+  const teamOptions = teamsData.map((t) => ({
+    value: String(t.id_equipo),
+    label: t.nombre,
+  }));
 
   // ── Estado de UI ──
   const [activeTab, setActiveTab] = useState<CalendarMainTab>('journey');
   const [journeyIndex, setJourneyIndex] = useState(0);
   const [statusFilter, setStatusFilter] = useState<JourneyStatusFilter>('live');
 
+  // Cuando se navega desde el dashboard con filter=programmed, activar ese filtro
+  useEffect(() => {
+    if (filterParam === 'programmed') setStatusFilter('programmed');
+  }, [filterParam]);
+
   // ── Estado de modales ──
   const [menuVisible, setMenuVisible] = useState(false);
   const [calendarModalVisible, setCalendarModalVisible] = useState(false);
   const [calendarModalMode, setCalendarModalMode] = useState<'create' | 'edit'>('create');
+  const [calendarModalError, setCalendarModalError] = useState<string | undefined>(undefined);
+  const [calendarModalSubmitting, setCalendarModalSubmitting] = useState(false);
   const [newMatchModalVisible, setNewMatchModalVisible] = useState(false);
+  const [newMatchError, setNewMatchError] = useState<string | undefined>(undefined);
+  const [newMatchSubmitting, setNewMatchSubmitting] = useState(false);
 
   // Modales de acción sobre partidos — estado centralizado en el hook
   const {
@@ -478,9 +409,7 @@ export function CalendarScreen() {
   const [contentHeight, setContentHeight] = useState(0);
   const [viewportHeight, setViewportHeight] = useState(0);
 
-  // ── Permisos ──
-  // TODO: obtener rol real del store de sesión → const { role } = useSession()
-  const role = 'admin' as const;
+  // ── Permisos derivados del rol real ──
   const calendarPerms = getCalendarPermissions(role);
   // DashboardPermissions para las cards de partido
   const dashPerms = getDashboardPermissions(role);
@@ -496,6 +425,12 @@ export function CalendarScreen() {
 
   const activeRound = activeJourney ? `Jornada ${activeJourney.number}` : '';
 
+  // Resetear índice al inicio cuando cambia la liga o el número de jornadas
+  // No usar [journeys] porque cambia referencia en cada render
+  useEffect(() => {
+    setJourneyIndex(0);
+  }, [ligaId, journeys.length]);
+
   // ── Handlers de jornada ──
   const handlePrevJourney = () => {
     if (journeyIndex > 0) setJourneyIndex((i) => i - 1);
@@ -510,12 +445,14 @@ export function CalendarScreen() {
   const handleOpenCreateCalendar = () => {
     setMenuVisible(false);
     setCalendarModalMode('create');
+    setCalendarModalError(undefined);
     setCalendarModalVisible(true);
   };
 
   const handleOpenEditCalendar = () => {
     setMenuVisible(false);
     setCalendarModalMode('edit');
+    setCalendarModalError(undefined);
     setCalendarModalVisible(true);
   };
 
@@ -533,16 +470,62 @@ export function CalendarScreen() {
   };
 
   // ── Confirm de modales ──
-  const handleCalendarConfigConfirm = (data: CalendarConfigData) => {
-    setCalendarModalVisible(false);
-    // TODO: llamar a POST /calendar/generate (mode === 'create')
-    //       o PATCH /calendar/:id/config (mode === 'edit') con `data`
-    console.log('[CalendarConfigModal] confirmed:', data);
+  const handleCalendarConfigConfirm = async (data: CalendarConfigData) => {
+    if (calendarModalMode !== 'create') {
+      setCalendarModalVisible(false);
+      return;
+    }
+    setCalendarModalError(undefined);
+    setCalendarModalSubmitting(true);
+    const result = await calendarService.createCalendar(ligaId, {
+      type: data.type,
+      startDate: data.startDate,
+      matchDays: data.matchDays,
+      matchTime: data.matchTime,
+    });
+    setCalendarModalSubmitting(false);
+    if (result.success) {
+      setCalendarModalVisible(false);
+      refetchJourneys();
+    } else {
+      // El modal permanece abierto y muestra el error
+      setCalendarModalError(result.error);
+    }
   };
 
-  const handleNewMatchConfirm = (data: CreateManualMatchFormData) => {
-    setNewMatchModalVisible(false);
-    // TODO: llamar a POST /matches con { ...data, source: 'manual', leagueId }
+  const handleNewMatchConfirm = async (data: CreateManualMatchFormData) => {
+    if (ligaId <= 0) return;
+
+    // Número de jornada: preferir backendNumber (real) sobre number (visual)
+    const activeJornada = journeys[journeyIndex];
+    const jornadaNum = activeJornada?.backendNumber ?? activeJornada?.number ?? 1;
+
+    // Combinar fecha + hora en ISO: YYYY-MM-DDTHH:MM:00
+    // TODO API: si el backend requiere UTC, ajustar conversión aquí
+    const fechaHora = `${data.date}T${data.time}:00`;
+
+    setNewMatchError(undefined);
+    setNewMatchSubmitting(true);
+
+    const result = await createManualMatchService(ligaId, {
+      id_equipo_local: parseInt(data.homeTeamId, 10),
+      id_equipo_visitante: parseInt(data.awayTeamId, 10),
+      fecha_hora: fechaHora,
+      estadio: data.stadium || undefined,
+      numero_jornada: jornadaNum,
+    });
+
+    setNewMatchSubmitting(false);
+
+    if (result.success) {
+      setNewMatchModalVisible(false);
+      setNewMatchError(undefined);
+      // Refrescar calendario para mostrar el partido real
+      refetchJourneys();
+    } else {
+      // Mantener modal abierto y mostrar error
+      setNewMatchError(result.error ?? 'Error al crear el partido');
+    }
   };
 
   // ── Navegación al detalle de partido ──
@@ -610,6 +593,14 @@ export function CalendarScreen() {
 
   // ── Render: contenido de la tab Jornada ──
   const renderJourneyContent = () => {
+    if (isLoadingJourneys) {
+      return (
+        <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', paddingTop: 60 }}>
+          <ActivityIndicator color={Colors.brand.primary} size="large" />
+        </View>
+      );
+    }
+
     if (viewState === 'no_teams') {
       return (
         <EmptyNoTeams
@@ -636,7 +627,7 @@ export function CalendarScreen() {
         <JourneyNavigator
           journeyNumber={activeJourney.number}
           totalJourneys={journeys.length}
-          season="2025-2026"
+          season="–"
           onPrev={handlePrevJourney}
           onNext={handleNextJourney}
         />
@@ -730,10 +721,9 @@ export function CalendarScreen() {
     <View style={{ flex: 1, backgroundColor: Colors.bg.base }}>
       {/* ── Header premium ── */}
       <CalendarHeader
-        leagueName="Liga Sevilla Premier"
-        season="2025–2026"
-        // TODO: reemplazar por el logo real de la liga activa desde el store
-        leagueLogo={require('../../../../assets/images/liga.png')}
+        leagueName={leagueName}
+        season="–"
+        // TODO: pasar logo real cuando el store incluya crestUrl de la liga activa
         hasMultipleSeasons={false}
         onMenuPress={handleMenuPress}
       />
@@ -743,15 +733,22 @@ export function CalendarScreen() {
 
       {/* ── Contenido según tab activa ── */}
       {activeTab === 'teams' ? (
-        <PlaceholderTab label="Vista de equipos" />
+        <TeamsScreen embedded />
       ) : activeTab === 'classification' ? (
-        <PlaceholderTab label="Clasificación" />
+        <ClassificationScreen embedded />
       ) : (
         <View style={{ flex: 1 }}>
           <ScrollView
             ref={scrollRef}
             style={{ flex: 1 }}
             showsVerticalScrollIndicator={false}
+            refreshControl={
+              <RefreshControl
+                refreshing={isRefetchingJourneys}
+                onRefresh={refetchJourneys}
+                tintColor={Colors.brand.primary}
+              />
+            }
             onScroll={(e) => setScrollY(e.nativeEvent.contentOffset.y)}
             scrollEventThrottle={16}
             onContentSizeChange={(_, h) => setContentHeight(h)}
@@ -785,16 +782,21 @@ export function CalendarScreen() {
       <CalendarConfigModal
         visible={calendarModalVisible}
         mode={calendarModalMode}
+        error={calendarModalError}
+        isSubmitting={calendarModalSubmitting}
         onConfirm={handleCalendarConfigConfirm}
-        onCancel={() => setCalendarModalVisible(false)}
+        onCancel={() => { setCalendarModalVisible(false); setCalendarModalError(undefined); }}
       />
 
       {/* Modal nuevo partido manual — fuente de verdad única: CreateManualMatchModal */}
       <CreateManualMatchModal
         visible={newMatchModalVisible}
         defaultRound={activeRound}
+        teamOptions={teamOptions}
+        error={newMatchError}
+        isSubmitting={newMatchSubmitting}
         onSubmit={handleNewMatchConfirm}
-        onClose={() => setNewMatchModalVisible(false)}
+        onClose={() => { setNewMatchModalVisible(false); setNewMatchError(undefined); }}
       />
 
       {/* ── Modales operativos de partido — estado gestionado por useMatchActionModals ── */}

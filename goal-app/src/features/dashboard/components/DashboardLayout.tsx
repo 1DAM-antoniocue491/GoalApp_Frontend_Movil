@@ -45,6 +45,7 @@ import {
   ScrollView,
   StatusBar,
   TouchableOpacity,
+  ActivityIndicator,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -76,8 +77,13 @@ export interface DashboardLayoutProps {
   role: LeagueRole;
   /** Número de notificaciones no leídas. 0 oculta el indicador. */
   notificationCount?: number;
-  /** Si los datos del dashboard están cargando */
+  /** Si los datos del dashboard están cargando por primera vez */
   isLoading: boolean;
+  /**
+   * Si se está recargando con datos ya visibles.
+   * Muestra un banner discreto sin borrar el contenido existente.
+   */
+  isRefetching?: boolean;
   /** Si se ha producido un error al cargar los datos */
   isError: boolean;
   /** Callback para reintentar la carga tras un error */
@@ -235,6 +241,7 @@ export function DashboardLayout({
   role,
   notificationCount = 0,
   isLoading,
+  isRefetching = false,
   isError,
   onRetry,
   children,
@@ -283,6 +290,33 @@ export function DashboardLayout({
           contentContainerStyle={{ paddingBottom: theme.spacing.xxl }}
           showsVerticalScrollIndicator={false}
         >
+          {/* Banner discreto de refetch — solo cuando hay datos ya visibles */}
+          {isRefetching && (
+            <View
+              style={{
+                flexDirection: 'row',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: 6,
+                paddingVertical: 6,
+                backgroundColor: Colors.bg.surface1,
+                marginHorizontal: theme.spacing.lg,
+                marginTop: theme.spacing.md,
+                borderRadius: theme.borderRadius.md,
+              }}
+            >
+              <ActivityIndicator size="small" color={Colors.brand.primary} />
+              <Text
+                style={{
+                  color: Colors.text.secondary,
+                  fontSize: theme.fontSize.xs,
+                  fontWeight: '500',
+                }}
+              >
+                Actualizando datos...
+              </Text>
+            </View>
+          )}
           {children}
         </ScrollView>
       )}

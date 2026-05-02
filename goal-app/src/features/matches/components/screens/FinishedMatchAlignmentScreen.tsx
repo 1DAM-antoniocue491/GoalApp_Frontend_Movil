@@ -5,14 +5,18 @@
  */
 
 import React from 'react';
-import { Text } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { View, Text } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
+import { Colors } from '@/src/shared/constants/colors';
 
+/** Alineaciones del partido finalizado */
 export function FinishedMatchAlignmentScreen() {
-    return (
-        <SafeAreaView className="flex-1">
-            <Text>Hola desde src\features\matches\components\screens\FinishedMatchAlignmentScreen.tsx</Text>
-
-        </SafeAreaView>
-    );
+  return (
+    <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', padding: 40 }}>
+      <Ionicons name="people-outline" size={36} color={Colors.text.disabled} />
+      <Text style={{ color: Colors.text.disabled, fontSize: 14, marginTop: 12, textAlign: 'center' }}>
+        Alineaciones disponibles próximamente
+      </Text>
+    </View>
+  );
 }

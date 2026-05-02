@@ -22,7 +22,8 @@ import { EmptyLeaguesState } from '@/src/features/leagues/components/EmptyLeague
 import { LeaguesSkeleton } from '@/src/features/leagues/components/LeaguesSkeleton';
 import { ReactivateLeagueModal } from '@/src/features/leagues/components/ReactivateLeagueModal';
 import { JoinLeagueModal } from '@/src/features/leagues/components/JoinLeagueModal';
-import { CreateLeagueModal, type CreateLeagueForm } from '@/src/features/leagues/components/CreateLeagueModal';
+import { CreateLeagueModal } from '@/src/features/leagues/components/CreateLeagueModal';
+import { LeagueSettingsModal } from '@/src/features/leagues/components/LeagueSettingsModal';
 import type { LigaCreateRequest } from '@/src/features/leagues/types/league.api.types';
 
 import { LeagueItem, LeagueFilter } from '@/src/shared/types/league';
@@ -69,7 +70,7 @@ function OnboardingScreenContent() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
 
-  const { user } = useAuth();
+  const { user, logout } = useAuth();
   const {
     leagues: fetchedLeagues,
     loading: isLoading,
@@ -243,44 +244,15 @@ function OnboardingScreenContent() {
     setEditTarget(league);
   }, []);
 
-  /**
-   * Valores iniciales para el modal de edición.
-   * Mapeamos los campos disponibles en LeagueItem → CreateLeagueForm.
-   * Los campos sin equivalente (category, steppers) quedan en sus defaults.
-   */
-  const editInitialValues = useMemo<Partial<CreateLeagueForm>>(() => {
-    if (!editTarget) return {};
-    // La temporada llega como "2025/26" → extraemos el año de inicio
-    const seasonStartYear = parseInt(editTarget.season.split('/')[0], 10) || new Date().getFullYear();
-    return {
-      name: editTarget.name,
-      seasonStartYear,
-      logoUrl: editTarget.crestUrl ?? null,
-    };
-  }, [editTarget]);
-
-  /**
-   * Confirma la edición: actualiza estado local con los datos de LigaCreateRequest.
-   * Cuando exista PUT /ligas/{id}, añadir la llamada al servicio aquí.
-   */
-  const handleEditConfirm = useCallback((data: LigaCreateRequest) => {
-    if (!editTarget) return;
-    setLeagues((prev) =>
-      prev.map((l) =>
-        l.id === editTarget.id
-          ? {
-            ...l,
-            name: data.nombre,
-            season: data.temporada,
-            crestUrl: data.logo_url ?? l.crestUrl,
-          }
-          : l
-      )
-    );
-    setEditTarget(null);
-  }, [editTarget]);
 
   const handleClearSearch = useCallback(() => setSearchTerm(''), []);
+
+  // Cierra sesión: limpia liga activa, tokens y usuario, luego navega a login
+  const handleLogout = useCallback(async () => {
+    activeLeagueStore.clearSession();
+    await logout();
+    router.replace(routes.public.auth.login as never);
+  }, [logout, router]);
 
   return (
     <View style={{ flex: 1, backgroundColor: Colors.bg.base }}>
@@ -313,7 +285,7 @@ function OnboardingScreenContent() {
               {
                 paddingTop: insets.top + theme.spacing.md,
                 flexDirection: 'row',
-                alignItems: 'flex-start',
+                alignItems: 'center',
                 justifyContent: 'space-between',
                 marginBottom: theme.spacing.xxl,
               },
@@ -351,6 +323,35 @@ function OnboardingScreenContent() {
                 </Text>
               </View>
             </View>
+
+            {/* Botón de cerrar sesión — discreto, arriba derecha */}
+            <TouchableOpacity
+              onPress={handleLogout}
+              style={{
+                flexDirection: 'row',
+                alignItems: 'center',
+                gap: 5,
+                backgroundColor: Colors.bg.surface1,
+                paddingHorizontal: 12,
+                paddingVertical: 8,
+                borderRadius: 20,
+                borderWidth: 1,
+                borderColor: '#d5121212',
+                marginLeft: theme.spacing.md,
+              }}
+              activeOpacity={0.25}
+            >
+              <Ionicons name="log-out-outline" size={20} color={Colors.text.secondary} />
+              <Text
+                style={{
+                  color: Colors.text.secondary,
+                  fontSize: theme.fontSize.md,
+                  fontWeight: '500',
+                }}
+              >
+                Salir
+              </Text>
+            </TouchableOpacity>
           </Animated.View>
 
           {/* Quick Actions */}
@@ -528,16 +529,19 @@ function OnboardingScreenContent() {
       />
 
       {/**
-       * Modal editar liga — reutiliza CreateLeagueModal en modo 'edit'.
+       * Modal de configuración completa de liga.
        * Se abre desde LeagueCard → onPressSettings (solo admins).
-       * initialValues precarga nombre, temporada y logo de la liga seleccionada.
+       * Carga datos de la API, persiste en backend y solo cierra tras éxito.
        */}
-      <CreateLeagueModal
-        mode="edit"
+      <LeagueSettingsModal
         visible={editTarget !== null}
-        initialValues={editInitialValues}
-        onConfirm={handleEditConfirm}
-        onCancel={() => setEditTarget(null)}
+        league={editTarget}
+        onClose={() => setEditTarget(null)}
+        onSuccess={refresh}
+        onLeagueDeleted={() => {
+          setEditTarget(null);
+          refresh();
+        }}
       />
     </View >
   );

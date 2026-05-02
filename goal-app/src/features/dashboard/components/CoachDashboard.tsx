@@ -24,7 +24,7 @@
 import React from 'react';
 import { View } from 'react-native';
 
-import { useDashboardData } from '@/src/shared/hooks/usedashboarddata';
+import { useDashboardData } from '@/src/features/dashboard/hooks';
 import { getDashboardPermissions } from '../services/dashboardService';
 import { DashboardLayout } from './DashboardLayout';
 import { LiveMatchCard } from '@/src/features/matches/components/cards/LiveMatchCard';
@@ -53,7 +53,7 @@ export function CoachDashboard({
   teamName,
   notificationCount = 0,
 }: CoachDashboardProps) {
-  const { data, isLoading, isError, refetch } = useDashboardData(leagueId);
+  const { data, isLoading, isRefetching, isError, refetch } = useDashboardData(leagueId);
   // Permisos del rol coach — distintos a admin
   const permissions = getDashboardPermissions('coach');
 
@@ -67,6 +67,7 @@ export function CoachDashboard({
       role="coach"
       notificationCount={notificationCount}
       isLoading={isLoading}
+      isRefetching={isRefetching}
       isError={isError}
       onRetry={refetch}
     >

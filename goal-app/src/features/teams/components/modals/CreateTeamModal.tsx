@@ -28,10 +28,10 @@ import { Colors } from '@/src/shared/constants/colors';
 import { theme } from '@/src/shared/styles/theme';
 import { styles } from '@/src/shared/styles';
 import { Button } from '@/src/shared/components/ui/Button';
+import { useCreateTeam } from '../../hooks/useTeams';
 
-// Tipo local del formulario.
-// No usa el tipo Team de shared porque ese requiere id y shortName
-// (datos que se generan en el servidor, no en creación).
+// Tipo local del formulario — solo los campos que el usuario introduce.
+// ligaId se inyecta desde el padre, no del formulario.
 interface CreateTeamFormData {
   name: string;
   city: string;
@@ -41,8 +41,11 @@ interface CreateTeamFormData {
 
 interface CreateTeamModalProps {
   visible: boolean;
+  /** Liga en la que se creará el equipo */
+  ligaId: number;
   onClose: () => void;
-  onSubmit: (data: CreateTeamFormData) => void;
+  /** Llamado tras crear el equipo con éxito */
+  onCreated: () => void;
 }
 
 const DEFAULT_COLOR = '#C8F558'; // brand.primary del design system
@@ -54,20 +57,32 @@ const EMPTY_FORM: CreateTeamFormData = {
   stadium: '',
 };
 
-export function CreateTeamModal({ visible, onClose, onSubmit }: CreateTeamModalProps) {
+export function CreateTeamModal({ visible, ligaId, onClose, onCreated }: CreateTeamModalProps) {
   const [form, setForm] = useState<CreateTeamFormData>(EMPTY_FORM);
+  const { mutate, isLoading, isError, error, reset } = useCreateTeam();
 
   function handleChange(field: keyof CreateTeamFormData, value: string) {
     setForm(prev => ({ ...prev, [field]: value }));
   }
 
-  function handleSubmit() {
-    onSubmit(form);
+  async function handleSubmit() {
+    if (!form.name.trim()) return;
+    const result = await mutate({
+      nombre: form.name.trim(),
+      id_liga: ligaId,
+      colores: /^#[0-9A-Fa-f]{6}$/.test(form.primaryColor) ? form.primaryColor : null,
+      escudo: null,
+    });
+    if (result) {
+      setForm(EMPTY_FORM);
+      onCreated();
+    }
   }
 
   function handleClose() {
-    // Limpiar el form al cerrar para que no persista al reabrirse
+    // Limpiar el form y el error al cerrar
     setForm(EMPTY_FORM);
+    reset();
     onClose();
   }
 
@@ -134,6 +149,14 @@ export function CreateTeamModal({ visible, onClose, onSubmit }: CreateTeamModalP
               {/* ── Badge circular del escudo ── */}
               <View className="items-center mb-6">
                 {/*
+                 * TODO: subida real de escudo pendiente.
+                 * El backend acepta `escudo` como URL string en POST /equipos/.
+                 * Cuando el storage esté definido (S3, Cloudinary, etc.):
+                 *   1. Usar expo-image-picker para seleccionar imagen.
+                 *   2. Subir al storage y obtener la URL pública.
+                 *   3. Pasar esa URL como `escudo` en el payload.
+                 * Por ahora se envía `escudo: null` y la creación funciona igualmente.
+                 *
                  * style: tamaño, borderRadius y backgroundColor exactos definidos en constantes.
                  * El color de fondo cambia dinámicamente con el color del equipo.
                  * Nunca queda vacío: siempre muestra el ícono shield como fallback.
@@ -269,13 +292,25 @@ export function CreateTeamModal({ visible, onClose, onSubmit }: CreateTeamModalP
                 </View>
               </ScrollView>
 
+              {/* Error de creación */}
+              {isError && (
+                <Text style={{ color: Colors.semantic.error, fontSize: 13, marginBottom: 12, textAlign: 'center' }}>
+                  {error ?? 'Error al crear el equipo'}
+                </Text>
+              )}
+
               {/* ── Footer: Cancelar + Crear Equipo ── */}
               <View className="flex-row gap-3">
                 <View style={{ flex: 1 }}>
-                  <Button label="Cancelar" variant="secondary" onPress={handleClose} />
+                  <Button label="Cancelar" variant="secondary" onPress={handleClose} disabled={isLoading} />
                 </View>
                 <View style={{ flex: 1 }}>
-                  <Button label="Crear Equipo" variant="primary" onPress={handleSubmit} />
+                  <Button
+                    label={isLoading ? 'Creando...' : 'Crear Equipo'}
+                    variant="primary"
+                    onPress={handleSubmit}
+                    disabled={isLoading || !form.name.trim()}
+                  />
                 </View>
               </View>
             </View>

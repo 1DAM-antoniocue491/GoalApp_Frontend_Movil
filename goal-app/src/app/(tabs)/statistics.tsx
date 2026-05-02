@@ -1,19 +1,16 @@
-import React, { useState } from "react";
-import { View, Text, Image } from "react-native";
-import { LeagueStatisticsTabs } from "@/src/shared/types/auth";
+import React from 'react';
+import { View, Text } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
+import { Colors } from '@/src/shared/constants/colors';
 
-import { styles } from "@/src/shared/styles";
-import Match from "../statistics/match";
-import Players from "../statistics/players";
-import { Colors } from "@/src/shared/constants/colors";
-
-
-export default function Matches() {
-  const [activeTab, setActiveTab] = useState<LeagueStatisticsTabs>('match');
-
+/** Pantalla de estadísticas de la liga — pendiente de conectar con API */
+export default function StatisticsScreen() {
   return (
-    <View className="flex-1" style={{ backgroundColor: Colors.bg.surface1 }}>
-      <Text>Hola desde C:\Users\Usuario\Desktop\GoalApp_Frontend_Movil\goal-app\src\app\(tabs)\statistics.tsx</Text>
+    <View style={{ flex: 1, backgroundColor: Colors.bg.base, alignItems: 'center', justifyContent: 'center', padding: 40 }}>
+      <Ionicons name="bar-chart-outline" size={36} color={Colors.text.disabled} />
+      <Text style={{ color: Colors.text.disabled, fontSize: 14, marginTop: 12, textAlign: 'center' }}>
+        Estadísticas disponibles próximamente
+      </Text>
     </View>
   );
 }

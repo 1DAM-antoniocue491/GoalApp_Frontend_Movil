@@ -1,30 +1,43 @@
 /**
  * notifications.api
  *
- * Llamadas HTTP directas al endpoint de notificaciones.
- * TODO: importar httpClient de shared/api cuando esté disponible.
+ * Llamadas HTTP al módulo de notificaciones.
+ * Usa apiClient para inyección automática de token y retry.
+ *
+ * Endpoints:
+ *   GET    /notificaciones/           → lista completa del usuario
+ *   GET    /notificaciones/no-leidas  → lista de no leídas (para badge)
+ *   PATCH  /notificaciones/{id}/leer  → marcar una como leída
+ *   PUT    /notificaciones/mark-all-read → marcar todas como leídas
+ *   DELETE /notificaciones/{id}       → eliminar una notificación
  */
 
-import type { AppNotification } from '../types/notifications.types';
+import { apiClient } from '@/src/shared/api/client';
+import type { NotificationResponse } from '../types/notifications.types';
 
-export const notificationsApi = {
-  async getAll(_leagueId: string): Promise<AppNotification[]> {
-    // TODO: return httpClient.get(`/leagues/${_leagueId}/notifications`);
-    throw new Error('notificationsApi.getAll: not implemented');
-  },
+/** GET /notificaciones/ — lista completa del usuario autenticado */
+export async function getNotifications(): Promise<NotificationResponse[]> {
+  const response = await apiClient.get<NotificationResponse[]>('/notificaciones/');
+  return response.data;
+}
 
-  async markAsRead(_id: string): Promise<void> {
-    // TODO: return httpClient.patch(`/notifications/${_id}/read`);
-    throw new Error('notificationsApi.markAsRead: not implemented');
-  },
+/** GET /notificaciones/no-leidas — notificaciones no leídas (para badge) */
+export async function getUnreadNotifications(): Promise<NotificationResponse[]> {
+  const response = await apiClient.get<NotificationResponse[]>('/notificaciones/no-leidas');
+  return response.data;
+}
 
-  async remove(_id: string): Promise<void> {
-    // TODO: return httpClient.delete(`/notifications/${_id}`);
-    throw new Error('notificationsApi.remove: not implemented');
-  },
+/** PATCH /notificaciones/{id}/leer — marcar una notificación como leída */
+export async function markNotificationAsRead(id: number): Promise<void> {
+  await apiClient.patch(`/notificaciones/${id}/leer`);
+}
 
-  async markAllAsRead(_leagueId: string): Promise<void> {
-    // TODO: return httpClient.patch(`/leagues/${_leagueId}/notifications/read-all`);
-    throw new Error('notificationsApi.markAllAsRead: not implemented');
-  },
-};
+/** PUT /notificaciones/mark-all-read — marcar todas las notificaciones como leídas */
+export async function markAllNotificationsAsRead(): Promise<void> {
+  await apiClient.put('/notificaciones/mark-all-read');
+}
+
+/** DELETE /notificaciones/{id} — eliminar una notificación */
+export async function deleteNotification(id: number): Promise<void> {
+  await apiClient.delete(`/notificaciones/${id}`);
+}

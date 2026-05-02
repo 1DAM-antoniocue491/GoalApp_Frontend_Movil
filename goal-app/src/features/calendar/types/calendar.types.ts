@@ -91,8 +91,14 @@ export interface CalendarMatch {
 
 export interface CalendarJourney {
   id: string;
-  /** Número de jornada (1, 2, ... N) */
+  /** Número visual secuencial: 1, 2, 3... (para mostrar en UI y navegar) */
   number: number;
+  /**
+   * Número real devuelto por el backend (puede ser 18, 19... por acumulación previa).
+   * Solo para debugging/API futuras. No usar para navegación ni para mostrar en UI.
+   * TODO backend: crear-calendario debería empezar en jornada 1 si la liga no tiene calendario previo.
+   */
+  backendNumber?: number;
   matches: CalendarMatch[];
 }
 

@@ -75,8 +75,6 @@ export function JourneyNavigator({
           JORNADA {journeyNumber}
         </Text>
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 3 }}>
-          {/* Separador visual */}
-          <View style={{ width: 1, height: 9, backgroundColor: Colors.text.disabled }} />
           <Text style={{ color: Colors.text.disabled, fontSize: 10, letterSpacing: 0.5 }}>
             TEMPORADA {season}
           </Text>

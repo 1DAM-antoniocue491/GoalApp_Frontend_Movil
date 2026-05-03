@@ -35,8 +35,9 @@ export function JourneyStatusTabs({ activeFilter, counts, onFilterChange }: Jour
       showsHorizontalScrollIndicator={false}
       contentContainerStyle={{
         flexDirection: 'row',
+        alignItems: 'center',
         gap: theme.spacing.sm,
-        paddingHorizontal: theme.spacing.lg,
+        paddingHorizontal: theme.spacing.md,
         paddingVertical: theme.spacing.md,
       }}
     >
@@ -87,7 +88,7 @@ export function JourneyStatusTabs({ activeFilter, counts, onFilterChange }: Jour
             </Text>
 
             {/* Badge de conteo — solo si hay partidos */}
-            {count > 0 && (
+            {count > -1 && (
               <View
                 style={{
                   backgroundColor: isActive

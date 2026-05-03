@@ -26,7 +26,6 @@ import {
     ScrollView,
     TouchableOpacity,
     Modal,
-    Alert,
     ActivityIndicator,
     RefreshControl,
     StyleSheet,
@@ -41,7 +40,7 @@ import { ScrollEdgeButton } from '@/src/shared/components/navigation/ScrollEdgeB
 import { NotificationFilterTabs } from '@/src/features/notifications/components/NotificationFilterTabs';
 import { NotificationCard } from '@/src/features/notifications/components/NotificationCard';
 import { useNotifications } from '@/src/features/notifications/hooks/useNotifications';
-import type { AppNotification } from '@/src/features/notifications/types/notifications.types';
+import type { AppNotification, NotificationReadFilter } from '@/src/features/notifications/types/notifications.types';
 
 // ─── Componente ──────────────────────────────────────────────────────────────
 
@@ -55,13 +54,15 @@ export function NotificationsScreen() {
         unreadCount,
         isLoading,
         isRefreshing,
+        isMarkingAllAsRead,
         error,
         refresh,
         activeFilter,
         setActiveFilter,
+        readFilter,
+        setReadFilter,
         search,
         setSearch,
-        availableCategories,
         markAsRead,
         markAllAsRead,
         deleteNotification,
@@ -69,6 +70,8 @@ export function NotificationsScreen() {
 
     // Notificación objetivo del action sheet (⋮ o long press)
     const [actionTarget, setActionTarget] = useState<AppNotification | null>(null);
+    // Menú del header ⋮ (filtro de lectura)
+    const [headerMenuVisible, setHeaderMenuVisible] = useState(false);
 
     // Refs para ScrollEdgeButton
     const scrollRef = useRef<ScrollView>(null);
@@ -99,19 +102,12 @@ export function NotificationsScreen() {
     // ── Acciones del header ──────────────────────────────────────────────────
 
     function handleHeaderMenu() {
-        // Opciones del ⋮ del header: solo "marcar todas como leídas"
-        Alert.alert(
-            'Notificaciones',
-            undefined,
-            [
-                {
-                    text: 'Marcar todas como leídas',
-                    onPress: markAllAsRead,
-                },
-                { text: 'Cancelar', style: 'cancel' },
-            ],
-            { cancelable: true }
-        );
+        setHeaderMenuVisible(true);
+    }
+
+    function handleSelectReadFilter(filter: NotificationReadFilter) {
+        setReadFilter(filter);
+        setHeaderMenuVisible(false);
     }
 
     // ── Acciones del action sheet de tarjeta ────────────────────────────────
@@ -267,14 +263,16 @@ export function NotificationsScreen() {
 
                 {/* Filtros por categoría */}
                 <NotificationFilterTabs
-                    available={availableCategories}
                     active={activeFilter}
                     onChange={setActiveFilter}
                 />
 
-                {/* Separador y conteo de resultados */}
+                {/* Fila: conteo + marcar todas como leídas */}
                 <View
                     style={{
+                        flexDirection: 'row',
+                        alignItems: 'center',
+                        justifyContent: 'space-between',
                         paddingHorizontal: theme.spacing.xl,
                         paddingTop: theme.spacing.lg,
                         paddingBottom: theme.spacing.sm,
@@ -283,6 +281,25 @@ export function NotificationsScreen() {
                     <Text style={{ color: Colors.text.disabled, fontSize: theme.fontSize.xs }}>
                         {notifications.length} notificación{notifications.length !== 1 ? 'es' : ''}
                     </Text>
+                    {unreadCount > 0 && (
+                        <TouchableOpacity
+                            onPress={markAllAsRead}
+                            disabled={isMarkingAllAsRead}
+                            activeOpacity={0.7}
+                        >
+                            <Text
+                                style={{
+                                    color: isMarkingAllAsRead
+                                        ? Colors.text.disabled
+                                        : Colors.brand.primary,
+                                    fontSize: theme.fontSize.xs,
+                                    fontWeight: '600',
+                                }}
+                            >
+                                {isMarkingAllAsRead ? 'Marcando...' : 'Marcar todas como leídas'}
+                            </Text>
+                        </TouchableOpacity>
+                    )}
                 </View>
 
                 {/* Lista de tarjetas o empty state */}
@@ -326,6 +343,98 @@ export function NotificationsScreen() {
                 contentHeight={contentHeight}
                 viewportHeight={viewportHeight}
             />
+
+            {/* ── Menú del header ⋮ — filtro de lectura ── */}
+            <Modal
+                visible={headerMenuVisible}
+                transparent
+                animationType="slide"
+                onRequestClose={() => setHeaderMenuVisible(false)}
+            >
+                <View style={styles.sheetOverlay}>
+                    <TouchableOpacity
+                        style={StyleSheet.absoluteFillObject}
+                        activeOpacity={1}
+                        onPress={() => setHeaderMenuVisible(false)}
+                    />
+                    <View
+                        style={[
+                            styles.sheetPanel,
+                            { paddingBottom: Math.max(insets.bottom, theme.spacing.xl) },
+                        ]}
+                    >
+                        <View style={styles.sheetHandle} />
+
+                        <Text
+                            style={{
+                                color: Colors.text.secondary,
+                                fontSize: theme.fontSize.xs,
+                                fontWeight: '600',
+                                paddingHorizontal: theme.spacing.xl,
+                                paddingBottom: theme.spacing.md,
+                                textTransform: 'uppercase',
+                                letterSpacing: 0.6,
+                            }}
+                        >
+                            Mostrar notificaciones
+                        </Text>
+
+                        {(
+                            [
+                                { value: 'all' as const, label: 'Todas las notificaciones' },
+                                { value: 'read' as const, label: 'Leídas' },
+                                { value: 'unread' as const, label: 'No leídas' },
+                            ] as { value: NotificationReadFilter; label: string }[]
+                        ).map(({ value, label }) => (
+                            <TouchableOpacity
+                                key={value}
+                                onPress={() => handleSelectReadFilter(value)}
+                                activeOpacity={0.8}
+                                style={[
+                                    styles.sheetOption,
+                                    { justifyContent: 'space-between' },
+                                ]}
+                            >
+                                <Text
+                                    style={[
+                                        styles.sheetOptionText,
+                                        {
+                                            color: readFilter === value
+                                                ? Colors.brand.primary
+                                                : Colors.text.primary,
+                                            fontWeight: readFilter === value ? '700' : '400',
+                                        },
+                                    ]}
+                                >
+                                    {label}
+                                </Text>
+                                {readFilter === value && (
+                                    <Ionicons name="checkmark" size={18} color={Colors.brand.primary} />
+                                )}
+                            </TouchableOpacity>
+                        ))}
+
+                        <View
+                            style={{
+                                height: 1,
+                                backgroundColor: Colors.bg.surface2,
+                                marginHorizontal: theme.spacing.xl,
+                                marginVertical: theme.spacing.sm,
+                            }}
+                        />
+
+                        <TouchableOpacity
+                            onPress={() => setHeaderMenuVisible(false)}
+                            activeOpacity={0.8}
+                            style={styles.sheetOption}
+                        >
+                            <Text style={{ color: Colors.text.secondary, fontSize: theme.fontSize.md }}>
+                                Cancelar
+                            </Text>
+                        </TouchableOpacity>
+                    </View>
+                </View>
+            </Modal>
 
             {/* ── Action Sheet de tarjeta ── */}
             <Modal

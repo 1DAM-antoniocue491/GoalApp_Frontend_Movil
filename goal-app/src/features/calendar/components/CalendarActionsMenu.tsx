@@ -35,6 +35,8 @@ interface CalendarActionsMenuProps {
   onCreateCalendar: () => void;
   onEditCalendar: () => void;
   onAddMatch: () => void;
+  /** Abre CreateTeamModal desde el menú — solo admin */
+  onAddTeam?: () => void;
 }
 
 interface ActionItemProps {
@@ -108,6 +110,7 @@ function CalendarActionsMenuComponent({
   onCreateCalendar,
   onEditCalendar,
   onAddMatch,
+  onAddTeam,
 }: CalendarActionsMenuProps) {
   const slideAnim = useRef(new Animated.Value(300)).current;
   const opacityAnim = useRef(new Animated.Value(0)).current;
@@ -148,7 +151,8 @@ function CalendarActionsMenuComponent({
   const hasActions =
     permissions.canCreateCalendar ||
     permissions.canEditCalendar ||
-    permissions.canAddMatch;
+    permissions.canAddMatch ||
+    !!onAddTeam;
 
   if (!hasActions) return null;
 
@@ -242,6 +246,15 @@ function CalendarActionsMenuComponent({
               label="Nuevo partido"
               description="Añade un partido manualmente a la jornada"
               onPress={onAddMatch}
+              divider={!!onAddTeam}
+            />
+          )}
+          {onAddTeam && (
+            <ActionItem
+              icon="shield-outline"
+              label="Nuevo equipo"
+              description="Crea un equipo en la liga actual"
+              onPress={onAddTeam}
             />
           )}
 

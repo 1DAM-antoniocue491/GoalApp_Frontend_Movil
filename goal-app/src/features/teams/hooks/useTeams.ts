@@ -2,14 +2,6 @@
  * useTeams.ts
  *
  * Hooks de datos para el módulo de equipos.
- * Los componentes NO acceden a teamsService directamente; usan estos hooks.
- *
- * Hooks disponibles:
- * - useTeamsByLeague      → lista básica (cards)
- * - useTeamsPerformance   → rendimiento para tabla/clasificación visual
- * - useTeamDetail         → detalle de un equipo
- * - useClassification     → tabla de clasificación de la liga
- * - useCreateTeam         → mutación para crear equipo
  */
 
 import { useState, useEffect, useCallback } from 'react';
@@ -20,10 +12,14 @@ import type {
   EquipoDetalleResponse,
   ClasificacionItem,
   CreateTeamRequest,
+  EquipoUpdate,
+  JugadorResumen,
+  MatchSummary,
+  TeamTopScorer,
 } from '../types/teams.types';
 
 // ---------------------------------------------------------------------------
-// Tipos base reutilizables
+// Tipos base
 // ---------------------------------------------------------------------------
 
 interface AsyncState<T> {
@@ -74,13 +70,9 @@ function useAsyncData<T>(
 }
 
 // ---------------------------------------------------------------------------
-// Hooks públicos
+// Hooks de lectura
 // ---------------------------------------------------------------------------
 
-/**
- * Lista básica de equipos de la liga.
- * Usado por la vista de cards de TeamsTabs.
- */
 export function useTeamsByLeague(ligaId: number): AsyncState<EquipoResponse[]> {
   return useAsyncData(
     () => teamsService.getTeamsByLeague(ligaId),
@@ -89,10 +81,6 @@ export function useTeamsByLeague(ligaId: number): AsyncState<EquipoResponse[]> {
   );
 }
 
-/**
- * Equipos con estadísticas de rendimiento.
- * Usado por la vista de tabla en TeamsTabs.
- */
 export function useTeamsPerformance(ligaId: number): AsyncState<EquipoRendimientoItem[]> {
   return useAsyncData(
     () => teamsService.getTeamsPerformance(ligaId),
@@ -101,10 +89,7 @@ export function useTeamsPerformance(ligaId: number): AsyncState<EquipoRendimient
   );
 }
 
-/**
- * Detalle completo de un equipo.
- * Usado por TeamDetailScreen.
- */
+/** Detalle básico — para compatibilidad con código existente */
 export function useTeamDetail(teamId: number): AsyncState<EquipoDetalleResponse | null> {
   return useAsyncData(
     () => teamsService.getTeamDetail(teamId),
@@ -114,9 +99,80 @@ export function useTeamDetail(teamId: number): AsyncState<EquipoDetalleResponse 
 }
 
 /**
- * Tabla de clasificación de la liga.
- * Usado por ClassificationScreen.
+ * Detalle completo del equipo — carga en paralelo con Promise.allSettled.
+ * Solo el detalle base es crítico. Squad, partidos y goleadores son secundarios.
  */
+export function useTeamDetailFull(teamId: number) {
+  const [detail, setDetail] = useState<EquipoDetalleResponse | null>(null);
+  const [squad, setSquad] = useState<JugadorResumen[]>([]);
+  const [upcomingMatches, setUpcomingMatches] = useState<MatchSummary[]>([]);
+  const [lastMatches, setLastMatches] = useState<MatchSummary[]>([]);
+  const [topScorers, setTopScorers] = useState<TeamTopScorer[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [isRefreshing, setIsRefreshing] = useState(false);
+  const [isError, setIsError] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const load = useCallback(
+    async (refreshing = false) => {
+      if (teamId <= 0) return;
+
+      if (refreshing) {
+        setIsRefreshing(true);
+      } else {
+        setIsLoading(true);
+      }
+      setIsError(false);
+      setError(null);
+
+      const [detailResult, squadResult, upcomingResult, lastResult, scorersResult] =
+        await Promise.allSettled([
+          teamsService.getTeamDetail(teamId),
+          teamsService.getTeamSquad(teamId),
+          teamsService.getTeamUpcomingMatches(teamId),
+          teamsService.getTeamLastMatches(teamId),
+          teamsService.getTeamTopScorers(teamId),
+        ]);
+
+      // Detalle — crítico
+      if (detailResult.status === 'fulfilled') {
+        setDetail(detailResult.value);
+      } else {
+        setIsError(true);
+        setError('No se pudo cargar el equipo');
+      }
+
+      // Secundarios — tolerados
+      setSquad(squadResult.status === 'fulfilled' ? squadResult.value : []);
+      setUpcomingMatches(upcomingResult.status === 'fulfilled' ? upcomingResult.value : []);
+      setLastMatches(lastResult.status === 'fulfilled' ? lastResult.value : []);
+      setTopScorers(scorersResult.status === 'fulfilled' ? scorersResult.value : []);
+
+      setIsLoading(false);
+      setIsRefreshing(false);
+    },
+    [teamId],
+  );
+
+  useEffect(() => {
+    load(false);
+  }, [load]);
+
+  return {
+    detail,
+    squad,
+    upcomingMatches,
+    lastMatches,
+    topScorers,
+    isLoading,
+    isRefreshing,
+    isError,
+    error,
+    refetch: () => load(false),
+    refresh: () => load(true),
+  };
+}
+
 export function useClassification(ligaId: number): AsyncState<ClasificacionItem[]> {
   return useAsyncData(
     () => teamsService.getClassification(ligaId),
@@ -125,24 +181,19 @@ export function useClassification(ligaId: number): AsyncState<ClasificacionItem[
   );
 }
 
-/**
- * Mutación para crear un equipo.
- * Devuelve `null` si falla; el componente decide el feedback.
- */
+// ---------------------------------------------------------------------------
+// Hooks de mutación
+// ---------------------------------------------------------------------------
+
 export function useCreateTeam(): MutationState<CreateTeamRequest, EquipoResponse> {
   const [isLoading, setIsLoading] = useState(false);
   const [isError, setIsError] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const reset = useCallback(() => {
-    setIsError(false);
-    setError(null);
-  }, []);
+  const reset = useCallback(() => { setIsError(false); setError(null); }, []);
 
   const mutate = useCallback(async (input: CreateTeamRequest): Promise<EquipoResponse | null> => {
-    setIsLoading(true);
-    setIsError(false);
-    setError(null);
+    setIsLoading(true); setIsError(false); setError(null);
     try {
       const result = await teamsService.createTeam(input);
       return result;
@@ -156,4 +207,52 @@ export function useCreateTeam(): MutationState<CreateTeamRequest, EquipoResponse
   }, []);
 
   return { mutate, isLoading, isError, error, reset };
+}
+
+/** Mutación PUT /equipos/{id} */
+export function useUpdateTeam() {
+  const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const reset = useCallback(() => setError(null), []);
+
+  const mutate = useCallback(
+    async (
+      teamId: number,
+      data: EquipoUpdate,
+    ): Promise<{ success: boolean; data?: EquipoResponse }> => {
+      setIsLoading(true);
+      setError(null);
+      try {
+        const result = await teamsService.updateTeam(teamId, data);
+        if (!result.success) setError(result.error ?? 'Error al actualizar');
+        return result;
+      } finally {
+        setIsLoading(false);
+      }
+    },
+    [],
+  );
+
+  return { mutate, isLoading, error, reset };
+}
+
+/** Mutación DELETE /equipos/{id} */
+export function useDeleteTeam() {
+  const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const mutate = useCallback(async (teamId: number): Promise<boolean> => {
+    setIsLoading(true);
+    setError(null);
+    try {
+      const result = await teamsService.deleteTeam(teamId);
+      if (!result.success) setError(result.error ?? 'Error al eliminar');
+      return result.success;
+    } finally {
+      setIsLoading(false);
+    }
+  }, []);
+
+  return { mutate, isLoading, error };
 }

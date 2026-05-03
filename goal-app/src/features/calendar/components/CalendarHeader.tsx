@@ -61,7 +61,7 @@ export function CalendarHeader({
             width: 44,
             height: 44,
             borderRadius: 22,
-            backgroundColor: Colors.bg.surface1,
+            backgroundColor: Colors.brand.primary,
             borderWidth: 1,
             borderColor: Colors.bg.surface2,
             alignItems: 'center',
@@ -79,7 +79,7 @@ export function CalendarHeader({
             // Fallback: inicial de la liga si no hay imagen
             <Text
               style={{
-                color: Colors.text.secondary,
+                color: "#000000",
                 fontSize: theme.fontSize.md,
                 fontWeight: '700',
               }}

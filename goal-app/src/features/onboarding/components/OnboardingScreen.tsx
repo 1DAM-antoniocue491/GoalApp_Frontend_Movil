@@ -336,20 +336,20 @@ function OnboardingScreenContent() {
                 paddingVertical: 8,
                 borderRadius: 20,
                 borderWidth: 1,
-                borderColor: '#d5121212',
+                borderColor: Colors.bg.surface2,
                 marginLeft: theme.spacing.md,
               }}
               activeOpacity={0.25}
             >
-              <Ionicons name="log-out-outline" size={20} color={Colors.text.secondary} />
+              <Ionicons name="log-out-outline" size={18} color={Colors.text.secondary} />
               <Text
                 style={{
                   color: Colors.text.secondary,
-                  fontSize: theme.fontSize.md,
+                  fontSize: theme.fontSize.sm,
                   fontWeight: '500',
                 }}
               >
-                Salir
+                Cerrar sesión
               </Text>
             </TouchableOpacity>
           </Animated.View>

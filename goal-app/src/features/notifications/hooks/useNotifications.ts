@@ -12,6 +12,7 @@
 import { useState, useMemo, useCallback, useEffect, useRef } from 'react';
 import {
   fetchNotificationsService,
+  fetchUnreadNotificationsService,
   markNotificationAsReadService,
   deleteNotificationService,
   markAllNotificationsAsReadService,
@@ -20,17 +21,18 @@ import type {
   AppNotification,
   NotificationCategory,
   NotificationFilter,
+  NotificationReadFilter,
 } from '@/src/features/notifications/types/notifications.types';
 
 export type UserRole = 'admin' | 'coach' | 'player' | 'observer' | 'delegate';
 
-// Categorías accesibles por rol
+// Categorías accesibles por rol — incluye 'all' para notificaciones generales
 const CATEGORIES_BY_ROLE: Record<UserRole, NotificationCategory[]> = {
-  admin:    ['matches', 'results', 'teams', 'players', 'stats', 'events', 'league', 'roles', 'system'],
-  coach:    ['matches', 'results', 'teams', 'players', 'stats', 'events'],
-  delegate: ['matches', 'results', 'teams', 'events'],
-  player:   ['matches', 'results', 'stats', 'events'],
-  observer: ['matches', 'results', 'stats'],
+  admin:    ['all', 'live', 'results', 'teams', 'stats'],
+  coach:    ['all', 'live', 'results', 'teams', 'stats'],
+  delegate: ['all', 'live', 'results', 'teams'],
+  player:   ['all', 'live', 'results', 'stats'],
+  observer: ['all', 'live', 'results', 'stats'],
 };
 
 // ─── Hook ────────────────────────────────────────────────────────────────────
@@ -39,8 +41,10 @@ export function useNotifications(role: UserRole = 'admin') {
   const [notifications, setNotifications] = useState<AppNotification[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
+  const [isMarkingAllAsRead, setIsMarkingAllAsRead] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [activeFilter, setActiveFilter] = useState<NotificationFilter>('all');
+  const [readFilter, setReadFilter] = useState<NotificationReadFilter>('all');
   const [search, setSearch] = useState('');
 
   const hasLoadedRef = useRef(false);
@@ -79,12 +83,17 @@ export function useNotifications(role: UserRole = 'admin') {
     return notifications
       .filter(n => availableCategories.includes(n.category as NotificationCategory))
       .filter(n => activeFilter === 'all' || n.category === activeFilter)
+      .filter(n => {
+        if (readFilter === 'read') return n.isRead;
+        if (readFilter === 'unread') return !n.isRead;
+        return true;
+      })
       .filter(n =>
         !q ||
         n.title.toLowerCase().includes(q) ||
         n.body.toLowerCase().includes(q)
       );
-  }, [notifications, activeFilter, search, availableCategories]);
+  }, [notifications, activeFilter, readFilter, search, availableCategories]);
 
   // unreadCount desde la lista completa (no filtrada) para el badge real
   const unreadCount = useMemo(
@@ -107,13 +116,15 @@ export function useNotifications(role: UserRole = 'admin') {
   }, []);
 
   const markAllAsRead = useCallback(async () => {
-    const snapshot = notifications;
-    setNotifications(prev => prev.map(n => ({ ...n, isRead: true })));
+    setIsMarkingAllAsRead(true);
     const result = await markAllNotificationsAsReadService();
-    if (!result.success) {
-      setNotifications(snapshot);
+    if (result.success) {
+      setNotifications(prev => prev.map(n => ({ ...n, isRead: true })));
+    } else {
+      setError(result.error ?? 'No se pudieron marcar las notificaciones como leídas');
     }
-  }, [notifications]);
+    setIsMarkingAllAsRead(false);
+  }, []);
 
   const deleteNotification = useCallback(async (id: string) => {
     const snapshot = notifications;
@@ -130,15 +141,41 @@ export function useNotifications(role: UserRole = 'admin') {
     unreadCount,
     isLoading,
     isRefreshing,
+    isMarkingAllAsRead,
     error,
     refresh,
     search,
     setSearch,
     activeFilter,
     setActiveFilter,
+    readFilter,
+    setReadFilter,
     availableCategories,
     markAsRead,
     markAllAsRead,
     deleteNotification,
   };
+}
+
+// ─── Hook ligero para el badge de la campana ─────────────────────────────────
+
+/**
+ * useUnreadCount
+ *
+ * Obtiene el número de notificaciones no leídas desde GET /notificaciones/no-leidas.
+ * Usado en el DashboardHeader para mostrar el punto verde de la campana.
+ * Se recarga cada vez que el componente monta (al entrar al dashboard).
+ */
+export function useUnreadCount(): number {
+  const [count, setCount] = useState(0);
+
+  useEffect(() => {
+    fetchUnreadNotificationsService().then(result => {
+      if (result.success) {
+        setCount(result.data?.length ?? 0);
+      }
+    });
+  }, []);
+
+  return count;
 }

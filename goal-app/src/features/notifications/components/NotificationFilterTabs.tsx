@@ -2,42 +2,30 @@
  * NotificationFilterTabs
  *
  * Scroll horizontal de chips de categoría.
- * El chip "Todas" siempre aparece primero.
- * Solo se muestran las categorías accesibles para el rol actual.
+ * Muestra siempre los 5 filtros definidos: Todas, En vivo, Resultados, Equipos, Estadísticas.
  */
 
 import React, { memo } from 'react';
 import { ScrollView, TouchableOpacity, Text } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
 import { Colors } from '@/src/shared/constants/colors';
 import { theme } from '@/src/shared/styles/theme';
-import type { NotificationCategory, NotificationFilter } from '../types/notifications.types';
+import type { NotificationFilter } from '../types/notifications.types';
 
-const FILTER_LABELS: Record<NotificationFilter, string> = {
-  all:      'Todas',
-  matches:  'Partidos',
-  results:  'Resultados',
-  teams:    'Equipos',
-  players:  'Jugadores',
-  stats:    'Estadísticas',
-  league:   'Liga',
-  roles:    'Roles',
-  events:   'Eventos',
-  system:   'Sistema',
-};
+const FILTERS: { value: NotificationFilter; label: string; icon: keyof typeof Ionicons.glyphMap }[] = [
+  { value: 'all',     label: 'Todas',         icon: 'grid-outline' },
+  { value: 'live',    label: 'En vivo',        icon: 'radio-outline' },
+  { value: 'results', label: 'Resultados',     icon: 'trophy-outline' },
+  { value: 'teams',   label: 'Equipos',        icon: 'people-outline' },
+  { value: 'stats',   label: 'Estadísticas',   icon: 'stats-chart-outline' },
+];
 
 interface NotificationFilterTabsProps {
-  available: NotificationCategory[];
   active: NotificationFilter;
   onChange: (filter: NotificationFilter) => void;
 }
 
-function NotificationFilterTabsComponent({
-  available,
-  active,
-  onChange,
-}: NotificationFilterTabsProps) {
-  const filters: NotificationFilter[] = ['all', ...available];
-
+function NotificationFilterTabsComponent({ active, onChange }: NotificationFilterTabsProps) {
   return (
     <ScrollView
       horizontal
@@ -48,23 +36,30 @@ function NotificationFilterTabsComponent({
         paddingVertical: theme.spacing.xs,
       }}
     >
-      {filters.map(filter => {
-        const isActive = filter === active;
+      {FILTERS.map(({ value, label, icon }) => {
+        const isActive = value === active;
         return (
           <TouchableOpacity
-            key={filter}
-            onPress={() => onChange(filter)}
+            key={value}
+            onPress={() => onChange(value)}
             activeOpacity={0.8}
             style={{
+              flexDirection: 'row',
+              alignItems: 'center',
+              gap: 5,
               backgroundColor: isActive ? Colors.brand.primary : Colors.bg.surface1,
               borderRadius: theme.borderRadius.full,
               borderWidth: 1,
               borderColor: isActive ? Colors.brand.primary : Colors.bg.surface2,
               paddingHorizontal: theme.spacing.md,
               height: 34,
-              justifyContent: 'center',
             }}
           >
+            <Ionicons
+              name={icon}
+              size={13}
+              color={isActive ? '#000' : Colors.text.secondary}
+            />
             <Text
               style={{
                 color: isActive ? '#000' : Colors.text.secondary,
@@ -72,7 +67,7 @@ function NotificationFilterTabsComponent({
                 fontWeight: isActive ? '700' : '400',
               }}
             >
-              {FILTER_LABELS[filter] ?? filter}
+              {label}
             </Text>
           </TouchableOpacity>
         );

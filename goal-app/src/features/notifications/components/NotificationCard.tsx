@@ -19,32 +19,22 @@ import { Colors } from '@/src/shared/constants/colors';
 import { theme } from '@/src/shared/styles/theme';
 import type { AppNotification, NotificationCategory } from '../types/notifications.types';
 
-// Icono Ionicons por categoría (incluye 'all' como fallback)
+// Icono Ionicons por categoría
 const CATEGORY_ICON: Record<NotificationCategory, keyof typeof Ionicons.glyphMap> = {
-  all:      'notifications-outline',
-  matches:  'radio-outline',
-  results:  'trophy-outline',
-  teams:    'people-outline',
-  players:  'person-outline',
-  stats:    'stats-chart-outline',
-  league:   'shield-outline',
-  roles:    'key-outline',
-  events:   'football-outline',
-  system:   'construct-outline',
+  all:     'notifications-outline',
+  live:    'radio-outline',
+  results: 'trophy-outline',
+  teams:   'people-outline',
+  stats:   'stats-chart-outline',
 };
 
 // Color de acento por categoría
 const CATEGORY_COLOR: Record<NotificationCategory, string> = {
-  all:      Colors.text.secondary,
-  matches:  Colors.semantic.error,
-  results:  Colors.brand.primary,
-  teams:    Colors.brand.secondary,
-  players:  Colors.text.secondary,
-  stats:    Colors.brand.accent,
-  league:   Colors.brand.primary,
-  roles:    Colors.semantic.warning,
-  events:   Colors.semantic.error,
-  system:   Colors.semantic.warning,
+  all:     Colors.text.secondary,
+  live:    Colors.semantic.error,
+  results: Colors.brand.primary,
+  teams:   Colors.brand.secondary,
+  stats:   Colors.brand.accent,
 };
 
 /** Formatea fecha ISO a texto relativo simple */

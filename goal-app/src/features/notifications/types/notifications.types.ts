@@ -50,22 +50,23 @@ export interface NotificationResponse {
 
 /**
  * Categorías derivadas del campo `tipo` del backend.
- * 'all' solo existe como valor de filtro.
+ * 'all' solo existe como valor de filtro UI — ninguna lógica de negocio depende de él.
  */
 export type NotificationCategory =
   | 'all'
-  | 'matches'
+  | 'live'
   | 'results'
   | 'teams'
-  | 'players'
-  | 'stats'
-  | 'league'
-  | 'roles'
-  | 'events'
-  | 'system';
+  | 'stats';
+
+/** Alias de categoría para filtros de UI */
+export type NotificationCategoryFilter = NotificationCategory;
 
 /** Alias — en UI ambos se usan igual */
 export type NotificationFilter = NotificationCategory;
+
+/** Filtro de estado de lectura — independiente de los chips de categoría */
+export type NotificationReadFilter = 'all' | 'read' | 'unread';
 
 export interface AppNotification {
   /** String derivado de id_notificacion */
@@ -79,7 +80,7 @@ export interface AppNotification {
   createdAt: string;
   referenceId: number | null;
   referenceType: string | null;
-  category: NotificationCategory;
+  category: NotificationCategoryFilter;
   /** Ruta de Expo Router a la que navegar al pulsar la tarjeta */
   targetRoute?: string;
   /** Parámetros opcionales para la ruta destino */

@@ -32,10 +32,8 @@ import {
  */
 export function getNotificationCategory(tipo: string): NotificationCategory {
   switch (tipo) {
-    case 'partido_programado':
     case 'partido_en_juego':
-    case 'partido_cancelado':
-      return 'matches';
+      return 'live';
 
     case 'partido_finalizado':
     case 'resultado':
@@ -44,27 +42,16 @@ export function getNotificationCategory(tipo: string): NotificationCategory {
     case 'convocatoria':
     case 'convocatoria_actualizada':
     case 'convocatoria_eliminada':
+    case 'jugador_nuevo':
+    case 'rol_asignado':
+    case 'rol_revocado':
       return 'teams';
 
     case 'clasificacion':
       return 'stats';
 
-    case 'jugador_nuevo':
-      return 'players';
-
-    case 'liga_actualizacion':
-      return 'league';
-
-    case 'tarjeta':
-    case 'gol':
-      return 'events';
-
-    case 'rol_asignado':
-    case 'rol_revocado':
-      return 'roles';
-
     default:
-      return 'system';
+      return 'all';
   }
 }
 

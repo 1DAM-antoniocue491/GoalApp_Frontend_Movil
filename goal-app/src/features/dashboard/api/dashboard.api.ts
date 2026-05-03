@@ -144,6 +144,32 @@ function parseFechaHora(fechaHora: string | null | undefined): { day: string; mo
 }
 
 // ---------------------------------------------------------------------------
+// Helpers defensivos de equipo — nunca rompen si el objeto viene undefined
+// ---------------------------------------------------------------------------
+
+function safeString(value: unknown, fallback: string): string {
+  return typeof value === 'string' && value.trim().length > 0
+    ? value.trim()
+    : fallback;
+}
+
+function getTeamName(team: unknown, fallback = 'Equipo sin nombre'): string {
+  const t = team as Record<string, unknown> | null | undefined;
+  return safeString(
+    t?.nombre ?? t?.nombre_equipo ?? t?.team_name ?? t?.name,
+    fallback,
+  );
+}
+
+function getTeamColor(team: unknown, fallback = '#D4FF59'): string {
+  const t = team as Record<string, unknown> | null | undefined;
+  return safeString(
+    t?.colores ?? t?.color_primario ?? t?.color ?? t?.primaryColor,
+    fallback,
+  );
+}
+
+// ---------------------------------------------------------------------------
 // Helpers de jornadas — extracción y mapeo desde /jornadas
 // ---------------------------------------------------------------------------
 
@@ -332,19 +358,30 @@ function mapPartidoToLiveMatch(
   partido: PartidoConEquiposResponse,
   leagueName: string,
 ): LiveMatchData {
+  const homeTeam = getTeamName(partido.equipo_local, `Equipo ${partido.equipo_local?.id_equipo ?? 'local'}`);
+  const awayTeam = getTeamName(partido.equipo_visitante, `Equipo ${partido.equipo_visitante?.id_equipo ?? 'visitante'}`);
+
+  if (!partido.equipo_local || !partido.equipo_visitante) {
+    logger.warn('[dashboard/matches]', 'Partido con equipo incompleto (con-equipos)', {
+      matchId: partido.id_partido,
+      hasHomeTeam: Boolean(partido.equipo_local),
+      hasAwayTeam: Boolean(partido.equipo_visitante),
+    });
+  }
+
   return {
     id: String(partido.id_partido),
-    homeTeam: partido.equipo_local.nombre,
-    awayTeam: partido.equipo_visitante.nombre,
+    homeTeam,
+    awayTeam,
     homeScore: partido.goles_local ?? 0,
     awayScore: partido.goles_visitante ?? 0,
     minute: partido.minuto_actual ?? 0,
     leagueName,
     venue: partido.estadio ?? '',
-    homeShieldLetter: partido.equipo_local.nombre.charAt(0).toUpperCase(),
-    awayShieldLetter: partido.equipo_visitante.nombre.charAt(0).toUpperCase(),
-    homeColor: partido.equipo_local.color_primario ?? undefined,
-    awayColor: partido.equipo_visitante.color_primario ?? undefined,
+    homeShieldLetter: homeTeam.charAt(0).toUpperCase(),
+    awayShieldLetter: awayTeam.charAt(0).toUpperCase(),
+    homeColor: partido.equipo_local?.color_primario ?? undefined,
+    awayColor: partido.equipo_visitante?.color_primario ?? undefined,
   };
 }
 
@@ -353,17 +390,25 @@ function mapPartidoToUpcoming(partido: PartidoConEquiposResponse): UpcomingMatch
   const jornada = partido.jornada;
   const round = jornada?.nombre ?? (jornada?.numero != null ? `Jornada ${jornada.numero}` : '–');
 
+  if (!partido.equipo_local || !partido.equipo_visitante) {
+    logger.warn('[dashboard/matches]', 'Partido con equipo incompleto (con-equipos/upcoming)', {
+      matchId: partido.id_partido,
+      hasHomeTeam: Boolean(partido.equipo_local),
+      hasAwayTeam: Boolean(partido.equipo_visitante),
+    });
+  }
+
   return {
     id: String(partido.id_partido),
-    homeTeam: partido.equipo_local.nombre,
-    awayTeam: partido.equipo_visitante.nombre,
+    homeTeam: getTeamName(partido.equipo_local, `Equipo ${partido.equipo_local?.id_equipo ?? 'local'}`),
+    awayTeam: getTeamName(partido.equipo_visitante, `Equipo ${partido.equipo_visitante?.id_equipo ?? 'visitante'}`),
     day,
     month,
     time,
     round,
     venue: partido.estadio ?? '',
-    homeColor: partido.equipo_local.color_primario ?? undefined,
-    awayColor: partido.equipo_visitante.color_primario ?? undefined,
+    homeColor: partido.equipo_local?.color_primario ?? undefined,
+    awayColor: partido.equipo_visitante?.color_primario ?? undefined,
   };
 }
 

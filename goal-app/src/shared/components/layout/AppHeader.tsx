@@ -139,7 +139,7 @@ export function DashboardHeader({ leagueName, notificationCount = 0 }: Dashboard
               width: 8,
               height: 8,
               borderRadius: 999,
-              backgroundColor: Colors.brand.primary,
+              backgroundColor: Colors.semantic.success,
               // Borde oscuro para separar el punto del icono
               borderWidth: 1.5,
               borderColor: Colors.bg.base,

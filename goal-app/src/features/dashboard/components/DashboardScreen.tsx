@@ -25,6 +25,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 
 import { useActiveLeague } from '@/src/state/activeLeague/activeLeagueStore';
+import { useUnreadCount } from '@/src/features/notifications/hooks/useNotifications';
 import { AdminDashboard } from '@/src/features/dashboard/components/AdminDashboard';
 import { CoachDashboard } from '@/src/features/dashboard/components/CoachDashboard';
 import { PlayerDashboard } from '@/src/features/dashboard/components/PlayerDashboard';
@@ -158,6 +159,8 @@ function DashboardFallbackState({
 export default function DashboardScreen() {
   const router = useRouter();
   const { session, hasActiveLeague } = useActiveLeague();
+  // Badge real desde GET /notificaciones/no-leidas — se recarga al entrar al dashboard
+  const unreadCount = useUnreadCount();
 
   /**
    * Si no existe una liga activa, no renderizamos ningún dashboard.
@@ -186,7 +189,7 @@ export default function DashboardScreen() {
           leagueId={session.leagueId}
           leagueName={session.leagueName}
           userName={session.userName}
-          notificationCount={session.notificationCount}
+          notificationCount={unreadCount}
         />
       );
 
@@ -197,7 +200,7 @@ export default function DashboardScreen() {
           leagueName={session.leagueName}
           userName={session.userName}
           teamName={session.teamName}
-          notificationCount={session.notificationCount}
+          notificationCount={unreadCount}
         />
       );
 
@@ -208,7 +211,7 @@ export default function DashboardScreen() {
           leagueName={session.leagueName}
           userName={session.userName}
           teamName={session.teamName}
-          notificationCount={session.notificationCount}
+          notificationCount={unreadCount}
         />
       );
 
@@ -218,7 +221,7 @@ export default function DashboardScreen() {
           leagueId={session.leagueId}
           leagueName={session.leagueName}
           userName={session.userName}
-          notificationCount={session.notificationCount}
+          notificationCount={unreadCount}
         />
       );
 
@@ -228,7 +231,7 @@ export default function DashboardScreen() {
           leagueId={session.leagueId}
           leagueName={session.leagueName}
           userName={session.userName}
-          notificationCount={session.notificationCount}
+          notificationCount={unreadCount}
         />
       );
 

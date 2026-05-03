@@ -26,6 +26,7 @@ import { getDashboardPermissions } from '@/src/features/dashboard/services/dashb
 // Pantallas de equipos y clasificación — reutilizadas como contenido de tab
 import { TeamsScreen } from '@/src/features/teams/components/TeamsScreen';
 import { ClassificationScreen } from '@/src/features/teams/components/ClassificationScreen';
+import { CreateTeamModal } from '@/src/features/teams/components/modals/CreateTeamModal';
 
 // Sesión activa y hook de datos del calendario
 import { useActiveLeague } from '@/src/state/activeLeague/activeLeagueStore';
@@ -390,6 +391,7 @@ export function CalendarScreen() {
   const [newMatchModalVisible, setNewMatchModalVisible] = useState(false);
   const [newMatchError, setNewMatchError] = useState<string | undefined>(undefined);
   const [newMatchSubmitting, setNewMatchSubmitting] = useState(false);
+  const [createTeamVisible, setCreateTeamVisible] = useState(false);
 
   // Modales de acción sobre partidos — estado centralizado en el hook
   const {
@@ -461,13 +463,15 @@ export function CalendarScreen() {
     setNewMatchModalVisible(true);
   };
 
+  const handleOpenAddTeam = () => {
+    setMenuVisible(false);
+    setCreateTeamVisible(true);
+  };
+
   // ── Handlers de acciones en jornada ──
   const handleAddMatch = () => setNewMatchModalVisible(true);
 
-  const handleAddTeam = () => {
-    // TODO: navegar a la pantalla de creación de equipo
-    // router.push(routes.private.league.team.detail as never);
-  };
+  const handleAddTeam = () => setCreateTeamVisible(true);
 
   // ── Confirm de modales ──
   const handleCalendarConfigConfirm = async (data: CalendarConfigData) => {
@@ -638,31 +642,6 @@ export function CalendarScreen() {
           onFilterChange={setStatusFilter}
         />
 
-        {/* Acción rápida de admin: añadir partido a la jornada */}
-        {calendarPerms.canAddMatch && (
-          <Pressable
-            onPress={handleAddMatch}
-            style={{
-              flexDirection: 'row',
-              alignItems: 'center',
-              gap: 5,
-              alignSelf: 'flex-end',
-              marginRight: theme.spacing.lg,
-              marginBottom: theme.spacing.sm,
-              paddingHorizontal: 12,
-              paddingVertical: 7,
-              borderRadius: theme.borderRadius.full,
-              borderWidth: 1,
-              borderColor: Colors.bg.surface2,
-            }}
-          >
-            <Ionicons name="add" size={14} color={Colors.text.secondary} />
-            <Text style={{ color: Colors.text.secondary, fontSize: 12, fontWeight: '500' }}>
-              Nuevo partido
-            </Text>
-          </Pressable>
-        )}
-
         {/* Lista de partidos filtrada */}
         <View style={{ paddingHorizontal: theme.spacing.lg, paddingBottom: theme.spacing.xxl }}>
           {filteredMatches.length === 0 ? (
@@ -722,7 +701,7 @@ export function CalendarScreen() {
       {/* ── Header premium ── */}
       <CalendarHeader
         leagueName={leagueName}
-        season="–"
+        season=""
         // TODO: pasar logo real cuando el store incluya crestUrl de la liga activa
         hasMultipleSeasons={false}
         onMenuPress={handleMenuPress}
@@ -776,6 +755,7 @@ export function CalendarScreen() {
         onCreateCalendar={handleOpenCreateCalendar}
         onEditCalendar={handleOpenEditCalendar}
         onAddMatch={handleOpenAddMatch}
+        onAddTeam={calendarPerms.canAddMatch ? handleOpenAddTeam : undefined}
       />
 
       {/* Modal crear / editar calendario */}
@@ -786,6 +766,14 @@ export function CalendarScreen() {
         isSubmitting={calendarModalSubmitting}
         onConfirm={handleCalendarConfigConfirm}
         onCancel={() => { setCalendarModalVisible(false); setCalendarModalError(undefined); }}
+      />
+
+      {/* Modal crear equipo desde menú de calendario */}
+      <CreateTeamModal
+        visible={createTeamVisible}
+        ligaId={ligaId}
+        onClose={() => setCreateTeamVisible(false)}
+        onCreated={() => setCreateTeamVisible(false)}
       />
 
       {/* Modal nuevo partido manual — fuente de verdad única: CreateManualMatchModal */}

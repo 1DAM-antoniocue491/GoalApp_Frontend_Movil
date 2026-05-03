@@ -1,29 +1,34 @@
 /**
  * TeamCard.tsx
  *
- * Card premium para mostrar un equipo en la lista de equipos.
- * Muestra escudo (fallback letra), nombre, color de equipo y stats básicas.
+ * Card premium para mostrar un equipo en la lista.
+ * onPress → navegar al detalle.
+ * onLongPress → abrir menú de acciones (editar / eliminar).
  */
 
 import React from 'react';
 import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
 import { Colors } from '@/src/shared/constants/colors';
+import { getTeamName, getTeamColor } from '../types/teams.types';
 import type { EquipoResponse } from '../types/teams.types';
 
-interface TeamCardProps {
+export interface TeamCardProps {
   team: EquipoResponse;
   onPress: (teamId: number) => void;
+  onLongPress?: (team: EquipoResponse) => void;
 }
 
-export function TeamCard({ team, onPress }: TeamCardProps) {
-  const initial = team.nombre.charAt(0).toUpperCase();
-  // Color del equipo o fallback brand
-  const teamColor = team.color_primario ?? Colors.brand.primary;
+export function TeamCard({ team, onPress, onLongPress }: TeamCardProps) {
+  const name = getTeamName(team);
+  const initial = name.charAt(0).toUpperCase();
+  const teamColor = getTeamColor(team);
 
   return (
     <TouchableOpacity
       style={styles.card}
       onPress={() => onPress(team.id_equipo)}
+      onLongPress={() => onLongPress?.(team)}
+      delayLongPress={350}
       activeOpacity={0.75}
     >
       {/* Escudo / inicial */}
@@ -33,15 +38,26 @@ export function TeamCard({ team, onPress }: TeamCardProps) {
 
       {/* Info */}
       <View style={styles.info}>
-        <Text style={styles.name} numberOfLines={1}>{team.nombre}</Text>
-        {/* Indicador de estado activo */}
+        <Text style={styles.name} numberOfLines={1}>{name}</Text>
         <View style={styles.statusRow}>
-          <View style={[styles.dot, { backgroundColor: team.activo !== false ? Colors.semantic.success : Colors.text.disabled }]} />
-          <Text style={styles.statusText}>{team.activo !== false ? 'Activo' : 'Inactivo'}</Text>
+          <View
+            style={[
+              styles.dot,
+              { backgroundColor: team.activo !== false ? Colors.semantic.success : Colors.text.disabled },
+            ]}
+          />
+          <Text style={styles.statusText}>
+            {team.activo !== false ? 'Activo' : 'Inactivo'}
+          </Text>
         </View>
       </View>
 
-      {/* Acento lateral del color del equipo */}
+      {/* Hint de pulsación larga */}
+      <View style={styles.menuHint}>
+        <Text style={styles.menuDots}>···</Text>
+      </View>
+
+      {/* Acento lateral */}
       <View style={[styles.accent, { backgroundColor: teamColor }]} />
     </TouchableOpacity>
   );
@@ -57,7 +73,6 @@ const styles = StyleSheet.create({
     marginVertical: 6,
     padding: 14,
     gap: 12,
-    // Sombra sutil — se usa style porque NativeWind no cubre elevación en Android
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.25,
@@ -102,7 +117,14 @@ const styles = StyleSheet.create({
     color: Colors.text.secondary,
     fontSize: 12,
   },
-  // Barra de color del equipo en el borde derecho
+  menuHint: {
+    paddingHorizontal: 4,
+  },
+  menuDots: {
+    color: Colors.text.disabled,
+    fontSize: 16,
+    letterSpacing: 1,
+  },
   accent: {
     position: 'absolute',
     right: 0,

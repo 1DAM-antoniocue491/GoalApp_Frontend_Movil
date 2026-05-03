@@ -22,6 +22,8 @@ interface AuthContextType {
   register: (nombre: string, email: string, password: string) => Promise<void>;
   logout: () => Promise<void>;
   clearError: () => void;
+  /** Actualiza los datos del usuario en el contexto tras edición de perfil */
+  updateUser: (partial: Partial<AuthUser>) => void;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -89,6 +91,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const clearError = () => setError(null);
 
+  /** Merge parcial de datos de usuario sin sobreescribir todo el estado de auth */
+  const updateUser = (partial: Partial<AuthUser>) => {
+    setUser((prev) => (prev ? { ...prev, ...partial } : prev));
+  };
+
   return (
     <AuthContext.Provider value={{
       user,
@@ -99,6 +106,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       register,
       logout,
       clearError,
+      updateUser,
     }}>
       {children}
     </AuthContext.Provider>

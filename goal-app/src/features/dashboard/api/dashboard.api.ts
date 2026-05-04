@@ -24,6 +24,7 @@
 
 import { apiClient } from '@/src/shared/api/client';
 import { getJornadasByLeague } from '@/src/features/matches/api/matches.api';
+import { getLeagueConfig } from '@/src/features/leagues/api/leagues.api';
 import { logger } from '@/src/shared/utils/logger';
 import { getUser } from '@/src/state/session/sessionStore';
 import type { LigaResponse } from '@/src/features/leagues/types/league.api.types';
@@ -421,13 +422,15 @@ function buildMetrics(
   usuarios: UsuarioLigaApi[],
   /** ID del usuario autenticado — para incluirlo si no aparece en /usuarios */
   currentUserId: number | null,
+  /** min_equipos de la configuración de la liga — el progreso llega al 100% cuando se alcanza */
+  minEquipos: number | null,
 ): LeagueMetricsData {
   // registeredTeams: equipos realmente inscritos (fuente: array del endpoint).
-  // configuredMaxTeams: capacidad máxima configurada en la liga.
-  //   liga.equipos_total refleja el max configurado; si no viene, se usa el conteo real.
-  //   Se usa como denominador en ProgressMetrics ("X de Y equipos activos").
+  // configuredMinTeams: mínimo de equipos requerido por la configuración de la liga.
+  //   Es el denominador en ProgressMetrics: la barra se llena cuando se alcanzan los equipos mínimos.
+  //   Fallback: liga.equipos_total (max configurado) → conteo real.
   const registeredTeams = equipos.length;
-  const configuredMaxTeams = liga.equipos_total ?? registeredTeams;
+  const configuredMaxTeams = minEquipos ?? liga.equipos_total ?? registeredTeams;
 
   // activeTeams: equipos con activo !== false. Si el campo no existe en ninguno, todos se consideran activos.
   const activeTeams = equipos.some(e => e.activo !== undefined)
@@ -605,6 +608,7 @@ export async function fetchDashboardData(ligaId: number): Promise<DashboardData>
     goleadoresResult,
     mvpResult,
     usuariosResult,
+    ligaConfigResult,
   ] = await Promise.allSettled([
     fetchJornadasRaw(ligaId),
     fetchPartidos(ligaId),
@@ -614,6 +618,7 @@ export async function fetchDashboardData(ligaId: number): Promise<DashboardData>
     fetchGoleadores(ligaId),
     fetchMvp(ligaId),
     fetchLeagueUsers(ligaId),
+    getLeagueConfig(ligaId),
   ]);
 
   // ── Jornadas — fuente primaria para próximos partidos y partido en vivo ──
@@ -745,7 +750,19 @@ export async function fetchDashboardData(ligaId: number): Promise<DashboardData>
   const currentUser = await getUser().catch(() => null);
   const currentUserId = currentUser?.id_usuario ?? null;
 
-  const metrics = buildMetrics(liga, equipos, partidos, clasificacion, stats, usuarios, currentUserId);
+  // min_equipos desde configuración de liga — determina cuándo se completa la barra de progreso
+  const minEquipos: number | null = ligaConfigResult.status === 'fulfilled'
+    ? (ligaConfigResult.value?.min_equipos ?? null)
+    : null;
+
+  if (ligaConfigResult.status === 'rejected') {
+    logger.warn('dashboard.api', '[ligaConfig] FALLÓ — se usará fallback para progress bar', {
+      ligaId,
+      error: ligaConfigResult.reason instanceof Error ? ligaConfigResult.reason.message : String(ligaConfigResult.reason),
+    });
+  }
+
+  const metrics = buildMetrics(liga, equipos, partidos, clasificacion, stats, usuarios, currentUserId, minEquipos);
 
   logger.info('dashboard.api', 'Dashboard cargado', {
     ligaId,

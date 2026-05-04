@@ -155,3 +155,58 @@ export async function createCalendarForLeague(
   );
   return res.data;
 }
+
+// ---------------------------------------------------------------------------
+// Configuración del calendario
+// ---------------------------------------------------------------------------
+
+/** Respuesta de GET /partidos/ligas/{liga_id}/config-calendario */
+export interface CalendarConfigResponse {
+  tipo: 'ida' | 'ida_vuelta';
+  fecha_inicio: string; // YYYY-MM-DD
+  dias_partido: number[]; // 1=Lun…6=Sáb, 0=Dom (formato backend)
+  hora: string; // HH:MM
+}
+
+/**
+ * GET /partidos/ligas/{liga_id}/config-calendario
+ * Obtiene la configuración con la que se generó el calendario.
+ */
+export async function getCalendarConfig(
+  ligaId: number,
+): Promise<CalendarConfigResponse> {
+  const res = await apiClient.get<CalendarConfigResponse>(
+    `/partidos/ligas/${ligaId}/config-calendario`,
+  );
+  return res.data;
+}
+
+/**
+ * PUT /partidos/ligas/{liga_id}/calendario
+ * Regenera el calendario con nueva configuración (elimina el anterior y crea uno nuevo).
+ */
+export async function updateCalendarForLeague(
+  ligaId: number,
+  data: CreateCalendarRequest,
+): Promise<unknown> {
+  const res = await apiClient.put(`/partidos/ligas/${ligaId}/calendario`, data);
+  return res.data;
+}
+
+export interface DeleteCalendarResponse {
+  partidos_eliminados: number;
+  jornadas_eliminadas: number;
+}
+
+/**
+ * DELETE /partidos/ligas/{liga_id}/calendario
+ * Elimina todos los partidos y jornadas del calendario de la liga.
+ */
+export async function deleteCalendarForLeague(
+  ligaId: number,
+): Promise<DeleteCalendarResponse> {
+  const res = await apiClient.delete<DeleteCalendarResponse>(
+    `/partidos/ligas/${ligaId}/calendario`,
+  );
+  return res.data;
+}

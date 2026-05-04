@@ -15,6 +15,9 @@ import {
   getPartidosByLeague,
   getJornadasByLeague,
   createCalendarForLeague,
+  getCalendarConfig,
+  updateCalendarForLeague,
+  deleteCalendarForLeague,
   type PartidoConEquiposCalendario,
   type PartidoCalendarioApi,
   type JornadaConPartidosApi,
@@ -419,7 +422,7 @@ function toApiDays(uiDays: number[]): number[] {
   return uiDays.map((i) => (i === 6 ? 0 : i + 1));
 }
 
-/** Input del formulario de creación de calendario (espejo de CalendarConfigData) */
+/** Input del formulario de creación/edición de calendario (espejo de CalendarConfigData) */
 export interface CreateCalendarInput {
   type: 'one_way' | 'two_way';
   /** Fecha en formato UI: DD/MM/YYYY, YYYY-MM-DD o ISO */
@@ -428,6 +431,25 @@ export interface CreateCalendarInput {
   matchDays: number[];
   /** HH:MM */
   matchTime: string;
+}
+
+/**
+ * Convierte fecha API (YYYY-MM-DD) a formato UI (DD/MM/YYYY).
+ */
+function fromApiDate(fechaInicio: string): string {
+  const parts = fechaInicio.split('-');
+  if (parts.length === 3) {
+    const [y, m, d] = parts;
+    return `${d}/${m}/${y}`;
+  }
+  return fechaInicio;
+}
+
+/**
+ * Convierte días de la API (1=Lun…6=Sáb, 0=Dom) a formato UI (0=Lun…5=Sáb, 6=Dom).
+ */
+function fromApiDays(apiDays: number[]): number[] {
+  return apiDays.map((d) => (d === 0 ? 6 : d - 1));
 }
 
 // ---------------------------------------------------------------------------
@@ -484,6 +506,93 @@ export const calendarService = {
         error: err instanceof Error ? err.message : String(err),
       });
       return { success: false, error: 'No se pudo crear el calendario. Comprueba la conexión.' };
+    }
+  },
+
+  /**
+   * Obtiene la configuración actual del calendario en formato UI.
+   * Usado para precargar el formulario en modo edición.
+   */
+  async fetchCalendarConfig(ligaId: number): Promise<ServiceResult<CreateCalendarInput>> {
+    try {
+      const raw = await getCalendarConfig(ligaId);
+      const input: CreateCalendarInput = {
+        type: raw.tipo === 'ida' ? 'one_way' : 'two_way',
+        startDate: fromApiDate(raw.fecha_inicio),
+        matchDays: fromApiDays(raw.dias_partido),
+        matchTime: raw.hora,
+      };
+      return { success: true, data: input };
+    } catch (err: unknown) {
+      const axiosError = err as { response?: { status?: number } };
+      const status = axiosError?.response?.status;
+      if (status === 404) {
+        return { success: false, error: 'No se encontró la configuración del calendario.' };
+      }
+      logger.warn('calendarService', 'fetchCalendarConfig error', {
+        ligaId,
+        error: err instanceof Error ? err.message : String(err),
+      });
+      return { success: false, error: 'No se pudo cargar la configuración.' };
+    }
+  },
+
+  /**
+   * Actualiza el calendario existente con nueva configuración.
+   * PUT /partidos/ligas/{liga_id}/calendario — elimina el anterior y regenera.
+   */
+  async updateCalendar(ligaId: number, input: CreateCalendarInput): Promise<ServiceResult> {
+    const payload: CreateCalendarRequest = {
+      tipo: input.type === 'one_way' ? 'ida' : 'ida_vuelta',
+      fecha_inicio: toApiDate(input.startDate),
+      dias_partido: toApiDays(input.matchDays),
+      hora: input.matchTime,
+    };
+    try {
+      const data = await updateCalendarForLeague(ligaId, payload);
+      return { success: true, data };
+    } catch (err: unknown) {
+      const axiosError = err as { response?: { status?: number; data?: { detail?: string; message?: string } } };
+      const status = axiosError?.response?.status;
+      const detail =
+        axiosError?.response?.data?.detail ??
+        axiosError?.response?.data?.message;
+      if (status === 400 || status === 422) {
+        return { success: false, error: detail ?? 'Datos incorrectos. Revisa el formulario.' };
+      }
+      if (status != null && status >= 500) {
+        return { success: false, error: 'Error del servidor. Inténtalo de nuevo.' };
+      }
+      logger.warn('calendarService', 'updateCalendar error', {
+        ligaId,
+        error: err instanceof Error ? err.message : String(err),
+      });
+      return { success: false, error: 'No se pudo actualizar el calendario.' };
+    }
+  },
+
+  /**
+   * Elimina el calendario completo de la liga (partidos + jornadas).
+   * DELETE /partidos/ligas/{liga_id}/calendario
+   */
+  async deleteCalendar(ligaId: number): Promise<ServiceResult<{ partidos_eliminados: number; jornadas_eliminadas: number }>> {
+    try {
+      const data = await deleteCalendarForLeague(ligaId);
+      return { success: true, data };
+    } catch (err: unknown) {
+      const axiosError = err as { response?: { status?: number; data?: { detail?: string; message?: string } } };
+      const status = axiosError?.response?.status;
+      if (status === 403) {
+        return { success: false, error: 'No tienes permisos para eliminar el calendario.' };
+      }
+      if (status != null && status >= 500) {
+        return { success: false, error: 'Error del servidor. Inténtalo de nuevo.' };
+      }
+      logger.warn('calendarService', 'deleteCalendar error', {
+        ligaId,
+        error: err instanceof Error ? err.message : String(err),
+      });
+      return { success: false, error: 'No se pudo eliminar el calendario.' };
     }
   },
 

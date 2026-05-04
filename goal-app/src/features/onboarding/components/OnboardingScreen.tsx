@@ -197,7 +197,8 @@ function OnboardingScreenContent() {
         leagueName: league.name,
         role: league.role,
         userName: '',
-        teamName: undefined
+        teamName: undefined,
+        temporada: league.season,
       });
       router.push(routes.private.dashboard);
     },

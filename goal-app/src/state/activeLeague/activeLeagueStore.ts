@@ -19,6 +19,8 @@ export interface ActiveLeagueSession {
   leagueId: string;
   leagueName: string;
   role: LeagueRole;
+  /** Temporada de la liga, ej: "2025/26" */
+  temporada?: string;
 }
 
 interface ActiveLeagueState {

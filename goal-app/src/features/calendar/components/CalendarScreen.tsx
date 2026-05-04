@@ -6,7 +6,7 @@
  */
 
 import React, { useRef, useState, useEffect } from 'react';
-import { View, Text, ScrollView, Pressable, ActivityIndicator, RefreshControl } from 'react-native';
+import { View, Text, ScrollView, Pressable, ActivityIndicator, RefreshControl, Alert } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 
@@ -44,7 +44,7 @@ import { CalendarHeader } from './CalendarHeader';
 import { CalendarMainTabs } from './CalendarMainTabs';
 import { JourneyNavigator } from './JourneyNavigator';
 import { JourneyStatusTabs } from './JourneyStatusTabs';
-import { CalendarActionsMenu } from './CalendarActionsMenu';
+import { CalendarActionsMenu, type CalendarMenuState } from './CalendarActionsMenu';
 import { CalendarConfigModal } from './modals/CalendarConfigModal';
 import { CreateManualMatchModal } from './modals/CreateManualMatchModal';
 // Modales operativos de partido — viven en matches para reutilización cross-feature
@@ -72,6 +72,7 @@ import {
   getCalendarPermissions,
 } from '../utils/calendarFilters';
 import type { CalendarConfigData } from './modals/CalendarConfigModal';
+import type { CreateCalendarInput } from '../services/calendarService';
 import type { CreateManualMatchFormData } from './modals/CreateManualMatchModal';
 
 
@@ -353,6 +354,7 @@ export function CalendarScreen() {
   const { session } = useActiveLeague();
   const ligaId = session?.leagueId ? Number(session.leagueId) : 0;
   const leagueName = session?.leagueName ?? '–';
+  const temporada = session?.temporada ?? '–';
   const role = (session?.role ?? 'observer') as CalendarRole;
 
   // ── Datos reales del calendario ──
@@ -388,6 +390,7 @@ export function CalendarScreen() {
   const [calendarModalMode, setCalendarModalMode] = useState<'create' | 'edit'>('create');
   const [calendarModalError, setCalendarModalError] = useState<string | undefined>(undefined);
   const [calendarModalSubmitting, setCalendarModalSubmitting] = useState(false);
+  const [calendarModalInitialData, setCalendarModalInitialData] = useState<Partial<CreateCalendarInput> | undefined>(undefined);
   const [newMatchModalVisible, setNewMatchModalVisible] = useState(false);
   const [newMatchError, setNewMatchError] = useState<string | undefined>(undefined);
   const [newMatchSubmitting, setNewMatchSubmitting] = useState(false);
@@ -441,31 +444,77 @@ export function CalendarScreen() {
     if (journeyIndex < journeys.length - 1) setJourneyIndex((i) => i + 1);
   };
 
+  // ── Estado del calendario para el menú — 3 estados igual que la web ──
+  const hasMatchesInPlayOrFinished = journeys.some((j) =>
+    j.matches.some((m) => m.status === 'live' || m.status === 'finished'),
+  );
+  const calendarMenuState: CalendarMenuState =
+    viewState === 'no_calendar'
+      ? 'no_calendar'
+      : hasMatchesInPlayOrFinished
+      ? 'locked'
+      : 'editable';
+
   // ── Handlers del menú de admin ──
   const handleMenuPress = () => setMenuVisible(true);
 
   const handleOpenCreateCalendar = () => {
     setMenuVisible(false);
+    setCalendarModalInitialData(undefined);
     setCalendarModalMode('create');
     setCalendarModalError(undefined);
-    setCalendarModalVisible(true);
+    // setTimeout evita conflicto de Modals en Android al cerrar uno y abrir otro
+    setTimeout(() => setCalendarModalVisible(true), 150);
   };
 
-  const handleOpenEditCalendar = () => {
+  const handleOpenEditCalendar = async () => {
     setMenuVisible(false);
-    setCalendarModalMode('edit');
     setCalendarModalError(undefined);
-    setCalendarModalVisible(true);
+    // Cargar configuración actual para precargar el formulario
+    const result = await calendarService.fetchCalendarConfig(ligaId);
+    if (result.success && result.data) {
+      setCalendarModalInitialData(result.data);
+    } else {
+      setCalendarModalInitialData(undefined);
+    }
+    setCalendarModalMode('edit');
+    setTimeout(() => setCalendarModalVisible(true), 150);
+  };
+
+  const handleOpenDeleteCalendar = () => {
+    setMenuVisible(false);
+    // Confirmación nativa antes de eliminar
+    setTimeout(() => {
+      Alert.alert(
+        'Eliminar calendario',
+        'Se eliminarán todos los partidos y jornadas. Esta acción no se puede deshacer.',
+        [
+          { text: 'Cancelar', style: 'cancel' },
+          {
+            text: 'Eliminar',
+            style: 'destructive',
+            onPress: async () => {
+              const result = await calendarService.deleteCalendar(ligaId);
+              if (result.success) {
+                refetchJourneys();
+              } else {
+                Alert.alert('Error', result.error ?? 'No se pudo eliminar el calendario.');
+              }
+            },
+          },
+        ],
+      );
+    }, 200);
   };
 
   const handleOpenAddMatch = () => {
     setMenuVisible(false);
-    setNewMatchModalVisible(true);
+    setTimeout(() => setNewMatchModalVisible(true), 150);
   };
 
   const handleOpenAddTeam = () => {
     setMenuVisible(false);
-    setCreateTeamVisible(true);
+    setTimeout(() => setCreateTeamVisible(true), 150);
   };
 
   // ── Handlers de acciones en jornada ──
@@ -475,18 +524,20 @@ export function CalendarScreen() {
 
   // ── Confirm de modales ──
   const handleCalendarConfigConfirm = async (data: CalendarConfigData) => {
-    if (calendarModalMode !== 'create') {
-      setCalendarModalVisible(false);
-      return;
-    }
     setCalendarModalError(undefined);
     setCalendarModalSubmitting(true);
-    const result = await calendarService.createCalendar(ligaId, {
+
+    const input: CreateCalendarInput = {
       type: data.type,
       startDate: data.startDate,
       matchDays: data.matchDays,
       matchTime: data.matchTime,
-    });
+    };
+
+    const result = calendarModalMode === 'create'
+      ? await calendarService.createCalendar(ligaId, input)
+      : await calendarService.updateCalendar(ligaId, input);
+
     setCalendarModalSubmitting(false);
     if (result.success) {
       setCalendarModalVisible(false);
@@ -631,7 +682,7 @@ export function CalendarScreen() {
         <JourneyNavigator
           journeyNumber={activeJourney.number}
           totalJourneys={journeys.length}
-          season="–"
+          season={temporada}
           onPrev={handlePrevJourney}
           onNext={handleNextJourney}
         />
@@ -701,7 +752,7 @@ export function CalendarScreen() {
       {/* ── Header premium ── */}
       <CalendarHeader
         leagueName={leagueName}
-        season=""
+        season={temporada}
         // TODO: pasar logo real cuando el store incluya crestUrl de la liga activa
         hasMultipleSeasons={false}
         onMenuPress={handleMenuPress}
@@ -751,9 +802,11 @@ export function CalendarScreen() {
       <CalendarActionsMenu
         visible={menuVisible}
         permissions={calendarPerms}
+        calendarMenuState={calendarMenuState}
         onClose={() => setMenuVisible(false)}
         onCreateCalendar={handleOpenCreateCalendar}
         onEditCalendar={handleOpenEditCalendar}
+        onDeleteCalendar={handleOpenDeleteCalendar}
         onAddMatch={handleOpenAddMatch}
         onAddTeam={calendarPerms.canAddMatch ? handleOpenAddTeam : undefined}
       />
@@ -762,6 +815,7 @@ export function CalendarScreen() {
       <CalendarConfigModal
         visible={calendarModalVisible}
         mode={calendarModalMode}
+        initialData={calendarModalInitialData}
         error={calendarModalError}
         isSubmitting={calendarModalSubmitting}
         onConfirm={handleCalendarConfigConfirm}

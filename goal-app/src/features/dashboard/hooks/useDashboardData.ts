@@ -20,6 +20,7 @@
  */
 
 import { useState, useEffect, useCallback, useRef } from "react";
+import { useFocusEffect } from "@react-navigation/native";
 import type { DashboardData } from "@/src/shared/types/dashboard.types";
 import { fetchDashboardData } from "@/src/features/dashboard/api/dashboard.api";
 import { logger } from "@/src/shared/utils/logger";

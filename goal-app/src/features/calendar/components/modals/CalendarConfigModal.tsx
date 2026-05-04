@@ -258,6 +258,16 @@ function CalendarConfigModalComponent({
     }
   }, [visible, mode, initialData]);
 
+  // Cargar datos iniciales al abrir en modo edición
+  useEffect(() => {
+    if (visible && mode === 'edit' && initialData) {
+      setCalType(initialData.type ?? 'two_way');
+      setStartDate(initialData.startDate ?? '');
+      setMatchDays(initialData.matchDays ?? [5, 6]);
+      setMatchTime(initialData.matchTime ?? '');
+    }
+  }, [visible, mode, initialData]);
+
   useEffect(() => {
     if (visible) {
       Animated.parallel([
@@ -476,7 +486,9 @@ function CalendarConfigModalComponent({
                     fontWeight: '700',
                   }}
                 >
-                  {isSubmitting ? 'Creando…' : isCreate ? 'Crear calendario' : 'Guardar cambios'}
+                  {isSubmitting
+                    ? isCreate ? 'Creando…' : 'Guardando…'
+                    : isCreate ? 'Crear calendario' : 'Guardar cambios'}
                 </Text>
               </TouchableOpacity>
 

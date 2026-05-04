@@ -4,8 +4,10 @@
  * Bottom sheet de acciones del calendario que se abre desde el
  * icono de menú del CalendarHeader.
  *
- * Solo muestra las acciones que el rol actual puede realizar.
- * Las acciones abren los modales correspondientes en CalendarScreen.
+ * Las acciones disponibles dependen del rol Y del estado del calendario:
+ * - no_calendar: Crear calendario / Nuevo partido / Nuevo equipo
+ * - editable:    Editar calendario / Eliminar calendario / Nuevo partido
+ * - locked:      Solo "Nuevo partido" (calendario bloqueado por partidos en juego)
  */
 
 import React, { useRef, useEffect, memo } from 'react';
@@ -28,12 +30,18 @@ import type { CalendarPermissions } from '../types/calendar.types';
 // Tipos
 // ---------------------------------------------------------------------------
 
+/** Estado del calendario — controla qué acciones se muestran */
+export type CalendarMenuState = 'no_calendar' | 'editable' | 'locked';
+
 interface CalendarActionsMenuProps {
   visible: boolean;
   permissions: CalendarPermissions;
+  /** Estado del calendario para condicionar las acciones disponibles */
+  calendarMenuState: CalendarMenuState;
   onClose: () => void;
   onCreateCalendar: () => void;
   onEditCalendar: () => void;
+  onDeleteCalendar: () => void;
   onAddMatch: () => void;
   /** Abre CreateTeamModal desde el menú — solo admin */
   onAddTeam?: () => void;
@@ -46,13 +54,19 @@ interface ActionItemProps {
   onPress: () => void;
   /** Si true, muestra separador inferior */
   divider?: boolean;
+  /** Variante visual para acciones destructivas */
+  destructive?: boolean;
 }
 
 // ---------------------------------------------------------------------------
 // Sub-componente: item de acción
 // ---------------------------------------------------------------------------
 
-function ActionItem({ icon, label, description, onPress, divider = false }: ActionItemProps) {
+function ActionItem({ icon, label, description, onPress, divider = false, destructive = false }: ActionItemProps) {
+  const iconColor = destructive ? Colors.semantic.error : Colors.text.primary;
+  const labelColor = destructive ? Colors.semantic.error : Colors.text.primary;
+  const bgColor = destructive ? `${Colors.semantic.error}18` : Colors.bg.surface2;
+
   return (
     <>
       <TouchableOpacity
@@ -71,17 +85,17 @@ function ActionItem({ icon, label, description, onPress, divider = false }: Acti
             width: 44,
             height: 44,
             borderRadius: 22,
-            backgroundColor: Colors.bg.surface2,
+            backgroundColor: bgColor,
             alignItems: 'center',
             justifyContent: 'center',
           }}
         >
-          <Ionicons name={icon} size={20} color={Colors.text.primary} />
+          <Ionicons name={icon} size={20} color={iconColor} />
         </View>
 
         {/* Texto */}
         <View style={{ flex: 1 }}>
-          <Text style={{ color: Colors.text.primary, fontSize: theme.fontSize.md, fontWeight: '600' }}>
+          <Text style={{ color: labelColor, fontSize: theme.fontSize.md, fontWeight: '600' }}>
             {label}
           </Text>
           <Text style={{ color: Colors.text.secondary, fontSize: 12, marginTop: 2 }}>
@@ -106,9 +120,11 @@ function ActionItem({ icon, label, description, onPress, divider = false }: Acti
 function CalendarActionsMenuComponent({
   visible,
   permissions,
+  calendarMenuState,
   onClose,
   onCreateCalendar,
   onEditCalendar,
+  onDeleteCalendar,
   onAddMatch,
   onAddTeam,
 }: CalendarActionsMenuProps) {
@@ -147,14 +163,16 @@ function CalendarActionsMenuComponent({
     }
   }, [visible, opacityAnim, slideAnim]);
 
-  // Si no hay ninguna acción disponible, no renderizar
-  const hasActions =
-    permissions.canCreateCalendar ||
-    permissions.canEditCalendar ||
-    permissions.canAddMatch ||
-    !!onAddTeam;
+  // Acciones disponibles según estado y permisos
+  const canCreate = permissions.canCreateCalendar && calendarMenuState === 'no_calendar';
+  const canEdit = permissions.canEditCalendar && calendarMenuState === 'editable';
+  const canDelete = permissions.canEditCalendar && calendarMenuState === 'editable';
+  const canAddMatch = permissions.canAddMatch;
+  const hasActions = canCreate || canEdit || canDelete || canAddMatch || !!onAddTeam;
 
   if (!hasActions) return null;
+
+  const isLocked = calendarMenuState === 'locked';
 
   return (
     <Modal
@@ -215,32 +233,65 @@ function CalendarActionsMenuComponent({
             style={{
               color: Colors.text.secondary,
               fontSize: theme.fontSize.xs,
-              marginBottom: 20,
+              marginBottom: isLocked ? 12 : 20,
             }}
           >
             Elige una acción para continuar
           </Text>
 
-          {/* Acciones */}
-          {permissions.canCreateCalendar && (
+          {/* Banner de calendario bloqueado */}
+          {isLocked && (
+            <View
+              style={{
+                flexDirection: 'row',
+                alignItems: 'center',
+                gap: 10,
+                backgroundColor: `${Colors.semantic.warning}18`,
+                borderRadius: 12,
+                borderWidth: 1,
+                borderColor: `${Colors.semantic.warning}40`,
+                paddingHorizontal: 14,
+                paddingVertical: 10,
+                marginBottom: 20,
+              }}
+            >
+              <Ionicons name="lock-closed-outline" size={16} color={Colors.semantic.warning} />
+              <Text style={{ color: Colors.semantic.warning, fontSize: 12, flex: 1, lineHeight: 16 }}>
+                El calendario está bloqueado mientras hay partidos en juego o finalizados.
+              </Text>
+            </View>
+          )}
+
+          {/* Acciones según estado del calendario */}
+          {canCreate && (
             <ActionItem
               icon="calendar-outline"
               label="Crear calendario"
               description="Genera el calendario automático de la liga"
               onPress={onCreateCalendar}
-              divider={permissions.canEditCalendar || permissions.canAddMatch}
+              divider={canAddMatch || !!onAddTeam}
             />
           )}
-          {permissions.canEditCalendar && (
+          {canEdit && (
             <ActionItem
               icon="create-outline"
               label="Editar calendario"
               description="Modifica la configuración del calendario"
               onPress={onEditCalendar}
-              divider={permissions.canAddMatch}
+              divider={canDelete || canAddMatch}
             />
           )}
-          {permissions.canAddMatch && (
+          {canDelete && (
+            <ActionItem
+              icon="trash-outline"
+              label="Eliminar calendario"
+              description="Elimina todos los partidos y jornadas"
+              onPress={onDeleteCalendar}
+              divider={canAddMatch || !!onAddTeam}
+              destructive
+            />
+          )}
+          {canAddMatch && (
             <ActionItem
               icon="add-circle-outline"
               label="Nuevo partido"

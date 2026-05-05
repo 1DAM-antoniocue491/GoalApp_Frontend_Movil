@@ -5,12 +5,15 @@
  * PATCH /usuarios/me  → actualizar datos del perfil
  */
 
-import { apiClient } from '@/src/shared/api/client';
-import type { UserProfileResponse, UpdateUserProfileRequest } from '../types/profile.types';
+import { apiClient } from "@/src/shared/api/client";
+import type {
+  UserProfileResponse,
+  UpdateUserProfileRequest,
+} from "../types/profile.types";
 
 /** Obtener perfil del usuario autenticado */
 export async function getMyProfile(): Promise<UserProfileResponse> {
-  const { data } = await apiClient.get<UserProfileResponse>('/auth/me');
+  const { data } = await apiClient.get<UserProfileResponse>("/auth/me");
   return data;
 }
 
@@ -18,6 +21,9 @@ export async function getMyProfile(): Promise<UserProfileResponse> {
 export async function updateMyProfile(
   payload: UpdateUserProfileRequest,
 ): Promise<UserProfileResponse> {
-  const { data } = await apiClient.patch<UserProfileResponse>('/usuarios/me', payload);
+  const { data } = await apiClient.patch<UserProfileResponse>(
+    "/usuarios/me",
+    payload,
+  );
   return data;
 }

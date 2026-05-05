@@ -1,160 +1,178 @@
 /**
  * matches.api.ts
  *
- * Capa HTTP del módulo de partidos.
- *
- * ENDPOINTS CONFIRMADOS (verificados en código existente del proyecto):
- *   GET  /partidos/ligas/{liga_id}/con-equipos   — partidos con equipos embebidos
- *   GET  /partidos/ligas/{liga_id}/jornadas       — partidos agrupados por jornada
- *
- * ENDPOINTS NO CONFIRMADOS — comentados con TODO API:
- *   GET  /partidos/{partido_id}                          — detalle individual
- *   POST /partidos/ligas/{liga_id}/crear-partido         — partido manual
- *   POST /partidos/{partido_id}/iniciar                  — iniciar partido
- *   POST /partidos/{partido_id}/finalizar                — finalizar partido
- *   POST /partidos/{partido_id}/eventos                  — registrar evento
- *   GET  /partidos/{partido_id}/plantilla                — plantilla/squads
+ * Capa HTTP real del módulo de partidos.
+ * Está alineada con la integración web entregada:
+ * - Crear partido manual: POST /partidos/
+ * - Iniciar/finalizar: PUT /partidos/{id}/iniciar|finalizar
+ * - Eventos: GET /eventos/partido/{id} y POST /eventos/
  *
  * Reglas:
- * - Usar apiClient, nunca fetch directo
- * - No hardcodear BASE_URL ni /api/v1 (apiClient lo gestiona)
- * - Los endpoints no confirmados devuelven null — no lanzan
+ * - Usar apiClient, nunca fetch directo.
+ * - No duplicar /api/v1.
+ * - No devolver mocks ni stubs silenciosos para endpoints confirmados.
  */
 
-import { apiClient } from '@/src/shared/api/client';
+import { apiClient } from "@/src/shared/api/client";
 import type {
-  PartidoApi,
-  CreateManualMatchRequest,
+  CalendarCreatePayload,
+  CalendarUpdatePayload,
+  CreateMatchPayload,
   CreateMatchEventRequest,
   FinishMatchRequest,
-} from '../types/matches.types';
+  JornadaPartidosApi,
+  MatchEventResponse,
+  PartidoApi,
+  UpdateMatchPayload,
+} from "../types/matches.types";
 
 // ---------------------------------------------------------------------------
-// Endpoints confirmados
+// Lecturas de partidos
 // ---------------------------------------------------------------------------
 
-/**
- * GET /partidos/ligas/{liga_id}/con-equipos
- * Todos los partidos de la liga con equipos embebidos.
- * Mismo endpoint que usan dashboard.api.ts y calendar.api.ts (fallback).
- * Se expone aquí para que matchesService lo consuma directamente sin
- * depender de esos módulos.
- */
-export async function getMatchesByLeague(ligaId: number): Promise<PartidoApi[]> {
+export async function getMatchesByLeague(
+  ligaId: number,
+): Promise<PartidoApi[]> {
+  const res = await apiClient.get<PartidoApi[]>(`/partidos/ligas/${ligaId}`);
+  return Array.isArray(res.data) ? res.data : [];
+}
+
+export async function getMatchesWithTeams(
+  ligaId: number,
+): Promise<PartidoApi[]> {
   const res = await apiClient.get<PartidoApi[] | null>(
     `/partidos/ligas/${ligaId}/con-equipos`,
   );
   return Array.isArray(res.data) ? res.data : [];
 }
 
-/**
- * GET /partidos/ligas/{liga_id}/jornadas
- * Partidos agrupados por jornada.
- * Devuelve unknown para que el service normalice la forma variable del backend.
- * El servicio de calendario ya tiene normalizeJornadasResponse para este propósito.
- */
+export async function getUpcomingMatches(
+  ligaId: number,
+  limit = 3,
+): Promise<PartidoApi[]> {
+  const res = await apiClient.get<PartidoApi[]>(
+    `/partidos/proximos?limit=${limit}&liga_id=${ligaId}`,
+  );
+  return Array.isArray(res.data) ? res.data : [];
+}
+
+export async function getLiveMatches(ligaId: number): Promise<PartidoApi[]> {
+  const res = await apiClient.get<PartidoApi[]>(
+    `/partidos/en-vivo?liga_id=${ligaId}`,
+  );
+  return Array.isArray(res.data) ? res.data : [];
+}
+
+export async function getMatchById(partidoId: number): Promise<PartidoApi> {
+  const res = await apiClient.get<PartidoApi>(`/partidos/${partidoId}`);
+  return res.data;
+}
+
 export async function getJornadasByLeague(ligaId: number): Promise<unknown> {
-  const res = await apiClient.get<unknown>(`/partidos/ligas/${ligaId}/jornadas`);
+  const res = await apiClient.get<
+    JornadaPartidosApi[] | { jornadas?: JornadaPartidosApi[] } | PartidoApi[]
+  >(`/partidos/ligas/${ligaId}/jornadas`);
   return res.data;
 }
 
 // ---------------------------------------------------------------------------
-// Endpoints no confirmados — TODO API
+// Mutaciones de partido
 // ---------------------------------------------------------------------------
 
-/**
- * GET /partidos/{partido_id}
- *
- * TODO API: endpoint no encontrado en OpenAPI local ni en código existente.
- * No implementar llamada real hasta que el backend lo exponga.
- */
-export async function getMatchById(_matchId: number): Promise<PartidoApi | null> {
-  // TODO API: descomentar cuando el backend exponga GET /partidos/{partido_id}
-  // const res = await apiClient.get<PartidoApi>(`/partidos/${_matchId}`);
-  // return res.data;
-  return null;
-}
-
-/**
- * POST /partidos/ligas/{liga_id}/crear-partido
- *
- * TODO API: endpoint no confirmado. La ruta sigue el patrón de crear-calendario
- * del mismo módulo, pero body y respuesta deben verificarse contra el backend.
- */
 export async function createManualMatch(
-  ligaId: number,
-  data: CreateManualMatchRequest,
-): Promise<PartidoApi | null> {
-  // TODO API: descomentar cuando el backend exponga POST /partidos/ligas/{liga_id}/crear-partido
-  // const res = await apiClient.post<PartidoApi>(
-  //   `/partidos/ligas/${ligaId}/crear-partido`,
-  //   data,
-  // );
-  // return res.data;
-  void ligaId;
-  void data;
-  return null;
+  data: CreateMatchPayload,
+): Promise<PartidoApi> {
+  const res = await apiClient.post<PartidoApi>("/partidos/", data);
+  return res.data;
 }
 
-/**
- * POST /partidos/{partido_id}/iniciar
- *
- * TODO API: endpoint no confirmado. El hook useMatchActionModals referencia
- * PATCH /matches/:id/start (inglés), que no coincide con la convención del
- * backend (español, /partidos/). No implementar hasta confirmar ruta y método.
- */
-export async function startMatch(_matchId: number): Promise<PartidoApi | null> {
-  // TODO API: descomentar cuando el backend confirme ruta y método
-  // Probable: POST /partidos/{_matchId}/iniciar
-  // const res = await apiClient.post<PartidoApi>(`/partidos/${_matchId}/iniciar`, {});
-  // return res.data;
-  return null;
+export async function updateMatch(
+  partidoId: number,
+  data: UpdateMatchPayload,
+): Promise<PartidoApi> {
+  const res = await apiClient.put<PartidoApi>(`/partidos/${partidoId}`, data);
+  return res.data;
 }
 
-/**
- * POST /partidos/{partido_id}/finalizar
- *
- * TODO API: endpoint no confirmado. No implementar llamada real hasta verificar
- * ruta exacta, método HTTP y campos del body con el backend.
- */
+export async function startMatch(partidoId: number): Promise<PartidoApi> {
+  const res = await apiClient.put<PartidoApi>(
+    `/partidos/${partidoId}/iniciar`,
+    {},
+  );
+  return res.data;
+}
+
 export async function finishMatch(
-  _matchId: number,
-  _data: FinishMatchRequest,
-): Promise<PartidoApi | null> {
-  // TODO API: descomentar cuando el backend confirme ruta y método
-  // Probable: POST /partidos/{_matchId}/finalizar
-  // const res = await apiClient.post<PartidoApi>(`/partidos/${_matchId}/finalizar`, _data);
-  // return res.data;
-  return null;
+  partidoId: number,
+  data: FinishMatchRequest,
+): Promise<PartidoApi> {
+  const res = await apiClient.put<PartidoApi>(
+    `/partidos/${partidoId}/finalizar`,
+    data,
+  );
+  return res.data;
 }
 
-/**
- * POST /partidos/{partido_id}/eventos
- *
- * TODO API: endpoint no confirmado. Cubre gol, tarjeta amarilla, tarjeta roja
- * y sustitución. No implementar hasta verificar ruta, método y body con backend.
- */
-export async function createMatchEvent(
-  _matchId: number,
-  _data: CreateMatchEventRequest,
+// ---------------------------------------------------------------------------
+// Calendario de partidos
+// ---------------------------------------------------------------------------
+
+export async function createCalendar(
+  ligaId: number,
+  data: CalendarCreatePayload,
 ): Promise<unknown> {
-  // TODO API: descomentar cuando el backend exponga POST /partidos/{_matchId}/eventos
-  // const res = await apiClient.post<unknown>(`/partidos/${_matchId}/eventos`, _data);
-  // return res.data;
-  return null;
+  const res = await apiClient.post(
+    `/partidos/ligas/${ligaId}/crear-calendario`,
+    data,
+  );
+  return res.data;
 }
 
-/**
- * GET /partidos/{partido_id}/plantilla
- *
- * TODO API: endpoint no confirmado. Los modales (GoalEventModal, YellowCardModal,
- * etc.) referencian GET /matches/:id/squads (inglés, sin verificar).
- * No implementar hasta confirmar ruta real en el backend.
- */
-export async function getMatchSquads(_matchId: number): Promise<unknown> {
-  // TODO API: descomentar cuando el backend exponga el endpoint de plantilla
-  // Probable: GET /partidos/{_matchId}/plantilla  (o /convocatoria)
-  // const res = await apiClient.get<unknown>(`/partidos/${_matchId}/plantilla`);
-  // return res.data;
+export async function getCalendarConfig(ligaId: number): Promise<unknown> {
+  const res = await apiClient.get(
+    `/partidos/ligas/${ligaId}/config-calendario`,
+  );
+  return res.data;
+}
+
+export async function deleteCalendar(ligaId: number): Promise<void> {
+  await apiClient.delete(`/partidos/ligas/${ligaId}/calendario`);
+}
+
+export async function updateCalendar(
+  ligaId: number,
+  data: CalendarUpdatePayload,
+): Promise<unknown> {
+  const res = await apiClient.put(`/partidos/ligas/${ligaId}/calendario`, data);
+  return res.data;
+}
+
+// ---------------------------------------------------------------------------
+// Eventos de partido
+// ---------------------------------------------------------------------------
+
+export async function getMatchEvents(
+  partidoId: number,
+): Promise<MatchEventResponse[]> {
+  const res = await apiClient.get<MatchEventResponse[]>(
+    `/eventos/partido/${partidoId}`,
+  );
+  return Array.isArray(res.data) ? res.data : [];
+}
+
+export async function createMatchEvent(
+  data: CreateMatchEventRequest,
+): Promise<MatchEventResponse> {
+  const res = await apiClient.post<MatchEventResponse>("/eventos/", data);
+  return res.data;
+}
+
+// ---------------------------------------------------------------------------
+// Plantillas / convocatoria del partido
+// ---------------------------------------------------------------------------
+
+export async function getMatchSquads(_partidoId: number): Promise<unknown> {
+  // El archivo web entregado no confirma endpoint de plantilla de partido.
+  // Mantener como fallo controlado en service hasta que backend lo documente.
   return null;
 }

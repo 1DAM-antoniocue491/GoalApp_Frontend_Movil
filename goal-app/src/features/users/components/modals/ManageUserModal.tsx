@@ -2,12 +2,12 @@
  * ManageUserModal
  *
  * Modal para gestionar un usuario existente dentro de la liga.
- * Permite: actualizar rol, datos de equipo, datos de jugador y eliminar.
+ * Replica la lógica web real:
+ * - Actualizar rol: PUT /ligas/{ligaId}/usuarios/{usuarioId}/rol
+ * - Actualizar estado: PUT /ligas/{ligaId}/usuarios/{usuarioId}/estado
+ * - Eliminar usuario: DELETE /ligas/{ligaId}/usuarios/{usuarioId}
  *
- * Reutiliza:
- * - OptionSelectField → selects de rol y equipo
- * - Button → footer Cancelar / Actualizar
- * - Colors, theme, styles (shared)
+ * No edita datos de equipo/jugador porque esos endpoints no están en el flujo web entregado.
  */
 
 import React, { useEffect, useState } from 'react';
@@ -15,36 +15,34 @@ import {
   Modal,
   View,
   Text,
-  TextInput,
   TouchableOpacity,
   ScrollView,
   KeyboardAvoidingView,
   Platform,
   Pressable,
   Switch,
+  ActivityIndicator,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { Colors } from '@/src/shared/constants/colors';
 import { theme } from '@/src/shared/styles/theme';
-import { styles } from '@/src/shared/styles';
 import { Button } from '@/src/shared/components/ui/Button';
 import { OptionSelectField, SelectOption } from '@/src/shared/components/ui/OptionSelectField';
 import type { LeagueUser, ManageUserFormData, UserRole } from '../../types/users.types';
-
-// ─── Tipos ────────────────────────────────────────────────────────────────────
 
 interface ManageUserModalProps {
   user: LeagueUser | null;
   visible: boolean;
   onClose: () => void;
-  onUpdate: (userId: string, data: ManageUserFormData) => void;
-  onRemove: (userId: string) => void;
-  teamOptions?: SelectOption[];
+  onUpdate: (userId: string, data: ManageUserFormData) => Promise<boolean> | boolean;
+  onRemove: (userId: string) => Promise<boolean> | boolean;
+  roleOptions?: SelectOption[];
+  isUpdating?: boolean;
+  isRemoving?: boolean;
+  error?: string | null;
 }
 
-// ─── Constantes ───────────────────────────────────────────────────────────────
-
-const ROLE_OPTIONS: SelectOption[] = [
+const FALLBACK_ROLE_OPTIONS: SelectOption[] = [
   { value: 'admin', label: 'Administrador' },
   { value: 'coach', label: 'Entrenador' },
   { value: 'player', label: 'Jugador' },
@@ -52,54 +50,55 @@ const ROLE_OPTIONS: SelectOption[] = [
   { value: 'observer', label: 'Observador' },
 ];
 
-const DEFAULT_TEAM_OPTIONS: SelectOption[] = [
-  { value: 'team_1', label: 'Real Madrid CF' },
-  { value: 'team_2', label: 'FC Barcelona' },
-  { value: 'team_3', label: 'Atlético de Madrid' },
-];
-
-// ─── Componente ───────────────────────────────────────────────────────────────
-
 export function ManageUserModal({
   user,
   visible,
   onClose,
   onUpdate,
   onRemove,
-  teamOptions = DEFAULT_TEAM_OPTIONS,
+  roleOptions = FALLBACK_ROLE_OPTIONS,
+  isUpdating = false,
+  isRemoving = false,
+  error,
 }: ManageUserModalProps) {
   const [form, setForm] = useState<ManageUserFormData>({
     role: '',
-    teamId: '',
-    jersey: '',
-    position: '',
-    isCaptain: false,
+    active: true,
   });
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
 
-  // Sincronizar el form cuando cambia el usuario seleccionado
   useEffect(() => {
-    if (user) {
+    if (user && visible) {
       setForm({
         role: user.role,
-        teamId: user.teamId ?? '',
-        jersey: user.jersey?.toString() ?? '',
-        position: user.position ?? '',
-        isCaptain: user.isCaptain ?? false,
+        active: user.active,
       });
+      setShowDeleteConfirm(false);
     }
-  }, [user]);
+  }, [user, visible]);
 
   if (!user) return null;
 
-  const isPlayer = form.role === 'player';
-  const needsTeam = form.role === 'player' || form.role === 'coach' || form.role === 'delegate';
+  const isBusy = isUpdating || isRemoving;
+  const hasChanges = form.role !== user.role || form.active !== user.active;
 
   function handleChange(field: keyof ManageUserFormData, value: string | boolean) {
     setForm(prev => ({ ...prev, [field]: value }));
   }
 
-  // Iniciales del nombre para el avatar fallback
-  const initials = user.name
+  async function handleUpdate() {
+    if (isBusy || !hasChanges || user === null) return;
+    const success = await onUpdate(user.id, form);
+    if (success) onClose();
+  }
+
+  async function handleRemove() {
+    if (isBusy || user === null) return;
+    const success = await onRemove(user.id);
+    if (success) onClose();
+  }
+
+  const initials = (user.name || user.email || 'U')
     .split(' ')
     .map(w => w[0])
     .slice(0, 2)
@@ -110,162 +109,172 @@ export function ManageUserModal({
     <Modal visible={visible} animationType="slide" transparent onRequestClose={onClose}>
       <Pressable
         style={{
-          // style: rgba no tiene clase Tailwind directa
           flex: 1,
-          backgroundColor: 'rgba(0,0,0,0.70)',
+          backgroundColor: 'rgba(0,0,0,0.72)',
           justifyContent: 'flex-end',
         }}
-        onPress={onClose}
+        onPress={isBusy ? undefined : onClose}
       >
         <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
           <Pressable>
             <View
               style={{
-                // style: borderRadius solo en esquinas superiores
                 backgroundColor: Colors.bg.surface1,
                 borderTopLeftRadius: theme.borderRadius.xl,
                 borderTopRightRadius: theme.borderRadius.xl,
                 paddingHorizontal: theme.spacing.xl,
                 paddingTop: theme.spacing.lg,
                 paddingBottom: theme.spacing.xxl,
+                borderWidth: 1,
+                borderColor: Colors.bg.surface2,
                 shadowColor: '#000',
                 shadowOffset: { width: 0, height: -4 },
                 shadowOpacity: 0.4,
                 shadowRadius: 12,
                 elevation: 20,
+                maxHeight: '88%',
               }}
             >
-              {/* ── Header ── */}
+              {/* Header */}
               <View className="flex-row items-center justify-between mb-5">
-                <Text style={{ color: Colors.text.primary, fontSize: theme.fontSize.xl, fontWeight: '700' }}>
+                <Text style={{ color: Colors.text.primary, fontSize: theme.fontSize.xl, fontWeight: '800' }}>
                   Gestionar usuario
                 </Text>
-                <TouchableOpacity onPress={onClose} hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}>
+                <TouchableOpacity onPress={onClose} disabled={isBusy} hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}>
                   <Ionicons name="close" size={22} color={Colors.text.secondary} />
                 </TouchableOpacity>
               </View>
 
-              {/* ── Identidad del usuario ── */}
+              {/* Identidad del usuario */}
               <View
                 className="flex-row items-center mb-5 p-4 rounded-2xl"
                 style={{ backgroundColor: Colors.bg.surface2 }}
               >
-                {/* Avatar con iniciales */}
                 <View
                   style={{
-                    // style: tamaño exacto y color de fondo dinámico
-                    width: 44,
-                    height: 44,
-                    borderRadius: 22,
+                    width: 48,
+                    height: 48,
+                    borderRadius: 24,
                     backgroundColor: Colors.bg.base,
                     alignItems: 'center',
                     justifyContent: 'center',
                     marginRight: theme.spacing.md,
+                    borderWidth: 1,
+                    borderColor: Colors.brand.primary,
                   }}
                 >
-                  <Text style={{ color: Colors.brand.primary, fontSize: theme.fontSize.md, fontWeight: '700' }}>
+                  <Text style={{ color: Colors.brand.primary, fontSize: theme.fontSize.md, fontWeight: '800' }}>
                     {initials}
                   </Text>
                 </View>
                 <View style={{ flex: 1 }}>
-                  <Text style={{ color: Colors.text.primary, fontSize: theme.fontSize.md, fontWeight: '600' }}>
-                    {user.name}
+                  <Text style={{ color: Colors.text.primary, fontSize: theme.fontSize.md, fontWeight: '700' }} numberOfLines={1}>
+                    {user.name || 'Usuario sin nombre'}
                   </Text>
-                  <Text style={{ color: Colors.text.secondary, fontSize: theme.fontSize.xs, marginTop: 2 }}>
-                    {user.email}
+                  <Text style={{ color: Colors.text.secondary, fontSize: theme.fontSize.xs, marginTop: 3 }} numberOfLines={1}>
+                    {user.email || 'Sin email'}
                   </Text>
                 </View>
               </View>
 
-              <ScrollView showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
+              {error ? (
+                <View
+                  style={{
+                    backgroundColor: 'rgba(255,69,52,0.10)',
+                    borderWidth: 1,
+                    borderColor: 'rgba(255,69,52,0.35)',
+                    borderRadius: theme.borderRadius.lg,
+                    padding: theme.spacing.md,
+                    marginBottom: theme.spacing.lg,
+                  }}
+                >
+                  <Text style={{ color: Colors.semantic.error, fontSize: theme.fontSize.sm, lineHeight: 20 }}>{error}</Text>
+                </View>
+              ) : null}
 
+              <ScrollView showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
                 {/* Rol */}
                 <View className="mb-4">
                   <OptionSelectField
                     label="Rol en la liga"
                     value={form.role}
-                    options={ROLE_OPTIONS}
+                    options={roleOptions.length > 0 ? roleOptions : FALLBACK_ROLE_OPTIONS}
                     placeholder="Selecciona un rol"
                     onChange={v => handleChange('role', v as UserRole)}
                   />
                 </View>
 
-                {/* Equipo (si aplica) */}
-                {needsTeam && (
-                  <View className="mb-4">
-                    <OptionSelectField
-                      label="Equipo"
-                      value={form.teamId}
-                      options={teamOptions}
-                      placeholder="Selecciona un equipo"
-                      onChange={v => handleChange('teamId', v)}
-                    />
-                  </View>
-                )}
-
-                {/* Campos de jugador */}
-                {isPlayer && (
-                  <>
-                    <View className="flex-row gap-3 mb-4">
-                      <View style={{ flex: 1 }}>
-                        <Text className={styles.label} style={{ marginBottom: 6 }}>Dorsal</Text>
-                        <View className={styles.inputRow}>
-                          <TextInput
-                            className={styles.input}
-                            placeholder="Ej: 10"
-                            placeholderTextColor={styles.inputPlaceholder}
-                            value={form.jersey}
-                            onChangeText={v => handleChange('jersey', v)}
-                            keyboardType="numeric"
-                            maxLength={2}
-                          />
-                        </View>
-                      </View>
-                      <View style={{ flex: 2 }}>
-                        <Text className={styles.label} style={{ marginBottom: 6 }}>Posición</Text>
-                        <View className={styles.inputRow}>
-                          <TextInput
-                            className={styles.input}
-                            placeholder="Ej: Delantero"
-                            placeholderTextColor={styles.inputPlaceholder}
-                            value={form.position}
-                            onChangeText={v => handleChange('position', v)}
-                          />
-                        </View>
-                      </View>
-                    </View>
-
-                    {/* Capitán — toggle */}
-                    <View
-                      className="flex-row items-center justify-between mb-4 px-4 rounded-2xl"
-                      style={{ backgroundColor: Colors.bg.surface2, height: 52 }}
-                    >
-                      <Text style={{ color: Colors.text.primary, fontSize: theme.fontSize.sm, fontWeight: '500' }}>
-                        Capitán del equipo
-                      </Text>
-                      <Switch
-                        value={form.isCaptain}
-                        onValueChange={v => handleChange('isCaptain', v)}
-                        trackColor={{ false: Colors.bg.base, true: Colors.brand.primary }}
-                        // style: color dinámico para el thumb según estado
-                        thumbColor={form.isCaptain ? '#000000' : Colors.text.secondary}
-                      />
-                    </View>
-                  </>
-                )}
-
-                {/* Eliminar de la liga — acción destructiva */}
-                <TouchableOpacity
-                  className="flex-row items-center justify-center rounded-2xl mb-4"
-                  style={{ backgroundColor: 'rgba(255,69,52,0.10)', height: 48 }}
-                  onPress={() => onRemove(user.id)}
-                  activeOpacity={0.8}
+                {/* Estado */}
+                <View
+                  className="flex-row items-center justify-between mb-4 px-4 rounded-2xl"
+                  style={{ backgroundColor: Colors.bg.surface2, minHeight: 58 }}
                 >
-                  <Ionicons name="trash-outline" size={17} color={Colors.semantic.error} style={{ marginRight: 8 }} />
-                  <Text style={{ color: Colors.semantic.error, fontSize: theme.fontSize.sm, fontWeight: '600' }}>
-                    Eliminar de la liga
-                  </Text>
-                </TouchableOpacity>
+                  <View>
+                    <Text style={{ color: Colors.text.primary, fontSize: theme.fontSize.sm, fontWeight: '700' }}>
+                      Estado del usuario
+                    </Text>
+                    <Text style={{ color: Colors.text.secondary, fontSize: theme.fontSize.xs, marginTop: 2 }}>
+                      {form.active ? 'Activo en la liga' : 'Pendiente o desactivado'}
+                    </Text>
+                  </View>
+                  <Switch
+                    value={form.active}
+                    onValueChange={v => handleChange('active', v)}
+                    disabled={isBusy}
+                    trackColor={{ false: Colors.bg.base, true: Colors.brand.primary }}
+                    thumbColor={form.active ? '#000000' : Colors.text.secondary}
+                  />
+                </View>
+
+                {/* Acción destructiva */}
+                {showDeleteConfirm ? (
+                  <View
+                    style={{
+                      backgroundColor: 'rgba(255,69,52,0.10)',
+                      borderWidth: 1,
+                      borderColor: 'rgba(255,69,52,0.35)',
+                      borderRadius: theme.borderRadius.lg,
+                      padding: theme.spacing.md,
+                      marginBottom: theme.spacing.md,
+                    }}
+                  >
+                    <Text style={{ color: Colors.text.primary, fontSize: theme.fontSize.sm, fontWeight: '700', marginBottom: 4 }}>
+                      ¿Eliminar de la liga?
+                    </Text>
+                    <Text style={{ color: Colors.text.secondary, fontSize: theme.fontSize.xs, lineHeight: 18, marginBottom: theme.spacing.md }}>
+                      Esta acción quitará a este usuario de la liga. No se puede deshacer.
+                    </Text>
+                    <View className="flex-row gap-2">
+                      <TouchableOpacity
+                        onPress={() => setShowDeleteConfirm(false)}
+                        disabled={isBusy}
+                        style={{ flex: 1, height: 42, borderRadius: theme.borderRadius.lg, backgroundColor: Colors.bg.surface2, alignItems: 'center', justifyContent: 'center' }}
+                      >
+                        <Text style={{ color: Colors.text.primary, fontWeight: '700' }}>Cancelar</Text>
+                      </TouchableOpacity>
+                      <TouchableOpacity
+                        onPress={handleRemove}
+                        disabled={isBusy}
+                        style={{ flex: 1, height: 42, borderRadius: theme.borderRadius.lg, backgroundColor: Colors.semantic.error, alignItems: 'center', justifyContent: 'center' }}
+                      >
+                        {isRemoving ? <ActivityIndicator size="small" color="#000" /> : <Text style={{ color: '#000', fontWeight: '800' }}>Eliminar</Text>}
+                      </TouchableOpacity>
+                    </View>
+                  </View>
+                ) : (
+                  <TouchableOpacity
+                    className="flex-row items-center justify-center rounded-2xl mb-4"
+                    style={{ backgroundColor: 'rgba(255,69,52,0.10)', height: 48 }}
+                    onPress={() => setShowDeleteConfirm(true)}
+                    disabled={isBusy}
+                    activeOpacity={0.8}
+                  >
+                    <Ionicons name="trash-outline" size={17} color={Colors.semantic.error} style={{ marginRight: 8 }} />
+                    <Text style={{ color: Colors.semantic.error, fontSize: theme.fontSize.sm, fontWeight: '700' }}>
+                      Eliminar de la liga
+                    </Text>
+                  </TouchableOpacity>
+                )}
               </ScrollView>
 
               {/* Footer */}
@@ -274,7 +283,11 @@ export function ManageUserModal({
                   <Button label="Cancelar" variant="secondary" onPress={onClose} />
                 </View>
                 <View style={{ flex: 1 }}>
-                  <Button label="Actualizar" variant="primary" onPress={() => onUpdate(user.id, form)} />
+                  <Button
+                    label={isUpdating ? 'Actualizando...' : 'Actualizar'}
+                    variant="primary"
+                    onPress={handleUpdate}
+                  />
                 </View>
               </View>
             </View>

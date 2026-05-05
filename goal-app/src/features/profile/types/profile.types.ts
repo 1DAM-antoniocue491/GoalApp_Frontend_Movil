@@ -22,8 +22,6 @@ export interface UpdateUserProfileRequest {
   nombre?: string | null;
   telefono?: string | null;
   fecha_nacimiento?: string | null;
-  genero?: string | null;
-  avatar_url?: string | null;
 }
 
 /** Modelo de perfil normalizado para la UI */
@@ -41,12 +39,12 @@ export interface UserProfile {
 /** Mapper defensivo: nunca devuelve undefined */
 export function mapUserProfile(response: UserProfileResponse): UserProfile {
   return {
-    id: String(response.id_usuario ?? response.id ?? ''),
-    nombre: response.nombre ?? '',
-    email: response.email ?? '',
-    telefono: response.telefono ?? '',
-    fechaNacimiento: response.fecha_nacimiento ?? '',
-    genero: response.genero ?? '',
+    id: String(response.id_usuario ?? response.id ?? ""),
+    nombre: response.nombre ?? "",
+    email: response.email ?? "",
+    telefono: response.telefono ?? "",
+    fechaNacimiento: response.fecha_nacimiento ?? "",
+    genero: response.genero ?? "",
     avatarUrl: response.avatar_url ?? response.imagen_url ?? null,
     createdAt: response.created_at ?? null,
   };

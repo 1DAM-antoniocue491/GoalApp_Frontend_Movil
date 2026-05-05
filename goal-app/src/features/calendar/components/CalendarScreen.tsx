@@ -172,7 +172,7 @@ function EmptyNoTeams({ canAddTeam, onAddTeam }: { canAddTeam: boolean; onAddTea
           marginBottom: 28,
         }}
       >
-        Antes de generar el calendario necesitas añadir los equipos de la liga.
+        Antes de generar el calendario necesitas añadir los equipos de la liga. Usa el menú de los tres puntos para crear uno nuevo.
       </Text>
       {canAddTeam && (
         <Pressable
@@ -241,7 +241,7 @@ function EmptyNoCalendar({
           marginBottom: 28,
         }}
       >
-        Genera el calendario automático o añade partidos manualmente.
+        Genera el calendario automático o añade partidos manualmente desde el menú de los tres puntos.
       </Text>
       {(canCreateCalendar || canAddMatch) && (
         <View style={{ gap: 12, width: '100%' }}>
@@ -341,6 +341,96 @@ function ManualMatchBadge() {
   );
 }
 
+
+// ---------------------------------------------------------------------------
+// Helpers de fecha para partido manual
+// ---------------------------------------------------------------------------
+
+/**
+ * DateTimePickerField puede devolver fechas visuales tipo DD/MM/YYYY.
+ * La API, igual que web, espera un datetime válido con año primero:
+ * YYYY-MM-DDTHH:mm:ss.
+ */
+function normalizeDateForApi(value: string | undefined | null): string | null {
+  if (!value) return null;
+
+  const clean = String(value).trim();
+  if (!clean) return null;
+
+  // Si ya llega como datetime, nos quedamos con la parte de fecha.
+  const datePart = clean.includes('T') ? clean.split('T')[0] : clean;
+
+  // Formato correcto: YYYY-MM-DD.
+  const isoMatch = datePart.match(/^(\d{4})-(\d{1,2})-(\d{1,2})$/);
+  if (isoMatch) {
+    const [, year, month, day] = isoMatch;
+    return `${year}-${month.padStart(2, '0')}-${day.padStart(2, '0')}`;
+  }
+
+  // Formato visual del picker móvil: DD/MM/YYYY o DD-MM-YYYY.
+  const spanishMatch = datePart.match(/^(\d{1,2})[\/-](\d{1,2})[\/-](\d{4})$/);
+  if (spanishMatch) {
+    const [, day, month, year] = spanishMatch;
+    return `${year}-${month.padStart(2, '0')}-${day.padStart(2, '0')}`;
+  }
+
+  const parsed = new Date(clean);
+  if (!Number.isNaN(parsed.getTime())) {
+    const year = String(parsed.getFullYear());
+    const month = String(parsed.getMonth() + 1).padStart(2, '0');
+    const day = String(parsed.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+  }
+
+  return null;
+}
+
+/**
+ * Normaliza horas que pueden llegar como H:m, H:m:s o como Date string.
+ */
+function normalizeTimeForApi(value: string | undefined | null): string | null {
+  if (!value) return null;
+
+  const clean = String(value).trim();
+  if (!clean) return null;
+
+  const timePart = clean.includes('T') ? clean.split('T')[1] : clean;
+  const timeMatch = timePart.match(/^(\d{1,2}):(\d{1,2})(?::(\d{1,2}))?/);
+
+  if (timeMatch) {
+    const [, rawHour, rawMinute, rawSecond = '0'] = timeMatch;
+    const hour = Number(rawHour);
+    const minute = Number(rawMinute);
+    const second = Number(rawSecond);
+
+    if (
+      Number.isInteger(hour) && hour >= 0 && hour <= 23 &&
+      Number.isInteger(minute) && minute >= 0 && minute <= 59 &&
+      Number.isInteger(second) && second >= 0 && second <= 59
+    ) {
+      return `${String(hour).padStart(2, '0')}:${String(minute).padStart(2, '0')}:${String(second).padStart(2, '0')}`;
+    }
+  }
+
+  const parsed = new Date(clean);
+  if (!Number.isNaN(parsed.getTime())) {
+    const hour = String(parsed.getHours()).padStart(2, '0');
+    const minute = String(parsed.getMinutes()).padStart(2, '0');
+    const second = String(parsed.getSeconds()).padStart(2, '0');
+    return `${hour}:${minute}:${second}`;
+  }
+
+  return null;
+}
+
+function buildMatchDateTimeForApi(date: string, time: string): string | null {
+  const normalizedDate = normalizeDateForApi(date);
+  const normalizedTime = normalizeTimeForApi(time);
+
+  if (!normalizedDate || !normalizedTime) return null;
+  return `${normalizedDate}T${normalizedTime}`;
+}
+
 // ---------------------------------------------------------------------------
 // CalendarScreen
 // ---------------------------------------------------------------------------
@@ -348,7 +438,11 @@ function ManualMatchBadge() {
 export function CalendarScreen() {
   const router = useRouter();
   // Param opcional desde navegación externa (ej: Dashboard > "Ver calendario")
-  const { filter: filterParam } = useLocalSearchParams<{ filter?: string }>();
+  const {
+    filter: filterParam,
+    status: statusParam,
+    tab: tabParam,
+  } = useLocalSearchParams<{ filter?: string; status?: string; tab?: string }>();
 
   // ── Sesión y liga activa ──
   const { session } = useActiveLeague();
@@ -379,10 +473,19 @@ export function CalendarScreen() {
   const [journeyIndex, setJourneyIndex] = useState(0);
   const [statusFilter, setStatusFilter] = useState<JourneyStatusFilter>('live');
 
-  // Cuando se navega desde el dashboard con filter=programmed, activar ese filtro
+  // Navegación externa: permite abrir Calendario directamente en Jornada > Programados.
   useEffect(() => {
-    if (filterParam === 'programmed') setStatusFilter('programmed');
-  }, [filterParam]);
+    if (tabParam === 'journey') setActiveTab('journey');
+
+    const requestedStatus = statusParam ?? filterParam;
+    if (
+      requestedStatus === 'live' ||
+      requestedStatus === 'programmed' ||
+      requestedStatus === 'finished'
+    ) {
+      setStatusFilter(requestedStatus);
+    }
+  }, [filterParam, statusParam, tabParam]);
 
   // ── Estado de modales ──
   const [menuVisible, setMenuVisible] = useState(false);
@@ -452,8 +555,8 @@ export function CalendarScreen() {
     viewState === 'no_calendar'
       ? 'no_calendar'
       : hasMatchesInPlayOrFinished
-      ? 'locked'
-      : 'editable';
+        ? 'locked'
+        : 'editable';
 
   // ── Handlers del menú de admin ──
   const handleMenuPress = () => setMenuVisible(true);
@@ -555,19 +658,26 @@ export function CalendarScreen() {
     const activeJornada = journeys[journeyIndex];
     const jornadaNum = activeJornada?.backendNumber ?? activeJornada?.number ?? 1;
 
-    // Combinar fecha + hora en ISO: YYYY-MM-DDTHH:MM:00
-    // TODO API: si el backend requiere UTC, ajustar conversión aquí
-    const fechaHora = `${data.date}T${data.time}:00`;
+    // Combinar fecha + hora en formato válido para API: YYYY-MM-DDTHH:mm:ss.
+    // El picker móvil puede devolver DD/MM/YYYY o horas sin padding; aquí se normaliza.
+    const fechaHora = buildMatchDateTimeForApi(data.date, data.time);
+
+    if (!fechaHora) {
+      setNewMatchError('Selecciona una fecha y hora válidas');
+      return;
+    }
 
     setNewMatchError(undefined);
     setNewMatchSubmitting(true);
 
-    const result = await createManualMatchService(ligaId, {
+    const result = await createManualMatchService({
+      id_liga: ligaId,
       id_equipo_local: parseInt(data.homeTeamId, 10),
       id_equipo_visitante: parseInt(data.awayTeamId, 10),
-      fecha_hora: fechaHora,
-      estadio: data.stadium || undefined,
-      numero_jornada: jornadaNum,
+      // Payload alineado con web: POST /partidos/ espera `fecha`.
+      fecha: fechaHora,
+      // Si el backend decide aceptar jornada manual, el service ya soporta id_jornada.
+      // No la enviamos por defecto para mantener paridad con web.
     });
 
     setNewMatchSubmitting(false);
@@ -575,7 +685,9 @@ export function CalendarScreen() {
     if (result.success) {
       setNewMatchModalVisible(false);
       setNewMatchError(undefined);
-      // Refrescar calendario para mostrar el partido real
+      // Refrescar calendario para mostrar el partido real y abrir Programados.
+      setActiveTab('journey');
+      setStatusFilter('programmed');
       refetchJourneys();
     } else {
       // Mantener modal abierto y mostrar error
@@ -659,8 +771,7 @@ export function CalendarScreen() {
     if (viewState === 'no_teams') {
       return (
         <EmptyNoTeams
-          canAddTeam={calendarPerms.canAddMatch}
-          onAddTeam={handleAddTeam}
+          canAddTeam={false}
         />
       );
     }
@@ -668,10 +779,8 @@ export function CalendarScreen() {
     if (viewState === 'no_calendar') {
       return (
         <EmptyNoCalendar
-          canCreateCalendar={calendarPerms.canCreateCalendar}
-          canAddMatch={calendarPerms.canAddMatch}
-          onCreateCalendar={handleOpenCreateCalendar}
-          onAddMatch={handleAddMatch}
+          canCreateCalendar={false}
+          canAddMatch={false}
         />
       );
     }
@@ -827,7 +936,10 @@ export function CalendarScreen() {
         visible={createTeamVisible}
         ligaId={ligaId}
         onClose={() => setCreateTeamVisible(false)}
-        onCreated={() => setCreateTeamVisible(false)}
+        onCreated={() => {
+          setCreateTeamVisible(false);
+          refetchJourneys();
+        }}
       />
 
       {/* Modal nuevo partido manual — fuente de verdad única: CreateManualMatchModal */}

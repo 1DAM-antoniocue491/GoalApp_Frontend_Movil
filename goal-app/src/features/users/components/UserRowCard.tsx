@@ -1,93 +1,117 @@
 /**
  * UserRowCard
  *
- * Tarjeta de fila para un miembro de la liga.
- * Muestra: avatar con iniciales, nombre, email, badge de rol,
- * estado (Activo/Pendiente) y botón Gestionar.
- *
- * Reutiliza:
- * - RoleBadge (shared) → badge visual del rol
- * - StatusDotLabel (shared) → punto de estado
- * - PrimaryPillButton (shared) → botón Gestionar
- * - Colors, theme (shared)
+ * Fila premium para un usuario de la liga.
+ * No contiene lógica de API: solo muestra datos normalizados de LeagueUser.
  */
 
 import React, { memo } from 'react';
 import { View, Text, TouchableOpacity } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { RoleBadge } from '@/src/shared/components/ui/RoleBadge';
-import { StatusDotLabel } from '@/src/shared/components/ui/StatusDotLabel';
 import { Colors } from '@/src/shared/constants/colors';
 import { theme } from '@/src/shared/styles/theme';
 import type { LeagueUser, UserRole } from '../types/users.types';
 
-// ─── Config visual de roles ───────────────────────────────────────────────────
-
-// Definida aquí porque solo se usa en esta tarjeta
-const ROLE_CONFIG: Record<UserRole, {
-  label: string;
-  bgColor: string;
-  textColor: string;
-  icon: keyof typeof Ionicons.glyphMap;
-}> = {
+const ROLE_CONFIG: Record<UserRole, { label: string; icon: keyof typeof Ionicons.glyphMap; bgColor: string; textColor: string }> = {
   admin: {
     label: 'Administrador',
-    bgColor: 'rgba(200,245,88,0.15)',
+    icon: 'shield-checkmark-outline',
+    bgColor: 'rgba(196,241,53,0.14)',
     textColor: Colors.brand.primary,
-    icon: 'shield-outline',
   },
   coach: {
     label: 'Entrenador',
-    bgColor: 'rgba(0,180,216,0.15)',
-    textColor: Colors.brand.secondary,
-    icon: 'ribbon-outline',
+    icon: 'clipboard-outline',
+    bgColor: 'rgba(24,162,251,0.12)',
+    textColor: Colors.brand.accent,
   },
   player: {
     label: 'Jugador',
-    bgColor: 'rgba(24,162,251,0.15)',
-    textColor: Colors.brand.accent,
     icon: 'football-outline',
+    bgColor: 'rgba(0,180,216,0.12)',
+    textColor: Colors.brand.secondary,
   },
   delegate: {
     label: 'Delegado',
-    bgColor: 'rgba(255,214,10,0.15)',
+    icon: 'id-card-outline',
+    bgColor: 'rgba(255,214,10,0.12)',
     textColor: Colors.semantic.warning,
-    icon: 'clipboard-outline',
   },
   observer: {
     label: 'Observador',
+    icon: 'eye-outline',
     bgColor: 'rgba(161,161,170,0.12)',
     textColor: Colors.text.secondary,
-    icon: 'eye-outline',
   },
 };
 
-const STATUS_COLOR: Record<string, string> = {
+const STATUS_COLOR = {
   active: Colors.semantic.success,
   pending: Colors.semantic.warning,
-};
+} as const;
 
-const STATUS_LABEL: Record<string, string> = {
+const STATUS_LABEL = {
   active: 'Activo',
   pending: 'Pendiente',
-};
-
-// ─── Componente ───────────────────────────────────────────────────────────────
+} as const;
 
 interface UserRowCardProps {
   user: LeagueUser;
   onManage: (user: LeagueUser) => void;
 }
 
-function UserRowCardComponent({ user, onManage }: UserRowCardProps) {
-  const roleConfig = ROLE_CONFIG[user.role];
+function RoleBadge({ user }: { user: LeagueUser }) {
+  const roleConfig = ROLE_CONFIG[user.role] ?? ROLE_CONFIG.observer;
+
+  return (
+    <View
+      style={{
+        flexDirection: 'row',
+        alignItems: 'center',
+        alignSelf: 'flex-start',
+        backgroundColor: roleConfig.bgColor,
+        paddingHorizontal: theme.spacing.sm,
+        paddingVertical: 5,
+        borderRadius: theme.borderRadius.full,
+      }}
+    >
+      <Ionicons name={roleConfig.icon} size={13} color={roleConfig.textColor} style={{ marginRight: 5 }} />
+      <Text style={{ color: roleConfig.textColor, fontSize: theme.fontSize.xs, fontWeight: '700' }}>
+        {user.roleLabel || roleConfig.label}
+      </Text>
+    </View>
+  );
+}
+
+function StatusDotLabel({ user }: { user: LeagueUser }) {
   const statusColor = STATUS_COLOR[user.status] ?? Colors.text.disabled;
   const statusLabel = STATUS_LABEL[user.status] ?? user.status;
 
-  // Iniciales para el avatar fallback
-  const initials = user.name
+  return (
+    <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+      <View
+        style={{
+          width: 7,
+          height: 7,
+          borderRadius: 4,
+          backgroundColor: statusColor,
+          marginRight: 6,
+        }}
+      />
+      <Text style={{ color: Colors.text.secondary, fontSize: theme.fontSize.xs, fontWeight: '600' }}>
+        {statusLabel}
+      </Text>
+    </View>
+  );
+}
+
+function UserRowCardComponent({ user, onManage }: UserRowCardProps) {
+  const roleConfig = ROLE_CONFIG[user.role] ?? ROLE_CONFIG.observer;
+
+  const initials = (user.name || user.email || 'U')
     .split(' ')
     .map(w => w[0])
+    .filter(Boolean)
     .slice(0, 2)
     .join('')
     .toUpperCase();
@@ -96,97 +120,88 @@ function UserRowCardComponent({ user, onManage }: UserRowCardProps) {
     <View
       className="rounded-2xl p-4 mb-3"
       style={{
-        // style: color de fondo del design system
         backgroundColor: Colors.bg.surface1,
         borderWidth: 1,
         borderColor: Colors.bg.surface2,
+        shadowColor: '#000',
+        shadowOpacity: 0.18,
+        shadowOffset: { width: 0, height: 8 },
+        shadowRadius: 16,
+        elevation: 4,
       }}
     >
       <View className="flex-row items-center">
         {/* Avatar con iniciales */}
         <View
           style={{
-            // style: tamaño exacto y color dinámico basado en el rol
-            width: 44,
-            height: 44,
-            borderRadius: 22,
+            width: 48,
+            height: 48,
+            borderRadius: 24,
             backgroundColor: roleConfig.bgColor,
             alignItems: 'center',
             justifyContent: 'center',
             marginRight: theme.spacing.md,
+            borderWidth: 1,
+            borderColor: roleConfig.textColor,
           }}
         >
-          <Text style={{ color: roleConfig.textColor, fontSize: theme.fontSize.sm, fontWeight: '700' }}>
-            {initials}
+          <Text style={{ color: roleConfig.textColor, fontSize: theme.fontSize.sm, fontWeight: '800' }}>
+            {initials || 'U'}
           </Text>
         </View>
 
         {/* Info principal */}
         <View style={{ flex: 1 }}>
           <Text
-            style={{ color: Colors.text.primary, fontSize: theme.fontSize.sm, fontWeight: '600', marginBottom: 2 }}
+            style={{ color: Colors.text.primary, fontSize: theme.fontSize.md, fontWeight: '700', marginBottom: 3 }}
             numberOfLines={1}
           >
-            {user.name}
-            {user.isCaptain && (
-              <Text style={{ color: Colors.semantic.warning }}> ©</Text>
-            )}
+            {user.name || 'Usuario sin nombre'}
+            {user.isCaptain ? <Text style={{ color: Colors.semantic.warning }}> ©</Text> : null}
           </Text>
           <Text
-            style={{ color: Colors.text.secondary, fontSize: theme.fontSize.xs, marginBottom: 6 }}
+            style={{ color: Colors.text.secondary, fontSize: theme.fontSize.xs }}
             numberOfLines={1}
           >
-            {user.email}
+            {user.email || 'Sin email'}
           </Text>
         </View>
-
-
 
         {/* Botón Gestionar */}
         <TouchableOpacity
           onPress={() => onManage(user)}
           activeOpacity={0.8}
           style={{
-            // style: tamaño exacto y color de fondo de la acción secundaria
             marginLeft: theme.spacing.sm,
-            paddingHorizontal: theme.spacing.md,
-            paddingVertical: theme.spacing.sm,
-            borderRadius: theme.borderRadius.lg,
+            width: 40,
+            height: 40,
+            borderRadius: 20,
             backgroundColor: Colors.bg.surface2,
             alignItems: 'center',
             justifyContent: 'center',
           }}
         >
-          <Ionicons name="settings-outline" size={18} color={Colors.text.secondary} />
+          <Ionicons name="settings-outline" size={19} color={Colors.text.secondary} />
         </TouchableOpacity>
       </View>
 
-      {/* Fila: badge de rol + estado */}
-      <View className="flex-row items-center gap-3 pt-3">
-        <RoleBadge
-          label={roleConfig.label}
-          bgColor={roleConfig.bgColor}
-          textColor={roleConfig.textColor}
-          icon={roleConfig.icon}
-        />
-        <StatusDotLabel label={statusLabel} color={statusColor} />
+      {/* Rol + estado */}
+      <View className="flex-row items-center justify-between pt-4 mt-4" style={{ borderTopWidth: 1, borderTopColor: Colors.bg.surface2 }}>
+        <RoleBadge user={user} />
+        <StatusDotLabel user={user} />
       </View>
 
-
-      {/* Info del equipo si aplica */}
-      {user.teamName && (
-        <View
-          className="flex-row items-center mt-3 pt-3"
-          style={{ borderTopWidth: 1, borderTopColor: Colors.bg.surface2 }}
-        >
+      {/* Info del equipo si el backend la devuelve en el futuro */}
+      {user.teamName ? (
+        <View className="flex-row items-center mt-3">
           <Ionicons name="people-outline" size={14} color={Colors.text.disabled} style={{ marginRight: 6 }} />
-          <Text style={{ color: Colors.text.disabled, fontSize: theme.fontSize.xs }}>
+          <Text style={{ color: Colors.text.disabled, fontSize: theme.fontSize.xs }} numberOfLines={1}>
             {user.teamName}
             {user.jersey ? ` · #${user.jersey}` : ''}
             {user.position ? ` · ${user.position}` : ''}
           </Text>
         </View>
-      )}
+      ) : null}
     </View>
   );
 }

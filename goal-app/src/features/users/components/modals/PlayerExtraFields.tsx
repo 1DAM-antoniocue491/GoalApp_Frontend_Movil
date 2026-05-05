@@ -1,14 +1,8 @@
 /**
  * PlayerExtraFields
  *
- * Campos adicionales del formulario de invitación que aparecen
- * dinámicamente según el rol seleccionado.
- *
- * - Jugador → tipo de jugador, dorsal, posición, equipo
- * - Entrenador / Delegado → solo equipo
- * - Observador → nada extra
- *
- * Reutiliza OptionSelectField para los selects de equipo y tipo de jugador.
+ * Campos adicionales del formulario de invitación.
+ * Muestra únicamente los campos que se envían realmente a la API de invitaciones.
  */
 
 import React from 'react';
@@ -37,16 +31,10 @@ const PLAYER_TYPE_OPTIONS: SelectOption[] = [
 ];
 
 const POSITION_OPTIONS: SelectOption[] = [
-  { value: 'PO', label: 'Portero' },
-  { value: 'LD', label: 'Lateral derecho' },
-  { value: 'LI', label: 'Lateral izquierdo' },
-  { value: 'CB', label: 'Central' },
-  { value: 'MCD', label: 'Mediocentro defensivo' },
-  { value: 'MC', label: 'Mediocentro' },
-  { value: 'MP', label: 'Mediapunta' },
-  { value: 'EXD', label: 'Extremo derecho' },
-  { value: 'EXI', label: 'Extremo izquierdo' },
-  { value: 'DC', label: 'Delantero centro' },
+  { value: 'portero', label: 'Portero' },
+  { value: 'defensa', label: 'Defensa' },
+  { value: 'centrocampista', label: 'Centrocampista' },
+  { value: 'delantero', label: 'Delantero' },
 ];
 
 export function PlayerExtraFields({
@@ -58,7 +46,6 @@ export function PlayerExtraFields({
   teamOptions,
   onChange,
 }: PlayerExtraFieldsProps) {
-  // Roles que requieren seleccionar equipo
   const needsTeam = role === 'player' || role === 'coach' || role === 'delegate';
   const isPlayer = role === 'player';
 
@@ -72,12 +59,11 @@ export function PlayerExtraFields({
           label="Equipo"
           value={teamId}
           options={teamOptions}
-          placeholder="Selecciona un equipo"
+          placeholder={teamOptions.length > 0 ? 'Selecciona un equipo' : 'No hay equipos disponibles'}
           onChange={v => onChange('teamId', v)}
         />
       </View>
 
-      {/* Campos exclusivos del jugador */}
       {isPlayer && (
         <>
           <View className="mb-4">
@@ -99,7 +85,7 @@ export function PlayerExtraFields({
               <View className={styles.inputRow}>
                 <TextInput
                   className={styles.input}
-                  placeholder="Ej: 10"
+                  placeholder="10"
                   placeholderTextColor={styles.inputPlaceholder}
                   value={jersey}
                   onChangeText={v => onChange('jersey', v)}
@@ -120,6 +106,10 @@ export function PlayerExtraFields({
               />
             </View>
           </View>
+
+          <Text style={{ color: Colors.text.disabled, fontSize: theme.fontSize.xs, lineHeight: 18, marginBottom: theme.spacing.md }}>
+            Los datos de jugador se enviarán dentro de la invitación y quedarán asociados cuando el usuario acepte.
+          </Text>
         </>
       )}
     </View>

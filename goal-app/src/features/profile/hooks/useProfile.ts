@@ -6,10 +6,16 @@
  * sincroniza el sessionStore y actualiza el estado local.
  */
 
-import { useState, useEffect, useCallback } from 'react';
-import { sessionStore } from '@/src/state/session/sessionStore';
-import { fetchMyProfileService, updateMyProfileService } from '../services/profileService';
-import type { UserProfile, UpdateUserProfileRequest } from '../types/profile.types';
+import { useState, useEffect, useCallback } from "react";
+import { sessionStore } from "@/src/state/session/sessionStore";
+import {
+  fetchMyProfileService,
+  updateMyProfileService,
+} from "../services/profileService";
+import type {
+  UserProfile,
+  UpdateUserProfileRequest,
+} from "../types/profile.types";
 
 export interface UseProfileReturn {
   profile: UserProfile | null;
@@ -33,7 +39,7 @@ export function useProfile(): UseProfileReturn {
       const data = await fetchMyProfileService();
       setProfile(data);
     } catch {
-      setError('No se pudo cargar el perfil');
+      setError("No se pudo cargar el perfil");
     } finally {
       setIsLoading(false);
     }
@@ -57,20 +63,24 @@ export function useProfile(): UseProfileReturn {
           // Sincronizar sessionStore para que la próxima sesión tenga datos frescos
           const session = await sessionStore.getSession();
           if (session.user && session.accessToken && session.refreshToken) {
-            await sessionStore.setSession(session.accessToken, session.refreshToken, {
-              ...session.user,
-              nombre: result.data.nombre || session.user.nombre,
-              telefono: result.data.telefono || session.user.telefono,
-              fecha_nacimiento: result.data.fechaNacimiento || session.user.fecha_nacimiento,
-              genero: result.data.genero || session.user.genero,
-            });
+            await sessionStore.setSession(
+              session.accessToken,
+              session.refreshToken,
+              {
+                ...session.user,
+                nombre: result.data.nombre || session.user.nombre,
+                telefono: result.data.telefono || session.user.telefono,
+                fecha_nacimiento:
+                  result.data.fechaNacimiento || session.user.fecha_nacimiento,
+              },
+            );
           }
           return true;
         }
-        setError(result.error ?? 'Error al guardar');
+        setError(result.error ?? "Error al guardar");
         return false;
       } catch {
-        setError('Error inesperado al guardar');
+        setError("Error inesperado al guardar");
         return false;
       } finally {
         setIsSaving(false);

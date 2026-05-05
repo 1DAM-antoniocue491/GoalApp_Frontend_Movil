@@ -1,18 +1,14 @@
 /**
  * CreateManualMatchModal
  *
- * Modal slide-up para crear un partido manual dentro de una liga.
- * A diferencia de los partidos generados por calendario, aquí el usuario
- * elige libremente ambos equipos y todos los datos del encuentro.
+ * Modal mobile para crear un partido manual.
+ * Está alineado con el modal web entregado: equipo local, equipo visitante,
+ * fecha y hora. La lógica de API vive fuera del modal; este componente solo
+ * valida y entrega los datos al contenedor.
  *
- * Campos: equipo local, equipo visitante, delegado, fecha, hora, estadio.
- *
- * Reutiliza:
- * - OptionSelectField (shared/components/ui) → selects de equipos y delegado
- * - Button (shared/components/ui) → footer Cancelar / Guardar partido
- * - Colors (shared/constants/colors) → valores del design system
- * - theme (shared/styles/theme) → spacing, borderRadius, fontSize
- * - styles (shared/styles) → inputRow, input, label, inputPlaceholder, inputIcon
+ * Campos antiguos como delegado, estadio y jornada se mantienen como props/data
+ * opcionales para no romper llamadas existentes, pero no se muestran porque la
+ * API web confirmada crea partidos con POST /partidos/ y payload mínimo.
  */
 
 import React, { useState, useEffect } from 'react';
@@ -20,7 +16,6 @@ import {
   Modal,
   View,
   Text,
-  TextInput,
   TouchableOpacity,
   ScrollView,
   KeyboardAvoidingView,
@@ -30,7 +25,6 @@ import {
 import { Ionicons } from '@expo/vector-icons';
 import { Colors } from '@/src/shared/constants/colors';
 import { theme } from '@/src/shared/styles/theme';
-import { styles } from '@/src/shared/styles';
 import { Button } from '@/src/shared/components/ui/Button';
 import { OptionSelectField, SelectOption } from '@/src/shared/components/ui/OptionSelectField';
 import { DateTimePickerField } from '@/src/shared/components/ui/DateTimePickerField';
@@ -40,11 +34,12 @@ import { DateTimePickerField } from '@/src/shared/components/ui/DateTimePickerFi
 export interface CreateManualMatchFormData {
   homeTeamId: string;
   awayTeamId: string;
-  delegateId: string;
   date: string;
   time: string;
-  stadium: string;
-  round: string;
+  /** Compatibilidad con pantallas anteriores; no se envía si el contenedor no lo usa. */
+  delegateId?: string;
+  stadium?: string;
+  round?: string;
 }
 
 interface CreateManualMatchModalProps {
@@ -53,9 +48,9 @@ interface CreateManualMatchModalProps {
   onSubmit: (data: CreateManualMatchFormData) => void;
   /** Opciones de equipos reales de la liga */
   teamOptions?: SelectOption[];
-  /** Opciones de delegados disponibles en la liga */
+  /** Prop legacy: se conserva para no romper llamadas actuales, pero no se renderiza. */
   delegateOptions?: SelectOption[];
-  /** Jornada activa — pre-rellena el campo al abrir el modal */
+  /** Prop legacy: se conserva como dato opcional para el contenedor. */
   defaultRound?: string;
   /** Error del servicio para mostrar dentro del modal */
   error?: string;
@@ -68,12 +63,76 @@ interface CreateManualMatchModalProps {
 const EMPTY_FORM: CreateManualMatchFormData = {
   homeTeamId: '',
   awayTeamId: '',
-  delegateId: '',
   date: '',
   time: '',
+  delegateId: '',
   stadium: '',
   round: '',
 };
+
+
+/**
+ * El picker móvil puede devolver DD/MM/YYYY. Antes de entregar al contenedor,
+ * normalizamos a YYYY-MM-DD para evitar errores de FastAPI/Pydantic.
+ */
+function normalizeDateForSubmit(value: string): string | null {
+  const clean = value.trim();
+  if (!clean) return null;
+
+  const datePart = clean.includes('T') ? clean.split('T')[0] : clean;
+
+  const isoMatch = datePart.match(/^(\d{4})-(\d{1,2})-(\d{1,2})$/);
+  if (isoMatch) {
+    const [, year, month, day] = isoMatch;
+    return `${year}-${month.padStart(2, '0')}-${day.padStart(2, '0')}`;
+  }
+
+  const spanishMatch = datePart.match(/^(\d{1,2})[\/-](\d{1,2})[\/-](\d{4})$/);
+  if (spanishMatch) {
+    const [, day, month, year] = spanishMatch;
+    return `${year}-${month.padStart(2, '0')}-${day.padStart(2, '0')}`;
+  }
+
+  const parsed = new Date(clean);
+  if (!Number.isNaN(parsed.getTime())) {
+    return `${parsed.getFullYear()}-${String(parsed.getMonth() + 1).padStart(2, '0')}-${String(parsed.getDate()).padStart(2, '0')}`;
+  }
+
+  return null;
+}
+
+/**
+ * Normaliza H:m, HH:mm o HH:mm:ss a HH:mm:ss.
+ */
+function normalizeTimeForSubmit(value: string): string | null {
+  const clean = value.trim();
+  if (!clean) return null;
+
+  const timePart = clean.includes('T') ? clean.split('T')[1] : clean;
+  const timeMatch = timePart.match(/^(\d{1,2}):(\d{1,2})(?::(\d{1,2}))?/);
+
+  if (timeMatch) {
+    const [, rawHour, rawMinute, rawSecond = '0'] = timeMatch;
+    const hour = Number(rawHour);
+    const minute = Number(rawMinute);
+    const second = Number(rawSecond);
+
+    if (
+      Number.isInteger(hour) && hour >= 0 && hour <= 23 &&
+      Number.isInteger(minute) && minute >= 0 && minute <= 59 &&
+      Number.isInteger(second) && second >= 0 && second <= 59
+    ) {
+      return `${String(hour).padStart(2, '0')}:${String(minute).padStart(2, '0')}:${String(second).padStart(2, '0')}`;
+    }
+  }
+
+  const parsed = new Date(clean);
+  if (!Number.isNaN(parsed.getTime())) {
+    return `${String(parsed.getHours()).padStart(2, '0')}:${String(parsed.getMinutes()).padStart(2, '0')}:${String(parsed.getSeconds()).padStart(2, '0')}`;
+  }
+
+  return null;
+}
 
 // ─── Componente ───────────────────────────────────────────────────────────────
 
@@ -82,7 +141,6 @@ export function CreateManualMatchModal({
   onClose,
   onSubmit,
   teamOptions = [],
-  delegateOptions = [],
   defaultRound = '',
   error,
   isSubmitting = false,
@@ -90,22 +148,22 @@ export function CreateManualMatchModal({
   const [form, setForm] = useState<CreateManualMatchFormData>(EMPTY_FORM);
   const [validationError, setValidationError] = useState<string | undefined>(undefined);
 
-  // Pre-rellena la jornada cuando se abre el modal
+  // Pre-rellena datos internos legacy al abrir, sin mostrarlos en UI.
   useEffect(() => {
     if (visible) {
       setForm(prev => ({ ...prev, round: defaultRound }));
+      setValidationError(undefined);
     }
   }, [visible, defaultRound]);
 
   function handleClose() {
-    // Limpia form y errores al cerrar para que no persistan al reabrirse
     setForm(EMPTY_FORM);
     setValidationError(undefined);
     onClose();
   }
 
   function handleSubmit() {
-    // Validaciones de cliente antes de llamar al servicio
+    // Validaciones de cliente antes de llamar al servicio/API.
     if (!form.homeTeamId) {
       setValidationError('Selecciona el equipo local');
       return;
@@ -126,40 +184,49 @@ export function CreateManualMatchModal({
       setValidationError('La hora es obligatoria');
       return;
     }
+
+    const normalizedDate = normalizeDateForSubmit(form.date);
+    const normalizedTime = normalizeTimeForSubmit(form.time);
+
+    if (!normalizedDate || !normalizedTime) {
+      setValidationError('Selecciona una fecha y hora válidas');
+      return;
+    }
+
     setValidationError(undefined);
-    onSubmit(form);
+    onSubmit({
+      ...form,
+      // El contenedor recibirá valores listos para construir YYYY-MM-DDTHH:mm:ss.
+      date: normalizedDate,
+      time: normalizedTime,
+    });
   }
 
+  const visibleError = validationError ?? error;
+
   return (
-    <Modal
-      visible={visible}
-      animationType="slide"
-      transparent
-      onRequestClose={handleClose}
-    >
-      {/* Overlay — toque fuera cierra el modal */}
+    <Modal visible={visible} animationType="slide" transparent onRequestClose={handleClose}>
+      {/* Overlay — toque fuera cierra el modal. */}
       <Pressable
         style={{
-          // style: backgroundColor con alpha no tiene clase Tailwind directa
           flex: 1,
-          backgroundColor: 'rgba(0,0,0,0.70)',
+          backgroundColor: 'rgba(0,0,0,0.72)',
           justifyContent: 'flex-end',
         }}
         onPress={handleClose}
       >
         <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
-          {/* Pressable interior sin onPress: consume el toque, evita cerrar al tocar dentro */}
+          {/* Pressable interior: evita cerrar al tocar dentro del modal. */}
           <Pressable>
             <View
               style={{
-                // style: borderRadius solo en esquinas superiores — no existe clase Tailwind para esto
                 backgroundColor: Colors.bg.surface1,
                 borderTopLeftRadius: theme.borderRadius.xl,
                 borderTopRightRadius: theme.borderRadius.xl,
                 paddingHorizontal: theme.spacing.xl,
                 paddingTop: theme.spacing.lg,
                 paddingBottom: theme.spacing.xxl,
-                // style: sombra elevada para separar visualmente del overlay
+                maxHeight: '86%',
                 shadowColor: '#000',
                 shadowOffset: { width: 0, height: -4 },
                 shadowOpacity: 0.4,
@@ -167,58 +234,61 @@ export function CreateManualMatchModal({
                 elevation: 20,
               }}
             >
-              {/* ── Header ── */}
+              {/* Header del modal */}
               <View className="flex-row items-center justify-between mb-2">
-                <Text
-                  style={{
-                    color: Colors.text.primary,
-                    fontSize: theme.fontSize.xl,
-                    fontWeight: '700',
-                  }}
-                >
-                  Nuevo partido
-                </Text>
+                <View style={{ flex: 1, paddingRight: theme.spacing.md }}>
+                  <Text
+                    style={{
+                      color: Colors.text.primary,
+                      fontSize: theme.fontSize.xl,
+                      fontWeight: '700',
+                    }}
+                  >
+                    Nuevo partido
+                  </Text>
+                  <Text
+                    style={{
+                      color: Colors.text.secondary,
+                      fontSize: theme.fontSize.sm,
+                      marginTop: 4,
+                      lineHeight: 20,
+                    }}
+                  >
+                    Selecciona los equipos y programa la fecha del encuentro.
+                  </Text>
+                </View>
+
                 <TouchableOpacity
                   onPress={handleClose}
                   hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
+                  disabled={isSubmitting}
                 >
                   <Ionicons name="close" size={22} color={Colors.text.secondary} />
                 </TouchableOpacity>
               </View>
 
-              {/* Subtítulo */}
-              <Text
-                style={{
-                  color: Colors.text.secondary,
-                  fontSize: theme.fontSize.sm,
-                  marginBottom: (validationError || error) ? theme.spacing.sm : theme.spacing.xl,
-                  lineHeight: 20,
-                }}
-              >
-                Partido manual — puedes elegir todos los datos del encuentro.
-              </Text>
-
-              {/* Error de validación o de API */}
-              {(validationError || error) && (
-                <Text
+              {/* Error de validación o API */}
+              {visibleError && (
+                <View
                   style={{
-                    color: '#F87171',
-                    fontSize: theme.fontSize.sm,
+                    marginTop: theme.spacing.md,
                     marginBottom: theme.spacing.lg,
+                    padding: theme.spacing.md,
+                    borderRadius: theme.borderRadius.md,
+                    backgroundColor: 'rgba(248,113,113,0.12)',
+                    borderWidth: 1,
+                    borderColor: 'rgba(248,113,113,0.30)',
                   }}
                 >
-                  {validationError ?? error}
-                </Text>
+                  <Text style={{ color: '#F87171', fontSize: theme.fontSize.sm }}>
+                    {visibleError}
+                  </Text>
+                </View>
               )}
 
-              <ScrollView
-                showsVerticalScrollIndicator={false}
-                keyboardShouldPersistTaps="handled"
-              >
-
-                {/* ── Equipo local ── */}
-                {/* OptionSelectField abre su propio modal de selección internamente */}
-                <View className="mb-4">
+              <ScrollView showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
+                {/* Equipo local */}
+                <View style={{ marginBottom: theme.spacing.lg }}>
                   <OptionSelectField
                     label="Equipo local"
                     value={form.homeTeamId}
@@ -228,8 +298,8 @@ export function CreateManualMatchModal({
                   />
                 </View>
 
-                {/* ── Equipo visitante ── */}
-                <View className="mb-5">
+                {/* Equipo visitante */}
+                <View style={{ marginBottom: theme.spacing.xl }}>
                   <OptionSelectField
                     label="Equipo visitante"
                     value={form.awayTeamId}
@@ -239,19 +309,8 @@ export function CreateManualMatchModal({
                   />
                 </View>
 
-                {/* ── Delegado del campo ── */}
-                <View className="mb-5">
-                  <OptionSelectField
-                    label="Delegado del campo"
-                    value={form.delegateId}
-                    options={delegateOptions}
-                    placeholder="Selecciona el delegado"
-                    onChange={v => setForm(prev => ({ ...prev, delegateId: v }))}
-                  />
-                </View>
-
-                {/* ── Fila: Fecha + Hora — selectores nativos ── */}
-                <View className="flex-row gap-3 mb-4">
+                {/* Fecha y hora — selectores nativos reutilizables */}
+                <View className="flex-row gap-3" style={{ marginBottom: theme.spacing.xl }}>
                   <DateTimePickerField
                     label="Fecha"
                     value={form.date}
@@ -266,52 +325,12 @@ export function CreateManualMatchModal({
                     mode="time"
                     icon="time-outline"
                     onChange={v => setForm(prev => ({ ...prev, time: v }))}
+                    style={{ flex: 1 }}
                   />
                 </View>
-
-                {/* ── Estadio ── */}
-                <View className="mb-4">
-                  <Text className={styles.label} style={{ marginBottom: 6 }}>
-                    Estadio
-                  </Text>
-                  <View className={styles.inputRow}>
-                    <View className={styles.inputIcon}>
-                      <Ionicons name="location-outline" size={17} color={Colors.text.secondary} />
-                    </View>
-                    <TextInput
-                      className={styles.input}
-                      placeholder="Nombre del estadio"
-                      placeholderTextColor={styles.inputPlaceholder}
-                      value={form.stadium}
-                      onChangeText={v => setForm(prev => ({ ...prev, stadium: v }))}
-                      returnKeyType="next"
-                    />
-                  </View>
-                </View>
-
-                {/* ── Jornada ── */}
-                <View className="mb-6">
-                  <Text className={styles.label} style={{ marginBottom: 6 }}>
-                    Jornada
-                  </Text>
-                  <View className={styles.inputRow}>
-                    <View className={styles.inputIcon}>
-                      <Ionicons name="list-outline" size={17} color={Colors.text.secondary} />
-                    </View>
-                    <TextInput
-                      className={styles.input}
-                      placeholder="Ej: Jornada 10"
-                      placeholderTextColor={styles.inputPlaceholder}
-                      value={form.round}
-                      onChangeText={v => setForm(prev => ({ ...prev, round: v }))}
-                      returnKeyType="done"
-                    />
-                  </View>
-                </View>
-
               </ScrollView>
 
-              {/* ── Footer ── */}
+              {/* Footer de acciones */}
               <View className="flex-row gap-3">
                 <View style={{ flex: 1 }}>
                   <Button
@@ -330,7 +349,6 @@ export function CreateManualMatchModal({
                   />
                 </View>
               </View>
-
             </View>
           </Pressable>
         </KeyboardAvoidingView>

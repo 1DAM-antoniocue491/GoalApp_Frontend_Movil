@@ -34,11 +34,15 @@ import type { TeamGoalsStats, TopScorerResponse } from '../types/statistics.type
 
 const SCREEN_WIDTH = Dimensions.get('window').width;
 const CARD_GAP = theme.spacing.sm;
+// Dos columnas con hueco entre ellas
 const METRIC_CARD_WIDTH = (SCREEN_WIDTH - theme.spacing.lg * 2 - CARD_GAP) / 2;
 
 // ─── Componentes internos ────────────────────────────────────────────────────
 
-/** Tarjeta de métrica simple (valor + etiqueta + icono) */
+/**
+ * Tarjeta de métrica simple (valor + etiqueta + icono).
+ * La línea de color superior identifica visualmente cada métrica.
+ */
 function MetricCard({
   icon,
   label,
@@ -51,17 +55,23 @@ function MetricCard({
   color: string;
 }) {
   return (
-    <View style={[styles.metricCard, { width: METRIC_CARD_WIDTH }]}>
-      <View style={[styles.metricIconWrap, { backgroundColor: color + '22' }]}>
-        <Ionicons name={icon} size={20} color={color} />
+    <View style={[styles.metricCard, { width: METRIC_CARD_WIDTH, borderTopColor: color }]}>
+      <View className='flex-row items-center gap-2'>
+        <View style={[styles.metricIconWrap, { backgroundColor: color + '22' }]}>
+          <Ionicons name={icon} size={20} color={color} />
+        </View>
+        <Text style={styles.metricLabel}>{label}</Text>
       </View>
+
       <Text style={styles.metricValue}>{value}</Text>
-      <Text style={styles.metricLabel}>{label}</Text>
     </View>
   );
 }
 
-/** Fila de goleador con ranking, iniciales, nombre, equipo y goles */
+/**
+ * Fila de goleador con ranking, iniciales, nombre, equipo y goles.
+ * El ranking 1–3 usa colores de medalla para mejor jerarquía visual.
+ */
 function ScorerRow({
   scorer,
   rank,
@@ -86,14 +96,14 @@ function ScorerRow({
 
   return (
     <View style={styles.scorerRow}>
-      {/* Ranking */}
+      {/* Ranking con color de medalla */}
       <Text style={[styles.scorerRank, { color: rankColor }]}>
         {rank}
       </Text>
 
-      {/* Avatar iniciales */}
-      <View style={styles.scorerAvatar}>
-        <Text style={styles.scorerAvatarText}>{getInitials(name)}</Text>
+      {/* Avatar iniciales con fondo tintado por color de ranking */}
+      <View style={[styles.scorerAvatar, { backgroundColor: rankColor + '18' }]}>
+        <Text style={[styles.scorerAvatarText, { color: rankColor }]}>{getInitials(name)} hola</Text>
       </View>
 
       {/* Nombre y equipo */}
@@ -117,7 +127,10 @@ function ScorerRow({
   );
 }
 
-/** Fila de equipo con barra proporcional de goles */
+/**
+ * Fila de equipo con barra proporcional de goles.
+ * La barra más gruesa (6px) mejora la legibilidad en mobile.
+ */
 function TeamGoalRow({
   team,
   maxGoals,
@@ -133,7 +146,7 @@ function TeamGoalRow({
 
   return (
     <View style={styles.teamGoalRow}>
-      {/* Iniciales de equipo */}
+      {/* Badge circular con iniciales */}
       <View style={styles.teamInitialBadge}>
         <Text style={styles.teamInitialText}>{getInitials(name)}</Text>
       </View>
@@ -164,13 +177,42 @@ function TeamGoalRow({
   );
 }
 
-/** Sección con título y borde izquierdo de color */
+/**
+ * Encabezado de sección con acento izquierdo brand + icono.
+ * Consistente a lo largo de toda la pantalla.
+ */
 function SectionHeader({ title, icon }: { title: string; icon: keyof typeof Ionicons.glyphMap }) {
   return (
     <View style={styles.sectionHeader}>
       <View style={styles.sectionAccent} />
-      <Ionicons name={icon} size={16} color={Colors.brand.primary} style={{ marginRight: 8 }} />
+      <Ionicons name={icon} size={15} color={Colors.brand.primary} style={{ marginRight: 7 }} />
       <Text style={styles.sectionTitle}>{title}</Text>
+    </View>
+  );
+}
+
+/**
+ * Estado vacío/error centrado con icono dentro de un círculo tintado.
+ * Más visual y premium que un icono suelto.
+ */
+function EmptyState({
+  icon,
+  iconColor,
+  title,
+  subtitle,
+}: {
+  icon: keyof typeof Ionicons.glyphMap;
+  iconColor: string;
+  title: string;
+  subtitle?: string;
+}) {
+  return (
+    <View style={styles.emptyCenter}>
+      <View style={[styles.emptyIconWrap, { backgroundColor: iconColor + '18' }]}>
+        <Ionicons name={icon} size={32} color={iconColor} />
+      </View>
+      <Text style={styles.emptyTitle}>{title}</Text>
+      {subtitle ? <Text style={styles.emptySubtitle}>{subtitle}</Text> : null}
     </View>
   );
 }
@@ -201,11 +243,12 @@ export function StatisticsScreen() {
         <View style={styles.header}>
           <Text style={styles.headerTitle}>Estadísticas</Text>
         </View>
-        <View style={styles.emptyCenter}>
-          <Ionicons name="bar-chart-outline" size={48} color={Colors.text.disabled} />
-          <Text style={styles.emptyTitle}>Sin liga activa</Text>
-          <Text style={styles.emptySubtitle}>Selecciona una liga primero</Text>
-        </View>
+        <EmptyState
+          icon="bar-chart-outline"
+          iconColor={Colors.text.disabled}
+          title="Sin liga activa"
+          subtitle="Selecciona una liga primero"
+        />
       </SafeAreaView>
     );
   }
@@ -238,9 +281,12 @@ export function StatisticsScreen() {
             <Text style={styles.headerSub}>{leagueName}</Text>
           ) : null}
         </View>
-        <View style={styles.emptyCenter}>
-          <Ionicons name="cloud-offline-outline" size={48} color={Colors.semantic.error} />
-          <Text style={styles.errorTitle}>No se pudieron cargar las estadísticas</Text>
+        <EmptyState
+          icon="cloud-offline-outline"
+          iconColor={Colors.semantic.error}
+          title="No se pudieron cargar las estadísticas"
+        />
+        <View style={styles.retryCenterWrap}>
           <TouchableOpacity style={styles.retryButton} onPress={refresh}>
             <Text style={styles.retryText}>Reintentar</Text>
           </TouchableOpacity>
@@ -265,13 +311,12 @@ export function StatisticsScreen() {
             <Text style={styles.headerSub}>{leagueName}</Text>
           ) : null}
         </View>
-        <View style={styles.emptyCenter}>
-          <Ionicons name="stats-chart-outline" size={48} color={Colors.text.disabled} />
-          <Text style={styles.emptyTitle}>Sin estadísticas</Text>
-          <Text style={styles.emptySubtitle}>
-            Todavía no hay estadísticas disponibles
-          </Text>
-        </View>
+        <EmptyState
+          icon="stats-chart-outline"
+          iconColor={Colors.text.disabled}
+          title="Sin estadísticas"
+          subtitle="Todavía no hay estadísticas disponibles"
+        />
       </SafeAreaView>
     );
   }
@@ -282,11 +327,14 @@ export function StatisticsScreen() {
   // ── Contenido principal ──────────────────────────────────────────────────
   return (
     <SafeAreaView style={styles.safeArea}>
-      {/* Header */}
+      {/* Header con nombre de liga como badge */}
       <View style={styles.header}>
         <Text style={styles.headerTitle}>Estadísticas</Text>
         {leagueName ? (
-          <Text style={styles.headerSub}>{leagueName}</Text>
+          <View style={styles.leagueBadge}>
+            <Ionicons name="shield-outline" size={11} color={Colors.brand.primary} style={{ marginRight: 4 }} />
+            <Text style={styles.headerSub}>{leagueName}</Text>
+          </View>
         ) : null}
       </View>
 
@@ -346,7 +394,10 @@ export function StatisticsScreen() {
                   { label: 'Rojas', value: safeNumber(myStats.tarjetas_rojas), icon: 'stop-outline' as const, color: Colors.semantic.error },
                 ].map((stat) => (
                   <View key={stat.label} style={styles.myStatItem}>
-                    <Ionicons name={stat.icon} size={18} color={stat.color} />
+                    {/* Icono con fondo semitransparente por color */}
+                    <View style={[styles.myStatIconWrap, { backgroundColor: stat.color + '1A' }]}>
+                      <Ionicons name={stat.icon} size={16} color={stat.color} />
+                    </View>
                     <Text style={styles.myStatValue}>{stat.value}</Text>
                     <Text style={styles.myStatLabel}>{stat.label}</Text>
                   </View>
@@ -374,9 +425,9 @@ export function StatisticsScreen() {
                   <Text style={styles.mvpAvatarText}>
                     {getInitials(safeString(matchdayMVP.nombre, 'MVP'))}
                   </Text>
-                  {/* Estrella */}
+                  {/* Estrella badge */}
                   <View style={styles.mvpStarBadge}>
-                    <Ionicons name="star" size={10} color={Colors.bg.base} />
+                    <Ionicons name="star" size={9} color={Colors.bg.base} />
                   </View>
                 </View>
 
@@ -399,7 +450,7 @@ export function StatisticsScreen() {
                 </View>
               </View>
 
-              {/* Stats secundarias */}
+              {/* Stats secundarias: goles + asistencias */}
               <View style={styles.mvpStatsRow}>
                 <View style={styles.mvpStatItem}>
                   <Ionicons name="football-outline" size={14} color={Colors.brand.primary} />
@@ -469,44 +520,68 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.bg.base,
   },
 
-  // Header
+  // ── Header ──
+
   header: {
     paddingHorizontal: theme.spacing.lg,
-    paddingTop: theme.spacing.md,
+    paddingTop: theme.spacing.lg,
     paddingBottom: theme.spacing.lg,
+    // Separador suave con color brand para dar protagonismo sin ruido
     borderBottomWidth: 1,
-    borderBottomColor: Colors.bg.surface2,
+    borderBottomColor: Colors.brand.primary + '18',
   },
   headerTitle: {
-    fontSize: theme.fontSize.xxl,
-    fontWeight: '700',
+    fontSize: 28,
+    fontWeight: '800',
     color: Colors.text.primary,
-    letterSpacing: 0.2,
+    letterSpacing: -0.5,
+  },
+  // Badge de liga: icono + nombre en una pill
+  leagueBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    alignSelf: 'flex-start',
+    marginTop: 6,
+    backgroundColor: Colors.brand.primary + '15',
+    borderRadius: theme.borderRadius.full,
+    paddingVertical: 3,
+    paddingHorizontal: theme.spacing.sm,
   },
   headerSub: {
-    fontSize: theme.fontSize.sm,
-    color: Colors.text.secondary,
-    marginTop: 2,
+    fontSize: theme.fontSize.xs,
+    fontWeight: '600',
+    color: Colors.brand.primary,
+    letterSpacing: 0.3,
   },
 
-  // Scroll
+  // ── Scroll ──
+
   scrollContent: {
     paddingHorizontal: theme.spacing.lg,
     paddingTop: theme.spacing.lg,
   },
 
-  // Estados vacío / error / loading
+  // ── Estados vacío / error / loading ──
+
   emptyCenter: {
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
     padding: theme.spacing.xxl,
   },
+  // Círculo con fondo tintado que envuelve el icono en estados vacíos
+  emptyIconWrap: {
+    width: 72,
+    height: 72,
+    borderRadius: 36,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: theme.spacing.lg,
+  },
   emptyTitle: {
     fontSize: theme.fontSize.md,
     fontWeight: '600',
     color: Colors.text.secondary,
-    marginTop: theme.spacing.md,
     textAlign: 'center',
   },
   emptySubtitle: {
@@ -526,10 +601,15 @@ const styles = StyleSheet.create({
     marginTop: theme.spacing.md,
     textAlign: 'center',
   },
+  // Wrapper externo para el botón de reintentar en estado de error
+  retryCenterWrap: {
+    alignItems: 'center',
+    marginTop: -theme.spacing.xxl,
+    paddingBottom: theme.spacing.xxl,
+  },
   retryButton: {
-    marginTop: theme.spacing.lg,
     paddingVertical: theme.spacing.sm,
-    paddingHorizontal: theme.spacing.xl,
+    paddingHorizontal: theme.spacing.xxl,
     backgroundColor: Colors.brand.primary,
     borderRadius: theme.borderRadius.full,
   },
@@ -539,12 +619,14 @@ const styles = StyleSheet.create({
     color: Colors.bg.base,
   },
 
-  // Sección
+  // ── Encabezados de sección ──
+
   sectionHeader: {
     flexDirection: 'row',
     alignItems: 'center',
+    // Espaciado generoso entre secciones para jerarquía vertical clara
     marginBottom: theme.spacing.md,
-    marginTop: theme.spacing.xl,
+    marginTop: theme.spacing.xxl,
   },
   sectionAccent: {
     width: 3,
@@ -557,18 +639,23 @@ const styles = StyleSheet.create({
     fontSize: theme.fontSize.md,
     fontWeight: '700',
     color: Colors.text.primary,
-    letterSpacing: 0.3,
+    letterSpacing: 0.2,
   },
 
-  // Tarjeta base
+  // ── Tarjeta base ──
+
   card: {
     backgroundColor: Colors.bg.surface1,
     borderRadius: theme.borderRadius.xl,
+    // Borde sutil que delimita la tarjeta sin añadir peso visual
+    borderWidth: 1,
+    borderColor: Colors.bg.surface2,
     padding: theme.spacing.lg,
-    marginBottom: theme.spacing.sm,
+    marginBottom: theme.spacing.md,
   },
 
   // ── A. Métricas ──
+
   metricsGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
@@ -579,36 +666,48 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.bg.surface1,
     borderRadius: theme.borderRadius.xl,
     padding: theme.spacing.lg,
+    // Línea de color superior que identifica la métrica (se sobreescribe por inline)
+    borderTopWidth: 2,
+    borderTopColor: Colors.brand.primary,
+    // Borde lateral suave
+    borderLeftWidth: 1,
+    borderRightWidth: 1,
+    borderBottomWidth: 1,
+    borderLeftColor: Colors.bg.surface2,
+    borderRightColor: Colors.bg.surface2,
+    borderBottomColor: Colors.bg.surface2,
     // Sombra sutil
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.3,
-    shadowRadius: 4,
-    elevation: 3,
+    shadowOpacity: 0.25,
+    shadowRadius: 6,
+    elevation: 4,
   },
   metricIconWrap: {
-    width: 36,
-    height: 36,
+    width: 38,
+    height: 38,
     borderRadius: theme.borderRadius.lg,
     alignItems: 'center',
     justifyContent: 'center',
     marginBottom: theme.spacing.sm,
   },
   metricValue: {
-    fontSize: theme.fontSize.xxl,
+    fontSize: theme.fontSize.xxxl,
     fontWeight: '800',
     color: Colors.text.primary,
-    lineHeight: 28,
+    lineHeight: 36,
   },
   metricLabel: {
     fontSize: theme.fontSize.xs,
     color: Colors.text.secondary,
-    marginTop: 2,
+    marginTop: 3,
     textTransform: 'uppercase',
-    letterSpacing: 0.5,
+    letterSpacing: 0.6,
+    fontWeight: '500',
   },
 
   // ── B. Mis estadísticas ──
+
   myStatsGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
@@ -618,60 +717,76 @@ const styles = StyleSheet.create({
     width: '30%',
     alignItems: 'center',
     paddingVertical: theme.spacing.md,
+    gap: 5,
+  },
+  // Fondo circular tintado detrás del icono de cada stat personal
+  myStatIconWrap: {
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   myStatValue: {
     fontSize: theme.fontSize.xl,
-    fontWeight: '700',
+    fontWeight: '800',
     color: Colors.text.primary,
-    marginTop: theme.spacing.xs,
   },
   myStatLabel: {
     fontSize: 10,
     color: Colors.text.disabled,
     textTransform: 'uppercase',
     letterSpacing: 0.5,
-    marginTop: 2,
+    fontWeight: '500',
   },
 
   // ── C. MVP ──
+
   mvpCard: {
-    // gradiente simulado con borde brand
-    borderWidth: 1,
-    borderColor: Colors.brand.primary + '33',
+    // Borde verde suave + glow para destacar el MVP sobre las demás tarjetas
+    borderColor: Colors.brand.primary + '40',
+    shadowColor: Colors.brand.primary,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.12,
+    shadowRadius: 12,
+    elevation: 6,
   },
   mvpJornadaBadge: {
     alignSelf: 'flex-start',
     backgroundColor: Colors.brand.primary + '22',
     borderRadius: theme.borderRadius.full,
-    paddingVertical: 3,
+    paddingVertical: 4,
     paddingHorizontal: theme.spacing.md,
     marginBottom: theme.spacing.md,
   },
   mvpJornadaText: {
     fontSize: theme.fontSize.xs,
-    fontWeight: '600',
+    fontWeight: '700',
     color: Colors.brand.primary,
     textTransform: 'uppercase',
-    letterSpacing: 0.5,
+    letterSpacing: 0.8,
   },
   mvpContent: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: theme.spacing.md,
+    marginBottom: theme.spacing.lg,
   },
   mvpAvatar: {
-    width: 52,
-    height: 52,
-    borderRadius: 26,
-    backgroundColor: Colors.brand.primary + '33',
+    width: 60,
+    height: 60,
+    borderRadius: 30,
+    backgroundColor: Colors.brand.primary + '2A',
     alignItems: 'center',
     justifyContent: 'center',
     marginRight: theme.spacing.md,
     // Posición relativa para el badge estrella
     position: 'relative',
+    // Borde brand para reforzar el foco visual
+    borderWidth: 1.5,
+    borderColor: Colors.brand.primary + '50',
   },
   mvpAvatarText: {
-    fontSize: theme.fontSize.md,
+    fontSize: theme.fontSize.lg,
     fontWeight: '700',
     color: Colors.brand.primary,
   },
@@ -685,6 +800,9 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.brand.primary,
     alignItems: 'center',
     justifyContent: 'center',
+    // Borde para separarlo del avatar
+    borderWidth: 1.5,
+    borderColor: Colors.bg.surface1,
   },
   mvpInfo: {
     flex: 1,
@@ -697,7 +815,7 @@ const styles = StyleSheet.create({
   mvpTeam: {
     fontSize: theme.fontSize.sm,
     color: Colors.text.secondary,
-    marginTop: 2,
+    marginTop: 3,
   },
   mvpRatingBox: {
     alignItems: 'center',
@@ -705,6 +823,7 @@ const styles = StyleSheet.create({
     borderRadius: theme.borderRadius.lg,
     paddingVertical: theme.spacing.sm,
     paddingHorizontal: theme.spacing.md,
+    minWidth: 52,
   },
   mvpRating: {
     fontSize: theme.fontSize.xl,
@@ -714,8 +833,8 @@ const styles = StyleSheet.create({
   },
   mvpRatingLabel: {
     fontSize: 9,
-    fontWeight: '600',
-    color: Colors.bg.base,
+    fontWeight: '700',
+    color: Colors.bg.base + 'CC',
     textTransform: 'uppercase',
     letterSpacing: 0.5,
   },
@@ -748,6 +867,7 @@ const styles = StyleSheet.create({
   },
 
   // ── D. Goleadores ──
+
   scorerHeader: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -760,15 +880,16 @@ const styles = StyleSheet.create({
     fontSize: theme.fontSize.xs,
     color: Colors.text.disabled,
     textTransform: 'uppercase',
-    letterSpacing: 0.5,
+    letterSpacing: 0.6,
     fontWeight: '600',
   },
   scorerRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingVertical: theme.spacing.sm,
+    // Padding vertical generoso para separar cada fila
+    paddingVertical: theme.spacing.md,
     borderBottomWidth: 1,
-    borderBottomColor: Colors.bg.surface2 + '55',
+    borderBottomColor: Colors.bg.surface2 + '44',
   },
   scorerRank: {
     width: 20,
@@ -776,11 +897,11 @@ const styles = StyleSheet.create({
     fontWeight: '800',
     textAlign: 'center',
   },
+  // Avatar con fondo tintado por color de medalla (sobreescrito inline)
   scorerAvatar: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    backgroundColor: Colors.bg.surface2,
+    width: 36,
+    height: 36,
+    borderRadius: 18,
     alignItems: 'center',
     justifyContent: 'center',
     marginHorizontal: theme.spacing.sm,
@@ -788,7 +909,6 @@ const styles = StyleSheet.create({
   scorerAvatarText: {
     fontSize: 11,
     fontWeight: '700',
-    color: Colors.text.secondary,
   },
   scorerInfo: {
     flex: 1,
@@ -802,7 +922,7 @@ const styles = StyleSheet.create({
   scorerTeam: {
     fontSize: theme.fontSize.xs,
     color: Colors.text.disabled,
-    marginTop: 1,
+    marginTop: 2,
   },
   scorerStats: {
     alignItems: 'flex-end',
@@ -815,25 +935,30 @@ const styles = StyleSheet.create({
   scorerAvgText: {
     fontSize: 10,
     color: Colors.text.disabled,
-    marginTop: 1,
+    marginTop: 2,
+    fontWeight: '500',
   },
 
   // ── E. Goles por equipo ──
+
   teamGoalRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingVertical: theme.spacing.sm,
+    paddingVertical: theme.spacing.md,
     borderBottomWidth: 1,
-    borderBottomColor: Colors.bg.surface2 + '55',
+    borderBottomColor: Colors.bg.surface2 + '44',
   },
+  // Badge circular (en lugar de cuadrado) para más modernidad
   teamInitialBadge: {
-    width: 36,
-    height: 36,
-    borderRadius: theme.borderRadius.md,
+    width: 38,
+    height: 38,
+    borderRadius: 19,
     backgroundColor: Colors.brand.secondary + '22',
     alignItems: 'center',
     justifyContent: 'center',
     marginRight: theme.spacing.md,
+    borderWidth: 1,
+    borderColor: Colors.brand.secondary + '30',
   },
   teamInitialText: {
     fontSize: 11,
@@ -847,7 +972,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    marginBottom: 6,
+    marginBottom: theme.spacing.sm,
   },
   teamGoalName: {
     fontSize: theme.fontSize.sm,
@@ -867,19 +992,23 @@ const styles = StyleSheet.create({
   teamGoalAvg: {
     fontSize: 10,
     color: Colors.text.disabled,
+    marginTop: 1,
+    fontWeight: '500',
   },
+  // Pista de la barra más gruesa (6px) para mejor visibilidad en móvil
   barTrack: {
-    height: 4,
+    height: 6,
     backgroundColor: Colors.bg.surface2,
-    borderRadius: 2,
+    borderRadius: 3,
     overflow: 'hidden',
   },
   barFill: {
-    height: 4,
+    height: 6,
     backgroundColor: Colors.brand.secondary,
-    borderRadius: 2,
+    borderRadius: 3,
   },
 
+  // ── Espaciado inferior ──
   bottomPad: {
     height: theme.spacing.xxl,
   },

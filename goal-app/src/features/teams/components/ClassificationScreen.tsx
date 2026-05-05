@@ -181,7 +181,7 @@ function ClassificationTable({ rows }: ClassificationTableProps) {
         {/* Columna fija: mantiene visible el ranking y el nombre del equipo */}
         <View style={styles.fixedColumn}>
           <View style={styles.fixedHeaderCell}>
-            <Text style={styles.headerText}># Equipo</Text>
+            <Text style={styles.headerText}>Equipo</Text>
           </View>
 
           {rows.map((item, index) => {

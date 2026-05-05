@@ -188,6 +188,8 @@ export function TeamDetailScreen() {
         </View>
       </View>
 
+      
+
       {/* ── Contenido ── */}
       {isLoading && (
         <View style={styles.centered}>

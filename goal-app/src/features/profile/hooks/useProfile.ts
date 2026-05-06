@@ -1,9 +1,9 @@
 /**
- * Hook de perfil
+ * Hook de perfil.
  *
  * Carga el perfil al montar.
  * Expone updateProfile que llama a la API y, si tiene éxito,
- * sincroniza el sessionStore y actualiza el estado local.
+ * sincroniza sessionStore y actualiza el estado local.
  */
 
 import { useState, useEffect, useCallback } from 'react';
@@ -29,6 +29,7 @@ export function useProfile(): UseProfileReturn {
   const load = useCallback(async () => {
     setIsLoading(true);
     setError(null);
+
     try {
       const data = await fetchMyProfileService();
       setProfile(data);
@@ -43,41 +44,43 @@ export function useProfile(): UseProfileReturn {
     load();
   }, [load]);
 
-  const refresh = useCallback(() => load(), [load]);
+  const refresh = useCallback(() => {
+    void load();
+  }, [load]);
 
-  const updateProfile = useCallback(
-    async (data: UpdateUserProfileRequest): Promise<boolean> => {
-      setIsSaving(true);
-      setError(null);
-      try {
-        const result = await updateMyProfileService(data);
-        if (result.success && result.data) {
-          setProfile(result.data);
+  const updateProfile = useCallback(async (data: UpdateUserProfileRequest): Promise<boolean> => {
+    setIsSaving(true);
+    setError(null);
 
-          // Sincronizar sessionStore para que la próxima sesión tenga datos frescos
-          const session = await sessionStore.getSession();
-          if (session.user && session.accessToken && session.refreshToken) {
-            await sessionStore.setSession(session.accessToken, session.refreshToken, {
-              ...session.user,
-              nombre: result.data.nombre || session.user.nombre,
-              telefono: result.data.telefono || session.user.telefono,
-              fecha_nacimiento: result.data.fechaNacimiento || session.user.fecha_nacimiento,
-              genero: result.data.genero || session.user.genero,
-            });
-          }
-          return true;
+    try {
+      const result = await updateMyProfileService(data);
+
+      if (result.success && result.data) {
+        setProfile(result.data);
+
+        // Sincronizar sessionStore para que otros puntos de la app lean datos frescos.
+        const session = await sessionStore.getSession();
+        if (session.user && session.accessToken && session.refreshToken) {
+          await sessionStore.setSession(session.accessToken, session.refreshToken, {
+            ...session.user,
+            nombre: result.data.nombre,
+            telefono: result.data.telefono,
+            fecha_nacimiento: result.data.fechaNacimiento,
+          });
         }
-        setError(result.error ?? 'Error al guardar');
-        return false;
-      } catch {
-        setError('Error inesperado al guardar');
-        return false;
-      } finally {
-        setIsSaving(false);
+
+        return true;
       }
-    },
-    [],
-  );
+
+      setError(result.error ?? 'Error al guardar');
+      return false;
+    } catch {
+      setError('Error inesperado al guardar');
+      return false;
+    } finally {
+      setIsSaving(false);
+    }
+  }, []);
 
   return { profile, isLoading, isSaving, error, refresh, updateProfile };
 }

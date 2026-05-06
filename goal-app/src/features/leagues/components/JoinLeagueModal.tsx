@@ -1,14 +1,5 @@
 import React, { useRef, useCallback, useEffect, useState, memo } from 'react';
-import {
-  View,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  Modal,
-  Animated,
-  Easing,
-  Pressable,
-  KeyboardAvoidingView,
+import { View, Text, TextInput, TouchableOpacity, Modal, Animated, Easing, Pressable,KeyboardAvoidingView,
   Platform,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';

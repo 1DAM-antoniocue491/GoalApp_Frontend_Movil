@@ -67,6 +67,7 @@ export function AdminDashboard({
   notificationCount = 0,
 }: AdminDashboardProps) {
   const router = useRouter();
+  
 
   // Datos del dashboard desde el hook — API real vía fetchDashboardData
   const { data, isLoading, isRefetching, isError, refetch } = useDashboardData(leagueId);

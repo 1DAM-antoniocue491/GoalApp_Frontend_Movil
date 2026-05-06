@@ -37,6 +37,7 @@ const permissions = getDashboardPermissions('admin');
 export function ProgrammedMatchesScreen() {
     const router = useRouter();
     const { modals, activeStartMatch, openStartMatch, modalProps } = useMatchActionModals();
+    console.log('IDs en ProgrammedMatchesScreen:', mockUpcomingMatches.map(m => m.id));
 
     if (mockUpcomingMatches.length === 0) {
         return (
@@ -90,9 +91,20 @@ export function ProgrammedMatchesScreen() {
                             key={match.id}
                             match={match}
                             permissions={permissions}
-                            onPress={() => {
-                                router.push(routes.private.matchRoutes.programmed.detail(match.id) as never);
-                            }}
+                            onPress={() => router.push({
+                                pathname: routes.private.matchRoutes.programmed.detail(match.id) as never,
+                                params: {
+                                    homeTeam: match.homeTeam,
+                                    awayTeam: match.awayTeam,
+                                    day: match.day,
+                                    month: match.month,
+                                    time: match.time,
+                                    round: match.round,
+                                    venue: match.venue,
+                                    homeColor: match.homeColor ?? '',
+                                    awayColor: match.awayColor ?? '',
+                                }
+                            } as never)}
                             onStartMatch={() =>
                                 openStartMatch({
                                     id: match.id,

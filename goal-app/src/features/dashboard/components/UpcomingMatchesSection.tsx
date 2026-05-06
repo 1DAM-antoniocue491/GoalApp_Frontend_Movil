@@ -93,12 +93,7 @@ export function UpcomingMatchesSection({
 
                 {/* Enlace "Ver calendario" → abre Calendario con filtro Programados activo */}
                 <TouchableOpacity
-                    onPress={() => {
-                        router.push({
-                            pathname: routes.private.tabs.calendar as never,
-                            params: { filter: 'programmed' },
-                        } as never);
-                    }}
+
                     style={{ flexDirection: 'row', alignItems: 'center', gap: 3 }}
                 >
                     <Text style={{ color: Colors.brand.primary, fontSize: 13, fontWeight: '500' }}>
@@ -115,7 +110,20 @@ export function UpcomingMatchesSection({
                     match={match}
                     permissions={permissions}
                     onPress={() => {
-                        router.push(routes.private.matchRoutes.programmed.detail(match.id) as never);
+                        router.push({
+                            pathname: routes.private.matchRoutes.programmed.detail(match.id) as never,
+                            params: {
+                                homeTeam: match.homeTeam,
+                                awayTeam: match.awayTeam,
+                                day: match.day,
+                                month: match.month,
+                                time: match.time,
+                                round: match.round,
+                                venue: match.venue,
+                                homeColor: match.homeColor ?? '',
+                                awayColor: match.awayColor ?? '',
+                            }
+                        } as never);
                     }}
                     onStartMatch={() => onStartMatch?.(match.id)}
                 />

@@ -230,16 +230,53 @@ function TeamBadge({ letter, color }: { letter: string; color: string }) {
 
 type ActiveSubTab = 'titulares' | 'suplentes';
 type ActiveTeam = 'home' | 'away';
-
 export function ProgrammedMatchDetailScreen() {
   const router = useRouter();
-  const { matchId } = useLocalSearchParams<{ matchId: string }>();
+
+  // ── UN SOLO useLocalSearchParams con todos los params ──
+  const {
+    matchId,
+    homeTeam,
+    awayTeam,
+    day,
+    month,
+    time,
+    round,
+    venue,
+    homeColor: homeColorParam,
+    awayColor: awayColorParam,
+  } = useLocalSearchParams<{
+    matchId: string;
+    homeTeam?: string;
+    awayTeam?: string;
+    day?: string;
+    month?: string;
+    time?: string;
+    round?: string;
+    venue?: string;
+    homeColor?: string;
+    awayColor?: string;
+  }>();
 
   const [activeTeam, setActiveTeam] = useState<ActiveTeam>('home');
   const [activeSubTab, setActiveSubTab] = useState<ActiveSubTab>('titulares');
   const [query, setQuery] = useState('');
 
-  const match = mockUpcomingMatches[0];
+  const match = homeTeam
+    ? {
+      id: matchId,
+      homeTeam,
+      awayTeam: awayTeam ?? '',
+      day: day ?? '',
+      month: month ?? '',
+      time: time ?? '',
+      round: round ?? '',
+      venue: venue ?? '',
+      homeColor: homeColorParam || undefined,
+      awayColor: awayColorParam || undefined,
+    }
+    : mockUpcomingMatches.find(m => m.id === matchId);
+
   const homeColor = match?.homeColor ?? '#A1A1AA';
   const awayColor = match?.awayColor ?? '#C4F135';
 

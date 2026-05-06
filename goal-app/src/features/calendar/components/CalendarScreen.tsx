@@ -452,8 +452,8 @@ export function CalendarScreen() {
     viewState === 'no_calendar'
       ? 'no_calendar'
       : hasMatchesInPlayOrFinished
-      ? 'locked'
-      : 'editable';
+        ? 'locked'
+        : 'editable';
 
   // ── Handlers del menú de admin ──
   const handleMenuPress = () => setMenuVisible(true);
@@ -719,7 +719,20 @@ export function CalendarScreen() {
                     <ProgrammedMatchCard
                       match={toProgrammedData(match)}
                       permissions={dashPerms}
-                      onPress={() => handleMatchPress(match.id, match.status)}
+                      onPress={() => router.push({
+                        pathname: routes.private.matchRoutes.programmed.detail(match.id) as never,
+                        params: {
+                          homeTeam: match.homeTeam,
+                          awayTeam: match.awayTeam,
+                          day: match.day ?? '',
+                          month: match.month ?? '',
+                          time: match.time ?? '',
+                          round: match.round,
+                          venue: match.venue,
+                          homeColor: match.homeColor ?? '',
+                          awayColor: match.awayColor ?? '',
+                        }
+                      } as never)}
                       onStartMatch={() => handleStartMatch(match.id)}
                     />
                     {match.source === 'manual' && <ManualMatchBadge />}

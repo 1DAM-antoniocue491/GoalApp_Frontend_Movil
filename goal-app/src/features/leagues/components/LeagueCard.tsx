@@ -1,7 +1,6 @@
 import React, { memo } from 'react';
 import { View, Text, TouchableOpacity, Image } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-
 import { Colors } from '@/src/shared/constants/colors';
 import { theme } from '@/src/shared/styles/theme';
 import { StatusDotLabel } from '@/src/shared/components/ui/StatusDotLabel';
@@ -228,7 +227,9 @@ function getLeagueCardInfoBlocks(league: LeagueItem): CardInfoBlock[] {
   const teamsBlock: CardInfoBlock = {
     icon: 'people-outline',
     label: 'Equipos',
-    value: league.teamsCount,
+    value
+    
+    : league.teamsCount,
   };
 
   if (league.role === 'admin' || league.role === 'observer') {

@@ -470,16 +470,19 @@ function CreateLeagueModalComponent({
                   activeOpacity={0.75}
                   style={{ alignSelf: 'center', alignItems: 'center', marginBottom: 28 }}
                 >
-                  <View
+                 <View
                     style={{
-                      width: 110,
-                      height: 110,
+                      width: 112,
+                      height: 112,
                       borderRadius: 24,
                       alignItems: 'center',
                       justifyContent: 'center',
                       backgroundColor: Colors.bg.base,
-                      borderWidth: 1,
-                      borderColor: Colors.bg.surface2,
+                      borderWidth: 1.5,
+                      borderColor: Colors.brand.primary,
+                      borderStyle: 'dashed',
+                      shadowColor: Colors.brand.primary,
+                      shadowRadius: 12,
                     }}
                   >
                     <Ionicons name="shield-outline" size={44} color={Colors.text.disabled} />

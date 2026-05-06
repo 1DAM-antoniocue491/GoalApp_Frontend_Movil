@@ -341,96 +341,6 @@ function ManualMatchBadge() {
   );
 }
 
-
-// ---------------------------------------------------------------------------
-// Helpers de fecha para partido manual
-// ---------------------------------------------------------------------------
-
-/**
- * DateTimePickerField puede devolver fechas visuales tipo DD/MM/YYYY.
- * La API, igual que web, espera un datetime válido con año primero:
- * YYYY-MM-DDTHH:mm:ss.
- */
-function normalizeDateForApi(value: string | undefined | null): string | null {
-  if (!value) return null;
-
-  const clean = String(value).trim();
-  if (!clean) return null;
-
-  // Si ya llega como datetime, nos quedamos con la parte de fecha.
-  const datePart = clean.includes('T') ? clean.split('T')[0] : clean;
-
-  // Formato correcto: YYYY-MM-DD.
-  const isoMatch = datePart.match(/^(\d{4})-(\d{1,2})-(\d{1,2})$/);
-  if (isoMatch) {
-    const [, year, month, day] = isoMatch;
-    return `${year}-${month.padStart(2, '0')}-${day.padStart(2, '0')}`;
-  }
-
-  // Formato visual del picker móvil: DD/MM/YYYY o DD-MM-YYYY.
-  const spanishMatch = datePart.match(/^(\d{1,2})[\/-](\d{1,2})[\/-](\d{4})$/);
-  if (spanishMatch) {
-    const [, day, month, year] = spanishMatch;
-    return `${year}-${month.padStart(2, '0')}-${day.padStart(2, '0')}`;
-  }
-
-  const parsed = new Date(clean);
-  if (!Number.isNaN(parsed.getTime())) {
-    const year = String(parsed.getFullYear());
-    const month = String(parsed.getMonth() + 1).padStart(2, '0');
-    const day = String(parsed.getDate()).padStart(2, '0');
-    return `${year}-${month}-${day}`;
-  }
-
-  return null;
-}
-
-/**
- * Normaliza horas que pueden llegar como H:m, H:m:s o como Date string.
- */
-function normalizeTimeForApi(value: string | undefined | null): string | null {
-  if (!value) return null;
-
-  const clean = String(value).trim();
-  if (!clean) return null;
-
-  const timePart = clean.includes('T') ? clean.split('T')[1] : clean;
-  const timeMatch = timePart.match(/^(\d{1,2}):(\d{1,2})(?::(\d{1,2}))?/);
-
-  if (timeMatch) {
-    const [, rawHour, rawMinute, rawSecond = '0'] = timeMatch;
-    const hour = Number(rawHour);
-    const minute = Number(rawMinute);
-    const second = Number(rawSecond);
-
-    if (
-      Number.isInteger(hour) && hour >= 0 && hour <= 23 &&
-      Number.isInteger(minute) && minute >= 0 && minute <= 59 &&
-      Number.isInteger(second) && second >= 0 && second <= 59
-    ) {
-      return `${String(hour).padStart(2, '0')}:${String(minute).padStart(2, '0')}:${String(second).padStart(2, '0')}`;
-    }
-  }
-
-  const parsed = new Date(clean);
-  if (!Number.isNaN(parsed.getTime())) {
-    const hour = String(parsed.getHours()).padStart(2, '0');
-    const minute = String(parsed.getMinutes()).padStart(2, '0');
-    const second = String(parsed.getSeconds()).padStart(2, '0');
-    return `${hour}:${minute}:${second}`;
-  }
-
-  return null;
-}
-
-function buildMatchDateTimeForApi(date: string, time: string): string | null {
-  const normalizedDate = normalizeDateForApi(date);
-  const normalizedTime = normalizeTimeForApi(time);
-
-  if (!normalizedDate || !normalizedTime) return null;
-  return `${normalizedDate}T${normalizedTime}`;
-}
-
 // ---------------------------------------------------------------------------
 // CalendarScreen
 // ---------------------------------------------------------------------------
@@ -548,6 +458,13 @@ export function CalendarScreen() {
   };
 
   // ── Estado del calendario para el menú — 3 estados igual que la web ──
+  // Los partidos manuales NO cuentan como calendario generado.
+  // Esta bandera controla que "Editar calendario" solo aparezca cuando existe
+  // calendario automático creado desde CalendarConfigModal/API.
+  const hasGeneratedCalendar = journeys.some((j) =>
+    j.matches.some((m) => m.source === 'automatic'),
+  );
+
   const hasMatchesInPlayOrFinished = journeys.some((j) =>
     j.matches.some((m) => m.status === 'live' || m.status === 'finished'),
   );
@@ -555,8 +472,8 @@ export function CalendarScreen() {
     viewState === 'no_calendar'
       ? 'no_calendar'
       : hasMatchesInPlayOrFinished
-        ? 'locked'
-        : 'editable';
+      ? 'locked'
+      : 'editable';
 
   // ── Handlers del menú de admin ──
   const handleMenuPress = () => setMenuVisible(true);
@@ -658,14 +575,9 @@ export function CalendarScreen() {
     const activeJornada = journeys[journeyIndex];
     const jornadaNum = activeJornada?.backendNumber ?? activeJornada?.number ?? 1;
 
-    // Combinar fecha + hora en formato válido para API: YYYY-MM-DDTHH:mm:ss.
-    // El picker móvil puede devolver DD/MM/YYYY o horas sin padding; aquí se normaliza.
-    const fechaHora = buildMatchDateTimeForApi(data.date, data.time);
-
-    if (!fechaHora) {
-      setNewMatchError('Selecciona una fecha y hora válidas');
-      return;
-    }
+    // Combinar fecha + hora en ISO: YYYY-MM-DDTHH:MM:00
+    // TODO API: si el backend requiere UTC, ajustar conversión aquí
+    const fechaHora = `${data.date}T${data.time}:00`;
 
     setNewMatchError(undefined);
     setNewMatchSubmitting(true);
@@ -912,6 +824,7 @@ export function CalendarScreen() {
         visible={menuVisible}
         permissions={calendarPerms}
         calendarMenuState={calendarMenuState}
+        hasGeneratedCalendar={hasGeneratedCalendar}
         onClose={() => setMenuVisible(false)}
         onCreateCalendar={handleOpenCreateCalendar}
         onEditCalendar={handleOpenEditCalendar}

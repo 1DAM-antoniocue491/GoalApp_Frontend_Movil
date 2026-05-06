@@ -178,6 +178,10 @@ export function getRoleGreeting(role: LeagueRole): string {
  * Siempre devuelve un entero con símbolo %, sin decimales.
  */
 export function formatProgress(current: number, total: number): string {
-  if (total === 0) return "0%";
-  return `${Math.round((current / total) * 100)}%`;
+  if (total <= 0) return "0%";
+
+  // El porcentaje visual se limita a 100% para evitar barras desbordadas
+  // cuando el valor actual supere el máximo configurado.
+  const ratio = Math.min(Math.max(current / total, 0), 1);
+  return `${Math.round(ratio * 100)}%`;
 }

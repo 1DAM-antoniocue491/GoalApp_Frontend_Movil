@@ -1,145 +1,179 @@
 /**
  * matches.types.ts
  *
- * Tipos canónicos del dominio de partidos.
+ * Tipos canónicos del dominio de partidos en móvil.
+ * Están alineados con la integración web actual y con la API real:
+ * - creación manual: POST /partidos/
+ * - iniciar/finalizar: PUT /partidos/{id}/iniciar|finalizar
+ * - eventos: POST /eventos/
  *
- * Diseñados para ser flexibles ante nombres de campo variables según el endpoint
- * y compatibles con los DTOs ya usados en calendar.api.ts y dashboard.api.ts.
- *
- * NO duplicar EquipoResumenCalendario / PartidoConEquiposCalendario —
- * esos tipos son específicos del módulo de calendario.
- * Estos son los tipos base compartidos para la feature de matches.
+ * IMPORTANTE:
+ * Se mantienen algunos campos opcionales legacy (fecha_hora, numero_jornada,
+ * id_delegado, estadio) para no romper pantallas móviles que ya los construyen,
+ * pero el service normaliza el payload antes de enviarlo a la API.
  */
 
 // ---------------------------------------------------------------------------
 // Estado del partido
 // ---------------------------------------------------------------------------
 
-/**
- * Estados conocidos del backend.
- * `| string` permite valores desconocidos sin romper TypeScript.
- */
 export type MatchStatus =
-  | 'programado'
-  | 'en_juego'
-  | 'en_vivo'
-  | 'finalizado'
-  | 'cancelado'
+  | "programado"
+  | "en_juego"
+  | "en_vivo"
+  | "finalizado"
+  | "cancelado"
   | string;
 
 // ---------------------------------------------------------------------------
-// DTOs — forma exacta que devuelve el backend
+// DTOs de backend
 // ---------------------------------------------------------------------------
 
-/** Equipo embebido en la respuesta de un partido */
 export interface EquipoPartidoApi {
-  /** El backend puede devolver id_equipo o id según el endpoint */
   id_equipo?: number;
   id?: number;
   nombre?: string;
   escudo?: string | null;
   logo_url?: string | null;
-  /** El color puede venir como colores o color_primario */
   colores?: string | null;
   color_primario?: string | null;
 }
 
-/**
- * DTO de partido — forma flexible para cubrir múltiples endpoints.
- * Los campos opcionales reflejan que distintos endpoints devuelven
- * subconjuntos distintos de esta estructura.
- */
 export interface PartidoApi {
   id_partido: number;
   id_liga?: number;
-  /** Número de jornada — el backend usa distintos nombres según el endpoint */
+  id_jornada?: number | null;
   jornada?: number | null;
   numero_jornada?: number | null;
   num_jornada?: number | null;
-  /** IDs de equipo como fallback cuando el objeto embebido no viene */
   id_equipo_local?: number;
   id_equipo_visitante?: number;
-  /** Equipos embebidos — presentes solo en endpoints con-equipos / jornadas */
   equipo_local?: EquipoPartidoApi | null;
   equipo_visitante?: EquipoPartidoApi | null;
-  /** Fecha flexible — puede venir como fecha_hora, fecha + hora separadas */
+  goles_local?: number | null;
+  goles_visitante?: number | null;
   fecha?: string | null;
   fecha_hora?: string | null;
   hora?: string | null;
   estadio?: string | null;
   estado?: MatchStatus;
-  goles_local?: number | null;
-  goles_visitante?: number | null;
   minuto_actual?: number | null;
   created_at?: string;
   updated_at?: string;
 }
 
+export interface JornadaPartidosApi {
+  jornada?: number;
+  numero_jornada?: number;
+  num_jornada?: number;
+  id_jornada?: number;
+  partidos?: PartidoApi[];
+}
+
 // ---------------------------------------------------------------------------
-// Requests de mutación
+// Requests de partidos
 // ---------------------------------------------------------------------------
 
 /**
- * Body para crear un partido manualmente.
- * Basado en la convención de nombres del backend (snake_case español)
- * y los campos que recoge CreateManualMatchModal.
- *
- * TODO API: confirmar campos exactos cuando el backend documente
- * POST /partidos/ligas/{liga_id}/crear-partido.
+ * Payload real para crear partido manual.
+ * Web envía: { id_liga, id_equipo_local, id_equipo_visitante, fecha }.
  */
-export interface CreateManualMatchRequest {
+export interface CreateMatchPayload {
+  id_liga: number;
+  id_jornada?: number | null;
   id_equipo_local: number;
   id_equipo_visitante: number;
   /** ISO date-time combinada: YYYY-MM-DDTHH:MM:SS */
-  fecha_hora: string;
+  fecha: string;
+}
+
+/**
+ * Request flexible que puede venir desde pantallas móviles antiguas.
+ * El service lo convierte a CreateMatchPayload antes del POST /partidos/.
+ */
+export interface CreateManualMatchRequest {
+  id_liga?: number;
+  id_jornada?: number | null;
+  id_equipo_local: number;
+  id_equipo_visitante: number;
+  fecha?: string;
+  fecha_hora?: string;
+  numero_jornada?: number | null;
   estadio?: string;
-  /** Número de jornada — puede llamarse distinto en el backend */
-  numero_jornada?: number;
-  /** ID del delegado asignado al partido */
   id_delegado?: number;
 }
 
+export interface UpdateMatchPayload {
+  id_jornada?: number | null;
+  id_equipo_local?: number;
+  id_equipo_visitante?: number;
+  goles_local?: number | null;
+  goles_visitante?: number | null;
+  fecha?: string;
+  estado?: MatchStatus;
+}
+
+export interface CalendarCreatePayload {
+  tipo: "ida" | "ida_vuelta";
+  fecha_inicio: string;
+  dias_partido: number[];
+  hora: string;
+}
+
+export interface CalendarUpdatePayload extends Partial<CalendarCreatePayload> {}
+
+/** Payload real que usa web para finalizar partido. */
+export interface FinishMatchRequest {
+  goles_local?: number;
+  goles_visitante?: number;
+  id_mvp?: number | null;
+  puntuacion_mvp?: number | null;
+  incidencias?: string | null;
+  /** Alias legacy móvil; el service lo convierte a incidencias. */
+  observaciones?: string | null;
+}
+
+export type MatchEventType =
+  | "gol"
+  | "tarjeta_amarilla"
+  | "tarjeta_roja"
+  | "cambio"
+  | "sustitucion"
+  | string;
+
 /**
- * Body para registrar un evento de partido (gol, tarjeta, sustitución).
- *
- * TODO API: endpoint no encontrado en código existente ni OpenAPI local.
- * No implementar llamada real hasta que el backend lo exponga.
- * Ruta probable: POST /partidos/{partido_id}/eventos
+ * Payload flexible de evento. La API real de web usa POST /eventos/ con
+ * tipo_evento; si llega tipo desde móvil, el service lo normaliza.
  */
 export interface CreateMatchEventRequest {
-  /** 'gol' | 'tarjeta_amarilla' | 'tarjeta_roja' | 'sustitucion' */
-  tipo: string;
+  id_partido?: number;
   id_jugador?: number;
-  /** Solo para sustitución: jugador que sale */
-  id_jugador_sale?: number;
-  /** Solo para sustitución: jugador que entra */
-  id_jugador_entra?: number;
-  minuto: number;
-  /** 'local' | 'visitante' */
-  equipo: 'local' | 'visitante';
+  tipo_evento?: MatchEventType;
+  tipo?: MatchEventType;
+  minuto?: number;
+  id_jugador_sale?: number | null;
+  id_jugador_entra?: number | null;
+  incidencias?: string | null;
+  equipo?: "local" | "visitante";
   es_propia_puerta?: boolean;
 }
 
-/**
- * Body para finalizar un partido.
- *
- * TODO API: endpoint no encontrado en código existente ni OpenAPI local.
- * No implementar llamada real hasta que el backend lo exponga.
- * Ruta probable: POST /partidos/{partido_id}/finalizar
- */
-export interface FinishMatchRequest {
-  id_mvp?: number;
-  observaciones?: string;
+export interface MatchEventResponse {
+  id_evento?: number;
+  id_partido: number;
+  id_jugador?: number | null;
+  tipo_evento: string;
+  minuto?: number | null;
+  id_jugador_sale?: number | null;
+  incidencias?: string | null;
+  created_at?: string;
+  updated_at?: string;
 }
 
 // ---------------------------------------------------------------------------
 // Patrón de resultado de servicio
 // ---------------------------------------------------------------------------
 
-/**
- * Resultado de una operación de servicio.
- * Las mutaciones nunca lanzan — siempre devuelven este tipo.
- */
 export interface ServiceResult<T = void> {
   success: boolean;
   data?: T;

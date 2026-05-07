@@ -1,74 +1,55 @@
 /**
- * Leagues API - Endpoints del módulo de ligas
- *
- * Usa apiClient para inyección automática de token y retry.
- * Convención: const response = await apiClient.method<T>(...); return response.data;
+ * Leagues API - Endpoints del módulo de ligas.
+ * Usa apiClient para token, base URL y retry.
  */
 
 import { apiClient } from '@/src/shared/api/client';
 import type {
+  JoinLeagueByCodeResponse,
   LigaConRolResponse,
   LigaConfiguracionRequest,
   LigaCreateRequest,
   LigaResponse,
   LigaUpdateRequest,
   LeagueConfigResponse,
+  MyTeamInLeagueResponse,
   UpdateLeagueConfigRequest,
 } from '../types/league.api.types';
 
-/**
- * GET /usuarios/me/ligas
- * Devuelve las ligas del usuario autenticado con su rol en cada una.
- */
 export async function getMyLeagues(): Promise<LigaConRolResponse[]> {
   const response = await apiClient.get<LigaConRolResponse[]>('/usuarios/me/ligas');
   return response.data;
 }
 
-/**
- * GET /ligas/{liga_id}
- * Devuelve el detalle de una liga por ID.
- */
 export async function getLeagueById(ligaId: number): Promise<LigaResponse> {
   const response = await apiClient.get<LigaResponse>(`/ligas/${ligaId}`);
   return response.data;
 }
 
-/**
- * POST /ligas/
- * Crea una nueva liga. El usuario autenticado queda como administrador.
- */
 export async function createLeague(body: LigaCreateRequest): Promise<LigaResponse> {
   const response = await apiClient.post<LigaResponse>('/ligas/', body);
   return response.data;
 }
 
-/**
- * POST /ligas/{liga_id}/configuracion
- * Crea la configuración de una liga nueva (primera vez).
- */
-export async function setLeagueConfig(
-  ligaId: number,
-  body: LigaConfiguracionRequest,
-): Promise<void> {
+export async function updateLeague(ligaId: number, body: LigaUpdateRequest): Promise<LigaResponse> {
+  const response = await apiClient.put<LigaResponse>(`/ligas/${ligaId}`, body);
+  return response.data;
+}
+
+export async function deleteLeague(ligaId: number): Promise<{ mensaje?: string; message?: string }> {
+  const response = await apiClient.delete<{ mensaje?: string; message?: string }>(`/ligas/${ligaId}`);
+  return response.data;
+}
+
+export async function setLeagueConfig(ligaId: number, body: LigaConfiguracionRequest): Promise<void> {
   await apiClient.post(`/ligas/${ligaId}/configuracion`, body);
 }
 
-/**
- * GET /ligas/{liga_id}/configuracion
- * Obtiene la configuración actual de la liga.
- */
 export async function getLeagueConfig(ligaId: number): Promise<LeagueConfigResponse> {
   const response = await apiClient.get<LeagueConfigResponse>(`/ligas/${ligaId}/configuracion`);
   return response.data;
 }
 
-/**
- * PUT /ligas/{liga_id}/configuracion
- * Actualiza la configuración de una liga que ya tiene configuración.
- * Acepta campos parciales (UpdateLeagueConfigRequest).
- * LigaConfiguracionRequest (campos requeridos) es asignable a este tipo.
- */
 export async function updateLeagueConfig(
   ligaId: number,
   body: UpdateLeagueConfigRequest,
@@ -78,22 +59,26 @@ export async function updateLeagueConfig(
 }
 
 /**
- * PUT /ligas/{liga_id}
- * Actualiza datos básicos de la liga (nombre, temporada, estado, etc.).
+ * GET /equipos/usuario/mi-equipo?liga_id={ligaId}
+ * Endpoint específico para obtener el equipo asignado del usuario autenticado.
+ * Se usa para que las cards de liga muestren "Mi equipo" correctamente.
  */
-export async function updateLeague(
-  ligaId: number,
-  body: LigaUpdateRequest,
-): Promise<LigaResponse> {
-  const response = await apiClient.put<LigaResponse>(`/ligas/${ligaId}`, body);
+export async function getMyTeamInLeague(ligaId: number): Promise<MyTeamInLeagueResponse> {
+  const response = await apiClient.get<MyTeamInLeagueResponse>(`/equipos/usuario/mi-equipo?liga_id=${ligaId}`);
   return response.data;
 }
 
+/** Valida un código de unión igual que web. */
+export async function validateJoinCode(codigo: string): Promise<unknown> {
+  const response = await apiClient.get(`/invitaciones/validar-codigo/${encodeURIComponent(codigo)}`);
+  return response.data;
+}
 
-/**
- * DELETE /ligas/{liga_id}
- * Elimina una liga. Solo debe invocarse desde flujos de administrador.
- */
-export async function deleteLeague(ligaId: number): Promise<void> {
-  await apiClient.delete(`/ligas/${ligaId}`);
+/** Acepta un código de unión. FastAPI requiere body en este POST, por eso se envía {}. */
+export async function acceptJoinCode(codigo: string): Promise<JoinLeagueByCodeResponse> {
+  const response = await apiClient.post<JoinLeagueByCodeResponse>(
+    `/invitaciones/aceptar-codigo/${encodeURIComponent(codigo)}`,
+    {},
+  );
+  return response.data;
 }

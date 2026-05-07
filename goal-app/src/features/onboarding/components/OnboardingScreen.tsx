@@ -1,10 +1,4 @@
-import React, {
-  useState,
-  useMemo,
-  useEffect,
-  useRef,
-  useCallback,
-} from "react";
+import React, { useState, useMemo, useEffect, useRef, useCallback } from 'react';
 import {
   View,
   Text,
@@ -12,47 +6,46 @@ import {
   Animated,
   Easing,
   TouchableOpacity,
-} from "react-native";
-import { Ionicons } from "@expo/vector-icons";
-import { useRouter } from "expo-router";
-import { useSafeAreaInsets } from "react-native-safe-area-context";
+} from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
+import { useRouter } from 'expo-router';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { routes } from "@/src/shared/config/routes";
-import { QuickActionCard } from "@/src/features/onboarding/components/QuickActionCard";
-import { LeagueFilterTabs } from "@/src/features/leagues/components/LeagueFilterTabs";
+import { routes } from '@/src/shared/config/routes';
+import { QuickActionCard } from '@/src/features/onboarding/components/QuickActionCard';
+import { LeagueFilterTabs } from '@/src/features/leagues/components/LeagueFilterTabs';
 
-import { SearchInput } from "@/src/shared/components/ui/SearchInput";
-import { LeagueCard } from "@/src/features/leagues/components/LeagueCard";
-import { EmptyLeaguesState } from "@/src/features/leagues/components/EmptyLeaguesState";
-import { LeaguesSkeleton } from "@/src/features/leagues/components/LeaguesSkeleton";
-import { ReactivateLeagueModal } from "@/src/features/leagues/components/ReactivateLeagueModal";
-import { JoinLeagueModal } from "@/src/features/leagues/components/JoinLeagueModal";
-import { CreateLeagueModal } from "@/src/features/leagues/components/CreateLeagueModal";
-import { LeagueSettingsModal } from "@/src/features/leagues/components/LeagueSettingsModal";
-import type { LigaCreateRequest } from "@/src/features/leagues/types/league.api.types";
+import { SearchInput } from '@/src/shared/components/ui/SearchInput';
+import { LeagueCard } from '@/src/features/leagues/components/LeagueCard';
+import { EmptyLeaguesState } from '@/src/features/leagues/components/EmptyLeaguesState';
+import { LeaguesSkeleton } from '@/src/features/leagues/components/LeaguesSkeleton';
+import { ReactivateLeagueModal } from '@/src/features/leagues/components/ReactivateLeagueModal';
+import { JoinLeagueModal } from '@/src/features/leagues/components/JoinLeagueModal';
+import { CreateLeagueModal } from '@/src/features/leagues/components/CreateLeagueModal';
+import { LeagueSettingsModal } from '@/src/features/leagues/components/LeagueSettingsModal';
+import type { LigaCreateRequest } from '@/src/features/leagues/types/league.api.types';
 
-import { LeagueItem, LeagueFilter } from "@/src/shared/types/league";
-import { reactivateLeague } from "@/src/features/leagues/services/leagueService";
-import { useLeagues } from "@/src/features/leagues/hooks/useLeagues";
-import { useAuth } from "@/src/providers/AuthProvider";
-import { activeLeagueStore } from "@/src/state/activeLeague/activeLeagueStore";
-import { Colors } from "@/src/shared/constants/colors";
-import { theme } from "@/src/shared/styles/theme";
-import { ScrollEdgeButton } from "@/src/shared/components/navigation/ScrollEdgeButton";
+import { LeagueItem, LeagueFilter } from '@/src/shared/types/league';
+import { reactivateLeague } from '@/src/features/leagues/services/leagueService';
+import { useLeagues } from '@/src/features/leagues/hooks/useLeagues';
+import { useAuth } from '@/src/providers/AuthProvider';
+import { activeLeagueStore } from '@/src/state/activeLeague/activeLeagueStore';
+import { Colors } from '@/src/shared/constants/colors';
+import { theme } from '@/src/shared/styles/theme';
+import { ScrollEdgeButton } from '@/src/shared/components/navigation/ScrollEdgeButton';
 
 // Import ProtectedRoute para proteger esta pantalla
-import { ProtectedRoute } from "@/src/components/ProtectedRoute";
+import { ProtectedRoute } from '@/src/components/ProtectedRoute';
 
 const COPY = {
-  sectionTitle: "Mis ligas",
-  emptyFilterText: "No se encontraron ligas con los filtros actuales",
-  createLeagueTitle: "Crear nueva liga",
-  createLeagueDescription: "Configura tu competición y empieza a gestionarla",
-  createLeagueCta: "Crear liga",
-  joinLeagueTitle: "Unirme a una liga",
-  joinLeagueDescription:
-    "Únete con un código de invitación y accede al instante",
-  joinLeagueCta: "Unirme",
+  sectionTitle: 'Mis ligas',
+  emptyFilterText: 'No se encontraron ligas con los filtros actuales',
+  createLeagueTitle: 'Crear nueva liga',
+  createLeagueDescription: 'Configura tu competición y empieza a gestionarla',
+  createLeagueCta: 'Crear liga',
+  joinLeagueTitle: 'Unirme a una liga',
+  joinLeagueDescription: 'Únete con un código de invitación y accede al instante',
+  joinLeagueCta: 'Unirme',
 };
 
 function useFadeUpStyle(animatedValue: Animated.Value) {
@@ -68,7 +61,7 @@ function useFadeUpStyle(animatedValue: Animated.Value) {
         },
       ],
     }),
-    [animatedValue],
+    [animatedValue]
   );
 }
 
@@ -85,18 +78,15 @@ function OnboardingScreenContent() {
     submitting: isCreating,
     createError,
     createNewLeague,
-    joiningByCode,
     joinError,
     joinLeagueByCode,
   } = useLeagues();
   const [leagues, setLeagues] = useState<LeagueItem[]>([]);
-  const [selectedFilter, setSelectedFilter] = useState<LeagueFilter>("all");
-  const [searchTerm, setSearchTerm] = useState("");
+  const [selectedFilter, setSelectedFilter] = useState<LeagueFilter>('all');
+  const [searchTerm, setSearchTerm] = useState('');
 
   // Modal states
-  const [reactivateTarget, setReactivateTarget] = useState<LeagueItem | null>(
-    null,
-  );
+  const [reactivateTarget, setReactivateTarget] = useState<LeagueItem | null>(null);
   const [showJoinModal, setShowJoinModal] = useState(false);
   const [showCreateModal, setShowCreateModal] = useState(false);
   /**
@@ -153,22 +143,25 @@ function OnboardingScreenContent() {
     ]).start();
   }, [actionsAnim, contentAnim, headerAnim]);
 
-  const firstName = useMemo(() => {
-    if (!user?.nombre) return "";
-    return user.nombre.split(" ")[0] ?? user.nombre;
-  }, [user?.nombre]);
+  const firstName = useMemo(
+    () => {
+      if (!user?.nombre) return '';
+      return user.nombre.split(' ')[0] ?? user.nombre;
+    },
+    [user?.nombre]
+  );
 
   const filteredLeagues = useMemo(() => {
     let result = leagues;
 
     switch (selectedFilter) {
-      case "active":
-        result = result.filter((league) => league.status === "active");
+      case 'active':
+        result = result.filter((league) => league.status === 'active');
         break;
-      case "finished":
-        result = result.filter((league) => league.status === "finished");
+      case 'finished':
+        result = result.filter((league) => league.status === 'finished');
         break;
-      case "favorites":
+      case 'favorites':
         result = result.filter((league) => league.isFavorite);
         break;
       default:
@@ -180,7 +173,7 @@ function OnboardingScreenContent() {
       result = result.filter(
         (league) =>
           league.name.toLowerCase().includes(normalizedSearch) ||
-          league.season.toLowerCase().includes(normalizedSearch),
+          league.season.toLowerCase().includes(normalizedSearch)
       );
     }
 
@@ -193,8 +186,8 @@ function OnboardingScreenContent() {
       prev.map((league) =>
         league.id === leagueId
           ? { ...league, isFavorite: !league.isFavorite }
-          : league,
-      ),
+          : league
+      )
     );
   }, []);
 
@@ -204,13 +197,13 @@ function OnboardingScreenContent() {
         leagueId: league.id,
         leagueName: league.name,
         role: league.role,
-        userName: "",
+        userName: '',
         teamName: undefined,
         temporada: league.season,
       });
       router.push(routes.private.dashboard);
     },
-    [router],
+    [router]
   );
 
   // Reactivate flow
@@ -231,30 +224,21 @@ function OnboardingScreenContent() {
     setReactivateTarget(null);
   }, []);
 
-  // Join league flow — usa API real y refresca "Mis ligas" desde useLeagues.
-  const handleJoinConfirm = useCallback(
-    async (code: string): Promise<boolean> => {
-      const success = await joinLeagueByCode(code);
-
-      if (success) {
-        setShowJoinModal(false);
-      }
-
-      return success;
-    },
-    [joinLeagueByCode],
-  );
+  // Join league flow — usa API real y refresca Mis ligas desde backend.
+  const handleJoinConfirm = useCallback(async (code: string) => {
+    const success = await joinLeagueByCode(code);
+    if (success) {
+      setShowJoinModal(false);
+    }
+  }, [joinLeagueByCode]);
 
   // Create league flow — el modal entrega LigaCreateRequest listo para el backend
-  const handleCreateConfirm = useCallback(
-    async (data: LigaCreateRequest) => {
-      const result = await createNewLeague({ league: data });
-      if (result) {
-        setShowCreateModal(false);
-      }
-    },
-    [createNewLeague],
-  );
+  const handleCreateConfirm = useCallback(async (data: LigaCreateRequest) => {
+    const result = await createNewLeague({ league: data });
+    if (result) {
+      setShowCreateModal(false);
+    }
+  }, [createNewLeague]);
 
   /**
    * Abre el modal de edición con la liga seleccionada.
@@ -264,7 +248,8 @@ function OnboardingScreenContent() {
     setEditTarget(league);
   }, []);
 
-  const handleClearSearch = useCallback(() => setSearchTerm(""), []);
+
+  const handleClearSearch = useCallback(() => setSearchTerm(''), []);
 
   // Cierra sesión: limpia liga activa, tokens y usuario, luego navega a login
   const handleLogout = useCallback(async () => {
@@ -280,10 +265,7 @@ function OnboardingScreenContent() {
         className="flex-1"
         showsVerticalScrollIndicator={false}
         contentContainerStyle={{
-          paddingBottom: Math.max(
-            insets.bottom + theme.spacing.lg,
-            theme.spacing.xl,
-          ),
+          paddingBottom: Math.max(insets.bottom + theme.spacing.lg, theme.spacing.xl),
         }}
         // scrollEventThrottle=16 garantiza actualizaciones ~60fps sin saturar el bridge
         scrollEventThrottle={16}
@@ -306,9 +288,9 @@ function OnboardingScreenContent() {
               headerStyle,
               {
                 paddingTop: insets.top + theme.spacing.md,
-                flexDirection: "row",
-                alignItems: "center",
-                justifyContent: "space-between",
+                flexDirection: 'row',
+                alignItems: 'center',
+                justifyContent: 'space-between',
                 marginBottom: theme.spacing.xxl,
               },
             ]}
@@ -338,7 +320,7 @@ function OnboardingScreenContent() {
                     color: Colors.text.secondary,
                     fontSize: theme.fontSize.md,
                     lineHeight: 22,
-                    fontWeight: "500",
+                    fontWeight: '500',
                   }}
                 >
                   Tus ligas
@@ -350,8 +332,8 @@ function OnboardingScreenContent() {
             <TouchableOpacity
               onPress={handleLogout}
               style={{
-                flexDirection: "row",
-                alignItems: "center",
+                flexDirection: 'row',
+                alignItems: 'center',
                 gap: 5,
                 backgroundColor: Colors.bg.surface1,
                 paddingHorizontal: 12,
@@ -363,16 +345,12 @@ function OnboardingScreenContent() {
               }}
               activeOpacity={0.25}
             >
-              <Ionicons
-                name="log-out-outline"
-                size={18}
-                color={Colors.text.secondary}
-              />
+              <Ionicons name="log-out-outline" size={18} color={Colors.text.secondary} />
               <Text
                 style={{
                   color: Colors.text.secondary,
                   fontSize: theme.fontSize.sm,
-                  fontWeight: "500",
+                  fontWeight: '500',
                 }}
               >
                 Cerrar sesión
@@ -381,9 +359,7 @@ function OnboardingScreenContent() {
           </Animated.View>
 
           {/* Quick Actions */}
-          <Animated.View
-            style={[actionsStyle, { marginBottom: theme.spacing.xxl }]}
-          >
+          <Animated.View style={[actionsStyle, { marginBottom: theme.spacing.xxl }]}>
             <View className="gap-4">
               <QuickActionCard
                 iconName="add"
@@ -423,17 +399,13 @@ function OnboardingScreenContent() {
               </>
             ) : leaguesError ? (
               <View className="py-10 items-center">
-                <Ionicons
-                  name="cloud-offline-outline"
-                  size={40}
-                  color={Colors.text.disabled}
-                />
+                <Ionicons name="cloud-offline-outline" size={40} color={Colors.text.disabled} />
                 <Text
                   style={{
                     color: Colors.text.secondary,
                     fontSize: theme.fontSize.sm,
                     lineHeight: 20,
-                    textAlign: "center",
+                    textAlign: 'center',
                     marginTop: theme.spacing.md,
                     marginBottom: theme.spacing.md,
                   }}
@@ -441,12 +413,7 @@ function OnboardingScreenContent() {
                   No se pudieron cargar las ligas
                 </Text>
                 <TouchableOpacity onPress={refresh}>
-                  <Text
-                    style={{
-                      color: Colors.brand.primary,
-                      fontSize: theme.fontSize.sm,
-                    }}
-                  >
+                  <Text style={{ color: Colors.brand.primary, fontSize: theme.fontSize.sm }}>
                     Reintentar
                   </Text>
                 </TouchableOpacity>
@@ -494,7 +461,7 @@ function OnboardingScreenContent() {
                         onPress={() =>
                           // Liga finalizada + admin → abre modal de reactivación.
                           // Cualquier otro caso → entra en la liga.
-                          league.status === "finished" && league.canReactivate
+                          league.status === 'finished' && league.canReactivate
                             ? handleReactivatePress(league)
                             : handleEnterLeague(league)
                         }
@@ -508,18 +475,14 @@ function OnboardingScreenContent() {
                       className="h-16 w-16 rounded-full items-center justify-center"
                       style={{ backgroundColor: Colors.bg.surface1 }}
                     >
-                      <Ionicons
-                        name="filter-outline"
-                        size={28}
-                        color={Colors.text.disabled}
-                      />
+                      <Ionicons name="filter-outline" size={28} color={Colors.text.disabled} />
                     </View>
                     <Text
                       style={{
                         color: Colors.text.secondary,
                         fontSize: theme.fontSize.sm,
                         lineHeight: 20,
-                        textAlign: "center",
+                        textAlign: 'center',
                         marginTop: theme.spacing.md + 2,
                       }}
                     >
@@ -531,7 +494,7 @@ function OnboardingScreenContent() {
             )}
           </Animated.View>
         </View>
-      </ScrollView>
+      </ScrollView >
 
       {/*
         ScrollEdgeButton flota fuera del ScrollView para que su position:absolute
@@ -546,9 +509,10 @@ function OnboardingScreenContent() {
       />
 
       {/* Modals */}
-      <ReactivateLeagueModal
-        visible={reactivateTarget !== null}
-        leagueName={reactivateTarget?.name ?? ""}
+      < ReactivateLeagueModal
+        visible={reactivateTarget !== null
+        }
+        leagueName={reactivateTarget?.name ?? ''}
         onConfirm={handleConfirmReactivate}
         onCancel={handleCancelReactivate}
       />
@@ -558,16 +522,13 @@ function OnboardingScreenContent() {
         onConfirm={handleJoinConfirm}
         onCancel={() => setShowJoinModal(false)}
         errorMessage={joinError}
-        submitting={joiningByCode}
       />
 
       {/* Modal crear liga — modo 'create' por defecto */}
       <CreateLeagueModal
         visible={showCreateModal}
         onConfirm={handleCreateConfirm}
-        onCancel={() => {
-          if (!isCreating) setShowCreateModal(false);
-        }}
+        onCancel={() => { if (!isCreating) setShowCreateModal(false); }}
         submitting={isCreating}
         submitError={createError}
       />
@@ -587,7 +548,7 @@ function OnboardingScreenContent() {
           refresh();
         }}
       />
-    </View>
+    </View >
   );
 }
 

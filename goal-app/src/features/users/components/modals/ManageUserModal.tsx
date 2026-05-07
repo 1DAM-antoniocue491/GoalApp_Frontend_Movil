@@ -1,21 +1,10 @@
-/**
- * ManageUserModal
- *
- * Gestiona un usuario existente dentro de una liga:
- * - actualizar rol
- * - activar/desactivar
- * - eliminar de la liga
- *
- * No intenta actualizar equipo/dorsal porque los endpoints web entregados no
- * exponen esa mutación desde gestión de usuario.
- */
+/** Modal React Native para gestionar rol/estado de un usuario de liga. */
 
 import React, { useEffect, useState } from 'react';
 import {
+  ActivityIndicator,
   Alert,
-  KeyboardAvoidingView,
   Modal,
-  Platform,
   Pressable,
   ScrollView,
   Switch,
@@ -24,21 +13,29 @@ import {
   View,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { Button } from '@/src/shared/components/ui/Button';
-import { OptionSelectField, SelectOption } from '@/src/shared/components/ui/OptionSelectField';
 import { Colors } from '@/src/shared/constants/colors';
 import { theme } from '@/src/shared/styles/theme';
-import type { LeagueUser, ManageUserFormData, UserRole } from '../../types/users.types';
+import type { LeagueUser, ManageUserFormData, SelectOption, UserRole } from '../../types/users.types';
 
 interface ManageUserModalProps {
-  user: LeagueUser;
+  user: LeagueUser | null;
   visible: boolean;
   onClose: () => void;
-  onUpdate: (user: LeagueUser, data: ManageUserFormData) => Promise<boolean> | boolean;
-  onRemove: (user: LeagueUser) => Promise<boolean> | boolean;
+  onUpdate: (userId: string, data: ManageUserFormData) => Promise<boolean> | boolean | Promise<void> | void;
+  onRemove: (userId: string) => Promise<boolean> | boolean | Promise<void> | void;
   roleOptions: SelectOption[];
   isSubmitting?: boolean;
   error?: string | null;
+}
+
+function roleIcon(role: string): keyof typeof Ionicons.glyphMap {
+  switch (role) {
+    case 'admin': return 'shield-outline';
+    case 'coach': return 'ribbon-outline';
+    case 'delegate': return 'clipboard-outline';
+    case 'player': return 'football-outline';
+    default: return 'eye-outline';
+  }
 }
 
 export function ManageUserModal({
@@ -51,16 +48,11 @@ export function ManageUserModal({
   isSubmitting = false,
   error,
 }: ManageUserModalProps) {
-  const [form, setForm] = useState<ManageUserFormData>({
-    role: '',
-    active: true,
-  });
-  const [localError, setLocalError] = useState<string | null>(null);
+  const [form, setForm] = useState<ManageUserFormData>({ role: '', active: true });
 
   useEffect(() => {
     if (user) {
       setForm({ role: user.role, active: user.active });
-      setLocalError(null);
     }
   }, [user]);
 
@@ -68,32 +60,29 @@ export function ManageUserModal({
 
   const initials = user.name
     .split(' ')
-    .map(word => word[0])
     .filter(Boolean)
+    .map(word => word[0])
     .slice(0, 2)
     .join('')
-    .toUpperCase() || 'U';
+    .toUpperCase() || '?';
 
   async function handleUpdate() {
-    setLocalError(null);
-    if (!form.role && user === null) return setLocalError('Selecciona un rol válido');
-
-    const ok = await onUpdate(user, form);
-    if (ok) onClose();
+    const result = await onUpdate(user.id, form);
+    if (result !== false) onClose();
   }
 
   function handleRemove() {
     Alert.alert(
       'Eliminar usuario',
-      `¿Seguro que quieres eliminar a ${user.name} de la liga?`,
+      `¿Quieres eliminar a ${user.name} de esta liga?`,
       [
         { text: 'Cancelar', style: 'cancel' },
         {
           text: 'Eliminar',
           style: 'destructive',
           onPress: async () => {
-            const ok = await onRemove(user);
-            if (ok) onClose();
+            const result = await onRemove(user.id);
+            if (result !== false) onClose();
           },
         },
       ],
@@ -101,180 +90,155 @@ export function ManageUserModal({
   }
 
   return (
-    <Modal visible={visible} animationType="slide" transparent onRequestClose={onClose}>
-      <Pressable style={modalStyles.backdrop} onPress={onClose}>
-        <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
-          <Pressable>
-            <View style={modalStyles.sheet}>
-              <View className="flex-row items-center justify-between mb-5">
-                <Text style={modalStyles.title}>Gestionar usuario</Text>
-                <TouchableOpacity onPress={onClose} hitSlop={12}>
-                  <Ionicons name="close" size={22} color={Colors.text.secondary} />
-                </TouchableOpacity>
+    <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
+      <Pressable style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.72)', justifyContent: 'flex-end' }} onPress={onClose}>
+        <Pressable>
+          <View
+            style={{
+              backgroundColor: Colors.bg.surface1,
+              borderTopLeftRadius: 28,
+              borderTopRightRadius: 28,
+              maxHeight: '88%',
+            }}
+          >
+            <View className="px-6 pt-5 pb-4 flex-row items-start justify-between">
+              <View style={{ flex: 1 }}>
+                <Text style={{ color: Colors.text.primary, fontSize: theme.fontSize.xxl, fontWeight: '800' }}>
+                  Gestionar usuario
+                </Text>
+                <Text style={{ color: Colors.text.secondary, fontSize: theme.fontSize.sm, marginTop: 6 }}>
+                  Cambia su rol, estado o elimínalo de la liga.
+                </Text>
               </View>
-
-              <View style={modalStyles.identityCard}>
-                <View style={modalStyles.avatar}>
-                  <Text style={modalStyles.avatarText}>{initials}</Text>
-                </View>
-                <View style={{ flex: 1 }}>
-                  <Text style={modalStyles.name} numberOfLines={1}>{user.name}</Text>
-                  <Text style={modalStyles.email} numberOfLines={1}>{user.email}</Text>
-                  <Text style={modalStyles.meta}>{user.roleLabel} · {user.active ? 'Activo' : 'Pendiente'}</Text>
-                </View>
-              </View>
-
-              <ScrollView showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
-                <View className="mb-4">
-                  <OptionSelectField
-                    label="Rol en la liga"
-                    value={form.role}
-                    options={roleOptions}
-                    placeholder="Selecciona un rol"
-                    onChange={value => setForm(prev => ({ ...prev, role: value as UserRole }))}
-                  />
-                </View>
-
-                <View style={modalStyles.switchRow}>
-                  <View style={{ flex: 1 }}>
-                    <Text style={modalStyles.switchTitle}>Usuario activo</Text>
-                    <Text style={modalStyles.switchHint}>Controla si el usuario puede participar en la liga.</Text>
-                  </View>
-                  <Switch
-                    value={form.active}
-                    onValueChange={active => setForm(prev => ({ ...prev, active }))}
-                    trackColor={{ false: Colors.bg.base, true: Colors.brand.primary }}
-                    thumbColor={form.active ? '#000000' : Colors.text.secondary}
-                  />
-                </View>
-
-                <TouchableOpacity
-                  style={modalStyles.deleteButton}
-                  onPress={handleRemove}
-                  activeOpacity={0.85}
-                  disabled={isSubmitting}
-                >
-                  <Ionicons name="trash-outline" size={17} color={Colors.semantic.error} style={{ marginRight: 8 }} />
-                  <Text style={modalStyles.deleteText}>Eliminar de la liga</Text>
-                </TouchableOpacity>
-
-                {(localError || error) && <Text style={modalStyles.error}>{localError ?? error}</Text>}
-              </ScrollView>
-
-              <View className="flex-row gap-3 mt-4">
-                <View style={{ flex: 1 }}>
-                  <Button label="Cancelar" variant="secondary" onPress={onClose} />
-                </View>
-                <View style={{ flex: 1 }}>
-                  <Button
-                    label={isSubmitting ? 'Actualizando...' : 'Actualizar'}
-                    variant="primary"
-                    onPress={handleUpdate}
-                    disabled={isSubmitting}
-                  />
-                </View>
-              </View>
+              <TouchableOpacity
+                onPress={onClose}
+                disabled={isSubmitting}
+                className="items-center justify-center rounded-2xl ml-4"
+                style={{ width: 48, height: 48, backgroundColor: Colors.bg.surface2 }}
+              >
+                <Ionicons name="close" size={24} color={Colors.text.secondary} />
+              </TouchableOpacity>
             </View>
-          </Pressable>
-        </KeyboardAvoidingView>
+
+            <ScrollView contentContainerStyle={{ paddingHorizontal: 24, paddingBottom: 28 }}>
+              <View className="flex-row items-center rounded-3xl p-4 mb-5" style={{ backgroundColor: Colors.bg.surface2 }}>
+                <View
+                  className="items-center justify-center rounded-full mr-4"
+                  style={{ width: 52, height: 52, backgroundColor: 'rgba(196,241,53,0.12)' }}
+                >
+                  <Text style={{ color: Colors.brand.primary, fontWeight: '900', fontSize: theme.fontSize.lg }}>
+                    {initials}
+                  </Text>
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Text style={{ color: Colors.text.primary, fontSize: theme.fontSize.md, fontWeight: '800' }} numberOfLines={1}>
+                    {user.name}
+                  </Text>
+                  <Text style={{ color: Colors.text.secondary, fontSize: theme.fontSize.sm, marginTop: 3 }} numberOfLines={1}>
+                    {user.email}
+                  </Text>
+                  {user.teamName ? (
+                    <Text style={{ color: Colors.text.disabled, fontSize: theme.fontSize.xs, marginTop: 4 }} numberOfLines={1}>
+                      {user.teamName}{user.jersey ? ` · #${user.jersey}` : ''}{user.position ? ` · ${user.position}` : ''}
+                    </Text>
+                  ) : null}
+                </View>
+              </View>
+
+              {error ? (
+                <View
+                  className="flex-row items-start rounded-2xl p-4 mb-5"
+                  style={{ backgroundColor: 'rgba(255,69,52,0.10)', borderWidth: 1, borderColor: 'rgba(255,69,52,0.35)' }}
+                >
+                  <Ionicons name="alert-circle-outline" size={20} color={Colors.semantic.error} />
+                  <Text style={{ flex: 1, color: Colors.semantic.error, fontSize: theme.fontSize.sm, marginLeft: 10 }}>
+                    {error}
+                  </Text>
+                </View>
+              ) : null}
+
+              <Text style={{ color: Colors.text.secondary, fontSize: theme.fontSize.sm, marginBottom: 10 }}>Rol en la liga</Text>
+              <View className="flex-row flex-wrap mb-5" style={{ gap: 10 }}>
+                {roleOptions.map(option => {
+                  const selected = form.role === option.value;
+                  return (
+                    <TouchableOpacity
+                      key={option.value}
+                      onPress={() => setForm(prev => ({ ...prev, role: option.value as UserRole }))}
+                      activeOpacity={0.85}
+                      className="flex-row items-center rounded-2xl px-4 py-3"
+                      style={{
+                        backgroundColor: selected ? Colors.brand.primary : Colors.bg.surface2,
+                        borderWidth: 1,
+                        borderColor: selected ? Colors.brand.primary : Colors.bg.surface2,
+                      }}
+                    >
+                      <Ionicons name={roleIcon(option.value)} size={17} color={selected ? '#000' : Colors.text.secondary} />
+                      <Text style={{ color: selected ? '#000' : Colors.text.primary, marginLeft: 8, fontWeight: '800' }}>
+                        {option.label}
+                      </Text>
+                    </TouchableOpacity>
+                  );
+                })}
+              </View>
+
+              <View
+                className="flex-row items-center justify-between rounded-2xl px-4 mb-5"
+                style={{ backgroundColor: Colors.bg.surface2, height: 58 }}
+              >
+                <View>
+                  <Text style={{ color: Colors.text.primary, fontSize: theme.fontSize.md, fontWeight: '800' }}>
+                    Usuario activo
+                  </Text>
+                  <Text style={{ color: Colors.text.secondary, fontSize: theme.fontSize.xs, marginTop: 2 }}>
+                    Controla si puede acceder a la liga.
+                  </Text>
+                </View>
+                <Switch
+                  value={form.active}
+                  onValueChange={active => setForm(prev => ({ ...prev, active }))}
+                  trackColor={{ false: Colors.bg.base, true: Colors.brand.primary }}
+                  thumbColor={form.active ? '#000000' : Colors.text.secondary}
+                />
+              </View>
+
+              <TouchableOpacity
+                onPress={handleRemove}
+                disabled={isSubmitting}
+                className="flex-row items-center justify-center rounded-2xl mb-5"
+                style={{ height: 50, backgroundColor: 'rgba(255,69,52,0.10)' }}
+              >
+                <Ionicons name="trash-outline" size={18} color={Colors.semantic.error} />
+                <Text style={{ color: Colors.semantic.error, fontSize: theme.fontSize.md, fontWeight: '800', marginLeft: 8 }}>
+                  Eliminar de la liga
+                </Text>
+              </TouchableOpacity>
+
+              <View className="flex-row" style={{ gap: 12 }}>
+                <TouchableOpacity
+                  onPress={onClose}
+                  disabled={isSubmitting}
+                  className="flex-1 items-center justify-center rounded-2xl"
+                  style={{ height: 54, backgroundColor: Colors.bg.surface2 }}
+                >
+                  <Text style={{ color: Colors.text.primary, fontSize: theme.fontSize.md, fontWeight: '800' }}>Cancelar</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  onPress={handleUpdate}
+                  disabled={isSubmitting}
+                  className="flex-1 flex-row items-center justify-center rounded-2xl"
+                  style={{ height: 54, backgroundColor: Colors.brand.primary, opacity: isSubmitting ? 0.65 : 1 }}
+                >
+                  {isSubmitting ? <ActivityIndicator color="#000" /> : <Ionicons name="save-outline" size={18} color="#000" />}
+                  <Text style={{ color: '#000', fontSize: theme.fontSize.md, fontWeight: '900', marginLeft: 8 }}>
+                    {isSubmitting ? 'Guardando' : 'Guardar'}
+                  </Text>
+                </TouchableOpacity>
+              </View>
+            </ScrollView>
+          </View>
+        </Pressable>
       </Pressable>
     </Modal>
   );
 }
-
-const modalStyles = {
-  backdrop: {
-    flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.70)',
-    justifyContent: 'flex-end' as const,
-  },
-  sheet: {
-    maxHeight: '88%' as const,
-    backgroundColor: Colors.bg.surface1,
-    borderTopLeftRadius: theme.borderRadius.xl,
-    borderTopRightRadius: theme.borderRadius.xl,
-    paddingHorizontal: theme.spacing.xl,
-    paddingTop: theme.spacing.lg,
-    paddingBottom: theme.spacing.xxl,
-  },
-  title: {
-    color: Colors.text.primary,
-    fontSize: theme.fontSize.xl,
-    fontWeight: '700' as const,
-  },
-  identityCard: {
-    flexDirection: 'row' as const,
-    alignItems: 'center' as const,
-    backgroundColor: Colors.bg.surface2,
-    borderRadius: theme.borderRadius.xl,
-    padding: theme.spacing.md,
-    marginBottom: theme.spacing.lg,
-  },
-  avatar: {
-    width: 46,
-    height: 46,
-    borderRadius: 23,
-    backgroundColor: Colors.bg.base,
-    alignItems: 'center' as const,
-    justifyContent: 'center' as const,
-    marginRight: theme.spacing.md,
-  },
-  avatarText: {
-    color: Colors.brand.primary,
-    fontSize: theme.fontSize.md,
-    fontWeight: '800' as const,
-  },
-  name: {
-    color: Colors.text.primary,
-    fontSize: theme.fontSize.md,
-    fontWeight: '700' as const,
-  },
-  email: {
-    color: Colors.text.secondary,
-    fontSize: theme.fontSize.xs,
-    marginTop: 2,
-  },
-  meta: {
-    color: Colors.text.disabled,
-    fontSize: theme.fontSize.xs,
-    marginTop: 4,
-  },
-  switchRow: {
-    flexDirection: 'row' as const,
-    alignItems: 'center' as const,
-    justifyContent: 'space-between' as const,
-    backgroundColor: Colors.bg.surface2,
-    borderRadius: theme.borderRadius.xl,
-    padding: theme.spacing.md,
-    marginBottom: theme.spacing.md,
-  },
-  switchTitle: {
-    color: Colors.text.primary,
-    fontSize: theme.fontSize.sm,
-    fontWeight: '700' as const,
-  },
-  switchHint: {
-    color: Colors.text.secondary,
-    fontSize: theme.fontSize.xs,
-    marginTop: 3,
-  },
-  deleteButton: {
-    flexDirection: 'row' as const,
-    alignItems: 'center' as const,
-    justifyContent: 'center' as const,
-    borderRadius: theme.borderRadius.xl,
-    backgroundColor: 'rgba(255,69,52,0.10)',
-    minHeight: 50,
-    marginBottom: theme.spacing.md,
-  },
-  deleteText: {
-    color: Colors.semantic.error,
-    fontSize: theme.fontSize.sm,
-    fontWeight: '700' as const,
-  },
-  error: {
-    color: Colors.semantic.error,
-    fontSize: theme.fontSize.sm,
-    marginBottom: theme.spacing.md,
-  },
-};

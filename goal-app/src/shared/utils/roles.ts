@@ -20,9 +20,17 @@ export interface RoleBadgeConfig {
   icon: keyof typeof Ionicons.glyphMap;
 }
 
+function normalizeText(value: unknown): string {
+  return String(value ?? '')
+    .trim()
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '');
+}
+
 /** Normaliza cualquier variante de rol recibida desde backend/web/móvil. */
 export function normalizeRole(role?: string | null): AppRole {
-  const value = String(role ?? '').trim().toLowerCase();
+  const value = normalizeText(role);
 
   switch (value) {
     case 'admin':
@@ -35,6 +43,7 @@ export function normalizeRole(role?: string | null): AppRole {
 
     case 'delegate':
     case 'delegado':
+    case 'delegado campo':
     case 'delegado_campo':
     case 'field_delegate':
     case 'fielddelegate':
@@ -46,6 +55,8 @@ export function normalizeRole(role?: string | null): AppRole {
 
     case 'observer':
     case 'observador':
+    case 'viewer':
+    case 'seguidor':
     default:
       return 'observer';
   }
@@ -60,6 +71,25 @@ export function toLeagueRole(role?: string | null): LeagueRole {
 /** Rol en formato de usuarios. UserRole usa delegate. */
 export function toUserRole(role?: string | null): UserRole {
   return normalizeRole(role) as UserRole;
+}
+
+/** Etiqueta de rol consistente para toda la app. */
+export function getRoleLabel(role?: string | null): string {
+  const normalized = normalizeRole(role);
+
+  switch (normalized) {
+    case 'admin':
+      return 'Administrador';
+    case 'coach':
+      return 'Entrenador';
+    case 'delegate':
+      return 'Delegado';
+    case 'player':
+      return 'Jugador';
+    case 'observer':
+    default:
+      return 'Observador';
+  }
 }
 
 /** Config visual única para RoleBadge. */

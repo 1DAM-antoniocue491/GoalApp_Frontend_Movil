@@ -1,28 +1,31 @@
 /**
- * League Service - Capa de acceso a datos de ligas
+ * League Service - Capa de acceso a datos de ligas.
  *
  * Responsabilidades:
- * - Llamar a la API de ligas
- * - Mapear respuestas del backend al modelo de UI (LeagueItem)
- * - Proveer utilidades de manipulación local (favoritos, reactivación)
+ * - Llamar a la API de ligas.
+ * - Mapear respuestas del backend al modelo de UI (LeagueItem).
+ * - Enriquecer tarjetas con el equipo asignado del usuario cuando aplica.
  */
 
-import type { LeagueItem, LeagueRole } from "@/src/shared/types/league";
-import type { Team } from "@/src/shared/types/team";
-import type { User } from "@/src/shared/types/user";
-import { logger } from "@/src/shared/utils/logger";
-import { ApiError } from "@/src/shared/api/errors";
+import type { LeagueItem, LeagueRole } from '@/src/shared/types/league';
+import type { Team } from '@/src/shared/types/team';
+import type { User } from '@/src/shared/types/user';
+import { logger } from '@/src/shared/utils/logger';
+import { ApiError } from '@/src/shared/api/errors';
+import { toLeagueRole } from '@/src/shared/utils/roles';
 import {
-  getMyLeagues,
-  joinLeagueByCode as joinLeagueByCodeApi,
-  getLeagueById as getLeagueByIdApi,
+  acceptJoinCode,
   createLeague as createLeagueApi,
-  setLeagueConfig,
-  updateLeagueConfig,
-  getLeagueConfig as getLeagueConfigApi,
-  updateLeague as updateLeagueApi,
   deleteLeague as deleteLeagueApi,
-} from "../api/leagues.api";
+  getLeagueById as getLeagueByIdApi,
+  getLeagueConfig as getLeagueConfigApi,
+  getMyLeagues,
+  getMyTeamInLeague,
+  setLeagueConfig,
+  updateLeague as updateLeagueApi,
+  updateLeagueConfig,
+  validateJoinCode,
+} from '../api/leagues.api';
 import type {
   JoinLeagueByCodeResponse,
   LigaConRolResponse,
@@ -31,167 +34,238 @@ import type {
   LigaResponse,
   LigaUpdateRequest,
   LeagueConfigResponse,
+  MyTeamInLeagueResponse,
   UpdateLeagueConfigRequest,
-} from "../types/league.api.types";
-import { mockTeams } from "@/src/mocks/data";
-import { toLeagueRole } from "@/src/shared/utils/roles";
+} from '../types/league.api.types';
+
+// ============================================================
+// TIPOS Y HELPERS
+// ============================================================
+
+export interface ServiceResult<T = undefined> {
+  success: boolean;
+  data?: T;
+  error?: string;
+}
+
+function safeString(value: unknown, fallback = ''): string {
+  return typeof value === 'string' && value.trim().length > 0 ? value.trim() : fallback;
+}
+
+function getErrorMessage(error: unknown): string {
+  if (error instanceof Error) return error.message;
+  if (typeof error === 'string') return error;
+  try {
+    return JSON.stringify(error);
+  } catch {
+    return 'Error inesperado';
+  }
+}
+
+/** Mapea rol de backend a LeagueRole de UI. */
+function mapRol(rol: string): LeagueRole {
+  return toLeagueRole(rol);
+}
+
+function getLeagueTeamFromInlineFields(league: LigaConRolResponse): Pick<LeagueItem, 'teamId' | 'teamName'> {
+  const rawTeamId =
+    league.id_equipo ??
+    league.equipo_id ??
+    league.equipo?.id_equipo ??
+    league.equipo?.id ??
+    null;
+
+  const rawTeamName =
+    league.nombre_equipo ??
+    league.equipo_nombre ??
+    league.mi_equipo ??
+    league.miEquipo ??
+    league.equipo?.nombre ??
+    null;
+
+  return {
+    teamId: rawTeamId != null ? String(rawTeamId) : undefined,
+    teamName: safeString(rawTeamName) || undefined,
+  };
+}
+
+function mapMyTeamResponseToLeaguePatch(team: MyTeamInLeagueResponse): Pick<LeagueItem, 'teamId' | 'teamName'> {
+  const teamId = team.id_equipo ?? team.id ?? null;
+  const teamName = safeString(team.nombre);
+
+  return {
+    teamId: teamId != null ? String(teamId) : undefined,
+    teamName: teamName || undefined,
+  };
+}
+
+function shouldLoadMyTeamForRole(role: LeagueRole): boolean {
+  return role === 'coach' || role === 'player' || role === 'field_delegate';
+}
 
 // ============================================================
 // MAPEO BACKEND → FRONTEND
 // ============================================================
 
-/**
- * Mapea rol de backend a LeagueRole de UI usando el normalizador compartido.
- * Esto mantiene el RoleBadge de tarjetas de liga y usuarios con la misma lógica.
- */
-function mapRol(rol: string): LeagueRole {
-  return toLeagueRole(rol);
-}
-
-/**
- * Mapea un item de GET /usuarios/me/ligas a LeagueItem de UI.
- * Valida que el objeto sea correcto antes de acceder a sus campos.
- */
 function mapLeagueWithRoleToLeagueItem(league: LigaConRolResponse): LeagueItem {
-  if (!league || typeof league.id_liga !== "number") {
-    throw new ApiError(500, "Liga inválida recibida desde la API");
+  if (!league || typeof league.id_liga !== 'number') {
+    throw new ApiError(500, 'Liga inválida recibida desde la API');
   }
+
+  const role = mapRol(league.rol);
+  const inlineTeam = getLeagueTeamFromInlineFields(league);
 
   return {
     id: String(league.id_liga),
-    name: league.nombre,
-    season: league.temporada,
-    status: league.activa ? "active" : "finished",
-    role: mapRol(league.rol),
+    name: safeString(league.nombre, 'Liga sin nombre'),
+    season: safeString(league.temporada, '-'),
+    status: league.activa ? 'active' : 'finished',
+    role,
     isFavorite: false,
+    teamId: inlineTeam.teamId,
+    teamName: inlineTeam.teamName,
     teamsCount: league.equipos_total ?? 0,
     crestUrl: league.logo_url ?? null,
-    canReactivate: !league.activa && mapRol(league.rol) === "admin",
+    categoria: league.categoria ?? undefined,
+    canReactivate: !league.activa && role === 'admin',
   };
 }
 
-/** Mapea una LigaResponse (sin rol) a LeagueItem usando un rol explícito */
 function mapLigaToItem(liga: LigaResponse, rol: string): LeagueItem {
+  const role = mapRol(rol);
+
   return {
     id: String(liga.id_liga),
-    name: liga.nombre,
-    season: liga.temporada,
-    status: liga.activa ? "active" : "finished",
-    role: mapRol(rol),
+    name: safeString(liga.nombre, 'Liga sin nombre'),
+    season: safeString(liga.temporada, '-'),
+    status: liga.activa ? 'active' : 'finished',
+    role,
     isFavorite: false,
     teamsCount: liga.equipos_total ?? 0,
     crestUrl: liga.logo_url ?? null,
-    canReactivate: !liga.activa && mapRol(rol) === "admin",
+    categoria: liga.categoria ?? undefined,
+    canReactivate: !liga.activa && role === 'admin',
   };
 }
 
 // ============================================================
-// FUNCIONES DE API
+// LIGAS DEL USUARIO + EQUIPO ASIGNADO
 // ============================================================
 
 /**
- * Obtiene las ligas del usuario autenticado desde el backend
- * y las mapea al modelo de UI.
+ * Enriquecimiento no crítico para mostrar "Mi equipo" en LeagueCard.
+ *
+ * El endpoint /usuarios/me/ligas no incluye equipo asignado en el OpenAPI actual.
+ * Para roles vinculados a equipo se consulta /equipos/usuario/mi-equipo por liga.
+ * Si falla con 404, la card mostrará "Sin asignar" sin romper la pantalla.
  */
-export async function fetchMyLeagues(): Promise<LeagueItem[]> {
+export async function enrichLeagueTeamAssignments(leagues: LeagueItem[]): Promise<LeagueItem[]> {
+  const enriched = await Promise.all(
+    leagues.map(async (league) => {
+      if (!shouldLoadMyTeamForRole(league.role) || league.teamName) {
+        return league;
+      }
+
+      try {
+        const team = await getMyTeamInLeague(Number(league.id));
+        return {
+          ...league,
+          ...mapMyTeamResponseToLeaguePatch(team),
+        };
+      } catch (error) {
+        const status = error instanceof ApiError ? error.status : 0;
+
+        // 404 es normal para usuarios sin equipo todavía; no debe romper ni llenar LogBox.
+        if (status !== 404) {
+          logger.warn('leagueService/enrichLeagueTeamAssignments', 'No se pudo obtener mi equipo', {
+            ligaId: league.id,
+            role: league.role,
+            error: getErrorMessage(error),
+          });
+        }
+
+        return league;
+      }
+    }),
+  );
+
+  return enriched;
+}
+
+export async function fetchMyLeagues(options?: { enrichTeams?: boolean }): Promise<LeagueItem[]> {
   try {
     const ligasConRol = await getMyLeagues();
 
     if (!Array.isArray(ligasConRol)) {
-      throw new ApiError(500, "Respuesta inesperada al cargar ligas");
+      throw new ApiError(500, 'Respuesta inesperada al cargar ligas');
     }
 
-    return ligasConRol.map(mapLeagueWithRoleToLeagueItem);
+    const mapped = ligasConRol.map(mapLeagueWithRoleToLeagueItem);
+
+    if (options?.enrichTeams === false) {
+      return mapped;
+    }
+
+    return enrichLeagueTeamAssignments(mapped);
   } catch (error) {
-    // warn, no error: el fallo de red/timeout está manejado por la UI y no debe abrir el red overlay
-    logger.warn(
-      "leagueService/fetchMyLeagues",
-      "Error al obtener ligas del usuario",
-      {
-        error: error instanceof Error ? error.message : String(error),
-      },
-    );
+    logger.warn('leagueService/fetchMyLeagues', 'Error al obtener ligas del usuario', {
+      error: getErrorMessage(error),
+    });
     throw error;
   }
 }
 
 /**
- * Une al usuario autenticado a una liga mediante código de unión.
- *
- * Flujo:
- * 1. POST endpoint de unión por código.
- * 2. Volver a leer GET /usuarios/me/ligas.
- * 3. Devolver las ligas ya mapeadas para que la UI use la API como fuente de verdad.
+ * Une al usuario autenticado a una liga con el mismo flujo que web:
+ * 1. GET /invitaciones/validar-codigo/{codigo}
+ * 2. POST /invitaciones/aceptar-codigo/{codigo} con body {}
+ * 3. Refrescar /usuarios/me/ligas desde API.
  */
 export async function joinLeagueByCodeService(
   code: string,
-): Promise<
-  ServiceResult<{ response: JoinLeagueByCodeResponse; leagues: LeagueItem[] }>
-> {
-  const normalizedCode = code
-    .trim()
-    .replace(/[^a-zA-Z0-9]/g, "")
-    .toUpperCase();
+): Promise<ServiceResult<{ response: JoinLeagueByCodeResponse; leagues: LeagueItem[] }>> {
+  const normalizedCode = code.trim().replace(/[^a-zA-Z0-9]/g, '').toUpperCase();
 
-  // Los códigos de unión generados por web/móvil son alfanuméricos.
-  // Usamos la misma normalización que web para evitar que el flujo funcione
-  // en una plataforma y falle en la otra.
   if (!/^[A-Z0-9]{6,12}$/.test(normalizedCode)) {
-    return {
-      success: false,
-      error: "Introduce un código de unión válido.",
-    };
+    return { success: false, error: 'Introduce un código de unión válido.' };
   }
 
   try {
-    const response = await joinLeagueByCodeApi(normalizedCode);
-    const leagues = await fetchMyLeagues();
+    await validateJoinCode(normalizedCode);
+    const response = await acceptJoinCode(normalizedCode);
+    const leagues = await fetchMyLeagues({ enrichTeams: true });
 
-    return {
-      success: true,
-      data: {
-        response,
-        leagues,
-      },
-    };
+    return { success: true, data: { response, leagues } };
   } catch (error) {
     const status = error instanceof ApiError ? error.status : 0;
-    const message = error instanceof Error ? error.message : String(error);
 
-    logger.warn(
-      "leagueService/joinLeagueByCodeService",
-      "Error al unirse a liga por código",
-      {
-        status,
-        error: message,
-      },
-    );
+    logger.warn('leagueService/joinLeagueByCodeService', 'Error al unirse por código', {
+      status,
+      error: getErrorMessage(error),
+    });
 
     return {
       success: false,
       error:
         status === 409
-          ? "Ya perteneces a esta liga."
+          ? 'Ya perteneces a esta liga.'
           : status === 404 || status === 400
-            ? "El código no existe o ha expirado."
-            : message || "No se pudo unir a la liga con ese código.",
+            ? 'El código no existe o ha expirado.'
+            : 'No se pudo unir a la liga con ese código.',
     };
   }
 }
 
-/**
- * Guarda la configuración de una liga.
- * Intenta POST (primera vez); si el backend ya creó una config por defecto, cae a PUT.
- */
-async function saveLeagueConfig(
-  ligaId: number,
-  config: LigaConfiguracionRequest,
-): Promise<void> {
+// ============================================================
+// CREACIÓN / DETALLE
+// ============================================================
+
+async function saveLeagueConfig(ligaId: number, config: LigaConfiguracionRequest): Promise<void> {
   try {
     await setLeagueConfig(ligaId, config);
   } catch (err) {
-    const msg = err instanceof Error ? err.message : "";
-    if (msg.includes("ya tiene configuración")) {
+    const msg = err instanceof Error ? err.message : '';
+    if (msg.includes('ya tiene configuración')) {
       await updateLeagueConfig(ligaId, config);
     } else {
       throw err;
@@ -199,15 +273,6 @@ async function saveLeagueConfig(
   }
 }
 
-/**
- * Crea una liga y opcionalmente su configuración.
- *
- * Flujo:
- * 1. POST /ligas/ con input.league
- * 2. Obtener id_liga de la respuesta
- * 3. Si hay input.config → saveLeagueConfig(id_liga, input.config)
- * 4. Devolver el LeagueItem mapeado
- */
 export async function createLeagueWithConfig(input: {
   league: LigaCreateRequest;
   config?: LigaConfiguracionRequest;
@@ -219,51 +284,36 @@ export async function createLeagueWithConfig(input: {
       await saveLeagueConfig(liga.id_liga, input.config);
     }
 
-    return mapLigaToItem(liga, "admin");
+    return mapLigaToItem(liga, 'admin');
   } catch (error) {
-    logger.error(
-      "leagueService/createLeagueWithConfig",
-      "Error al crear liga",
-      {
-        error: error instanceof Error ? error.message : String(error),
-      },
-    );
+    logger.error('leagueService/createLeagueWithConfig', 'Error al crear liga', {
+      error: getErrorMessage(error),
+    });
     throw error;
   }
 }
 
-/**
- * Obtiene el detalle de una liga por ID desde el backend.
- */
-export async function fetchLeagueById(
-  ligaId: string,
-): Promise<LeagueItem | null> {
+export async function fetchLeagueById(ligaId: string): Promise<LeagueItem | null> {
   try {
     const liga = await getLeagueByIdApi(Number(ligaId));
-    // El rol no está disponible aquí — se usa 'observer' como fallback seguro
-    return mapLigaToItem(liga, "observer");
+    return mapLigaToItem(liga, 'observer');
   } catch (error) {
-    logger.error(
-      "leagueService/fetchLeagueById",
-      `Error al obtener liga ${ligaId}`,
-      {
-        error: error instanceof Error ? error.message : String(error),
-      },
-    );
+    logger.error('leagueService/fetchLeagueById', `Error al obtener liga ${ligaId}`, {
+      error: getErrorMessage(error),
+    });
     return null;
   }
 }
 
 // ============================================================
-// UTILIDADES LOCALES (sin llamada a API)
+// UTILIDADES LOCALES
 // ============================================================
 
-/** Obtiene un equipo por ID desde mocks (mientras no haya endpoint de equipos) */
-export function getTeamById(id: string): Team | undefined {
-  return mockTeams.find((team) => team.id === id);
+export function getTeamById(_id: string): Team | undefined {
+  // Ya no usamos mocks para asociar equipos en cards. La asociación real se obtiene por API.
+  return undefined;
 }
 
-/** Alterna el estado de favorito para una liga en la lista local */
 export function toggleFavoriteLeague(user: User, leagueId: string): User {
   const isFavorite = user.favoriteLeagues.includes(leagueId);
   return {
@@ -274,41 +324,25 @@ export function toggleFavoriteLeague(user: User, leagueId: string): User {
   };
 }
 
-/** Verifica si una liga es favorita del usuario */
 export function isLeagueFavorite(user: User, leagueId: string): boolean {
   return user.favoriteLeagues.includes(leagueId);
 }
 
-/**
- * Reactiva una liga finalizada en la lista local.
- * Cuando el backend exponga el endpoint (POST /ligas/:id/reactivate),
- * añadir la llamada HTTP aquí antes de actualizar el estado local.
- */
-export function reactivateLeague(
-  leagueId: string,
-  leagues: LeagueItem[],
-): LeagueItem[] {
+export function reactivateLeague(leagueId: string, leagues: LeagueItem[]): LeagueItem[] {
   return leagues.map((league) =>
-    league.id === leagueId
-      ? { ...league, status: "active", canReactivate: false }
-      : league,
+    league.id === leagueId ? { ...league, status: 'active', canReactivate: false } : league,
   );
 }
 
 // ============================================================
-// CONFIGURACIÓN DE LIGA — GET / UPDATE
+// CONFIGURACIÓN DE LIGA — GET / UPDATE / DELETE
 // ============================================================
 
-/**
- * Configuración por defecto para ligas sin configuración guardada.
- * Se usa como fallback cuando el backend devuelve 404 en /configuracion.
- * TODO: el backend debería crear una configuración por defecto al crear la liga.
- */
 export const DEFAULT_LEAGUE_CONFIG: Omit<
   LeagueConfigResponse,
-  "id_configuracion" | "id_liga" | "created_at" | "updated_at"
+  'id_configuracion' | 'id_liga' | 'created_at' | 'updated_at'
 > = {
-  hora_partidos: "17:00",
+  hora_partidos: '17:00',
   min_equipos: 2,
   max_equipos: 20,
   min_convocados: 7,
@@ -321,24 +355,7 @@ export const DEFAULT_LEAGUE_CONFIG: Omit<
   max_partidos: 30,
 };
 
-/**
- * Resultado genérico de operaciones de mutación.
- * Las mutaciones no lanzan errores: siempre devuelven { success, data?, error }.
- */
-export interface ServiceResult<T = undefined> {
-  success: boolean;
-  data?: T;
-  error?: string;
-}
-
-/**
- * Obtiene la configuración de una liga.
- * Si el backend devuelve 404 (sin configuración guardada), devuelve los defaults
- * en lugar de romper la UI.
- */
-export async function getLeagueConfigService(
-  ligaId: number,
-): Promise<ServiceResult<LeagueConfigResponse>> {
+export async function getLeagueConfigService(ligaId: number): Promise<ServiceResult<LeagueConfigResponse>> {
   try {
     const data = await getLeagueConfigApi(ligaId);
     return { success: true, data };
@@ -346,40 +363,25 @@ export async function getLeagueConfigService(
     const status = error instanceof ApiError ? error.status : 0;
 
     if (status === 404) {
-      // Sin configuración guardada: devolver defaults para que el formulario pueda mostrar algo.
-      // TODO: el backend debería crear la config por defecto al crear la liga.
-      logger.warn(
-        "leagueService/getLeagueConfigService",
-        "Config no encontrada, usando defaults",
-        { ligaId },
-      );
-      const defaultConfig: LeagueConfigResponse = {
-        id_configuracion: 0,
-        id_liga: ligaId,
-        ...DEFAULT_LEAGUE_CONFIG,
+      logger.warn('leagueService/getLeagueConfigService', 'Config no encontrada, usando defaults', { ligaId });
+      return {
+        success: true,
+        data: {
+          id_configuracion: 0,
+          id_liga: ligaId,
+          ...DEFAULT_LEAGUE_CONFIG,
+        },
       };
-      return { success: true, data: defaultConfig };
     }
 
-    logger.error(
-      "leagueService/getLeagueConfigService",
-      "Error obteniendo configuración",
-      {
-        ligaId,
-        error: error instanceof Error ? error.message : String(error),
-      },
-    );
-    return {
-      success: false,
-      error: "No se pudo cargar la configuración de la liga.",
-    };
+    logger.error('leagueService/getLeagueConfigService', 'Error obteniendo configuración', {
+      ligaId,
+      error: getErrorMessage(error),
+    });
+    return { success: false, error: 'No se pudo cargar la configuración de la liga.' };
   }
 }
 
-/**
- * Actualiza la configuración de una liga existente.
- * PUT /ligas/{liga_id}/configuracion
- */
 export async function updateLeagueConfigService(
   ligaId: number,
   data: UpdateLeagueConfigRequest,
@@ -388,25 +390,14 @@ export async function updateLeagueConfigService(
     const result = await updateLeagueConfig(ligaId, data);
     return { success: true, data: result };
   } catch (error) {
-    logger.error(
-      "leagueService/updateLeagueConfigService",
-      "Error actualizando configuración",
-      {
-        ligaId,
-        error: error instanceof Error ? error.message : String(error),
-      },
-    );
-    return {
-      success: false,
-      error: "No se pudo guardar la configuración.",
-    };
+    logger.error('leagueService/updateLeagueConfigService', 'Error actualizando configuración', {
+      ligaId,
+      error: getErrorMessage(error),
+    });
+    return { success: false, error: 'No se pudo guardar la configuración.' };
   }
 }
 
-/**
- * Actualiza datos básicos de una liga.
- * PUT /ligas/{liga_id}
- */
 export async function updateLeagueService(
   ligaId: number,
   data: LigaUpdateRequest,
@@ -415,129 +406,47 @@ export async function updateLeagueService(
     const result = await updateLeagueApi(ligaId, data);
     return { success: true, data: result };
   } catch (error) {
-    logger.error(
-      "leagueService/updateLeagueService",
-      "Error actualizando liga",
-      {
-        ligaId,
-        error: error instanceof Error ? error.message : String(error),
-      },
-    );
-    return {
-      success: false,
-      error: "No se pudieron guardar los datos de la liga.",
-    };
+    logger.error('leagueService/updateLeagueService', 'Error actualizando liga', {
+      ligaId,
+      error: getErrorMessage(error),
+    });
+    return { success: false, error: 'No se pudieron guardar los datos de la liga.' };
   }
 }
 
-/**
- * Elimina una liga desde el backend.
- * DELETE /ligas/{liga_id}
- */
-export async function deleteLeagueService(
-  ligaId: number,
-): Promise<ServiceResult> {
+export async function deleteLeagueService(ligaId: number): Promise<ServiceResult> {
   try {
     await deleteLeagueApi(ligaId);
     return { success: true };
   } catch (error) {
-    logger.error(
-      "leagueService/deleteLeagueService",
-      "Error eliminando liga",
-      {
-        ligaId,
-        error: error instanceof Error ? error.message : String(error),
-      },
-    );
-    return {
-      success: false,
-      error: "No se pudo eliminar la liga.",
-    };
+    logger.error('leagueService/deleteLeagueService', 'Error eliminando liga', {
+      ligaId,
+      error: getErrorMessage(error),
+    });
+    return { success: false, error: 'No se pudo eliminar la liga.' };
   }
 }
 
-/**
- * Actualiza liga y configuración en un único flujo.
- *
- * Flujo:
- * 1. PUT /ligas/{liga_id}        → si falla, abortar sin tocar la config
- * 2. PUT /ligas/{liga_id}/configuracion → si falla, reportar error claro
- * 3. Si ambas van bien → { success: true }
- */
 export async function updateLeagueWithConfigService(input: {
   ligaId: number;
   league: LigaUpdateRequest;
   config: UpdateLeagueConfigRequest;
-  /**
-   * true si la configuración ya existe en backend.
-   * Si es false, intentamos crearla con POST y caemos a PUT si el backend indica que ya existía.
-   */
   configExists?: boolean;
 }): Promise<ServiceResult> {
-  const { ligaId, league, config, configExists = true } = input;
+  const { ligaId, league, config } = input;
 
-  // Paso 1: actualizar datos básicos de la liga
   const leagueResult = await updateLeagueService(ligaId, league);
-  if (!leagueResult.success) {
-    return { success: false, error: leagueResult.error };
-  }
+  if (!leagueResult.success) return { success: false, error: leagueResult.error };
 
-  // Paso 2: guardar configuración solo si la liga se guardó bien.
-  // Si no existía configuración, usamos el flujo POST con fallback a PUT.
-  // Si ya existía, usamos PUT directamente.
-  let configResult: ServiceResult<LeagueConfigResponse> | ServiceResult;
-
-  if (configExists) {
-    configResult = await updateLeagueConfigService(ligaId, config);
-  } else {
-    try {
-      const fullConfig: LigaConfiguracionRequest = {
-        hora_partidos: config.hora_partidos ?? DEFAULT_LEAGUE_CONFIG.hora_partidos,
-        min_equipos: config.min_equipos ?? DEFAULT_LEAGUE_CONFIG.min_equipos,
-        max_equipos: config.max_equipos ?? DEFAULT_LEAGUE_CONFIG.max_equipos,
-        min_convocados: config.min_convocados ?? DEFAULT_LEAGUE_CONFIG.min_convocados,
-        max_convocados: config.max_convocados ?? DEFAULT_LEAGUE_CONFIG.max_convocados,
-        min_plantilla: config.min_plantilla ?? DEFAULT_LEAGUE_CONFIG.min_plantilla,
-        max_plantilla: config.max_plantilla ?? DEFAULT_LEAGUE_CONFIG.max_plantilla,
-        min_jugadores_equipo:
-          config.min_jugadores_equipo ?? DEFAULT_LEAGUE_CONFIG.min_jugadores_equipo,
-        min_partidos_entre_equipos:
-          config.min_partidos_entre_equipos ?? DEFAULT_LEAGUE_CONFIG.min_partidos_entre_equipos,
-        minutos_partido: config.minutos_partido ?? DEFAULT_LEAGUE_CONFIG.minutos_partido,
-        max_partidos: config.max_partidos ?? DEFAULT_LEAGUE_CONFIG.max_partidos,
-      };
-
-      await saveLeagueConfig(ligaId, fullConfig);
-      configResult = { success: true };
-    } catch (error) {
-      logger.error(
-        "leagueService/updateLeagueWithConfigService",
-        "Error creando configuración",
-        {
-          ligaId,
-          error: error instanceof Error ? error.message : String(error),
-        },
-      );
-      configResult = {
-        success: false,
-        error: "No se pudo guardar la configuración.",
-      };
-    }
-  }
-
+  const configResult = await updateLeagueConfigService(ligaId, config);
   if (!configResult.success) {
     return {
       success: false,
-      error:
-        configResult.error ??
-        "Los datos de liga se guardaron pero falló la configuración.",
+      error: configResult.error ?? 'Los datos de liga se guardaron pero falló la configuración.',
     };
   }
 
-  logger.info(
-    "leagueService/updateLeagueWithConfigService",
-    "Liga y config actualizadas",
-    { ligaId },
-  );
+  logger.info('leagueService/updateLeagueWithConfigService', 'Liga y config actualizadas', { ligaId });
   return { success: true };
 }
+

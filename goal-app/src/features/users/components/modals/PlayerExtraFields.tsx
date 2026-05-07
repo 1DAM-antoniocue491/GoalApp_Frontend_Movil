@@ -1,91 +1,112 @@
-/**
- * PlayerExtraFields
- *
- * Campos adicionales del formulario de invitación/código.
- * Se alimenta con equipos reales desde GET /equipos/?liga_id={ligaId}.
- */
+/** Campos específicos para rol Jugador. */
 
 import React from 'react';
-import { View, Text, TextInput } from 'react-native';
-import { OptionSelectField, SelectOption } from '@/src/shared/components/ui/OptionSelectField';
+import { Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
 import { Colors } from '@/src/shared/constants/colors';
-import { styles } from '@/src/shared/styles';
-import type { UserRole } from '../../types/users.types';
-import { PLAYER_POSITIONS } from '../../types/users.types';
+import { theme } from '@/src/shared/styles/theme';
+import type { SelectOption } from '../../types/users.types';
+import { PLAYER_POSITIONS, PLAYER_TYPES } from '../../types/users.types';
 
 interface PlayerExtraFieldsProps {
-  role: UserRole | '';
-  teamId: string;
   jersey: string;
   position: string;
-  teamOptions: SelectOption[];
-  onChange: (field: string, value: string) => void;
+  playerType: string;
+  onJerseyChange: (value: string) => void;
+  onPositionChange: (value: string) => void;
+  onPlayerTypeChange: (value: string) => void;
 }
 
-const POSITION_OPTIONS: SelectOption[] = PLAYER_POSITIONS.map(item => ({
-  value: item.value,
-  label: item.label,
-}));
+function OptionChips({
+  label,
+  value,
+  options,
+  onChange,
+}: {
+  label: string;
+  value: string;
+  options: SelectOption[];
+  onChange: (value: string) => void;
+}) {
+  return (
+    <View className="mb-4">
+      <Text style={{ color: Colors.text.secondary, fontSize: theme.fontSize.sm, marginBottom: 8 }}>{label}</Text>
+      <View className="flex-row flex-wrap" style={{ gap: 8 }}>
+        {options.map(option => {
+          const selected = value === option.value;
+          return (
+            <TouchableOpacity
+              key={option.value}
+              activeOpacity={0.85}
+              onPress={() => onChange(option.value)}
+              style={{
+                paddingHorizontal: 12,
+                paddingVertical: 10,
+                borderRadius: theme.borderRadius.lg,
+                backgroundColor: selected ? Colors.brand.primary : Colors.bg.surface2,
+                borderWidth: 1,
+                borderColor: selected ? Colors.brand.primary : Colors.bg.surface2,
+              }}
+            >
+              <Text
+                style={{
+                  color: selected ? '#000000' : Colors.text.primary,
+                  fontSize: theme.fontSize.sm,
+                  fontWeight: '700',
+                }}
+              >
+                {option.label}
+              </Text>
+            </TouchableOpacity>
+          );
+        })}
+      </View>
+    </View>
+  );
+}
 
 export function PlayerExtraFields({
-  role,
-  teamId,
   jersey,
   position,
-  teamOptions,
-  onChange,
+  playerType,
+  onJerseyChange,
+  onPositionChange,
+  onPlayerTypeChange,
 }: PlayerExtraFieldsProps) {
-  const needsTeam = role === 'player' || role === 'coach' || role === 'delegate';
-  const isPlayer = role === 'player';
-
-  if (!needsTeam) return null;
-
   return (
-    <View>
+    <View className="mt-2">
       <View className="mb-4">
-        <OptionSelectField
-          label="Equipo"
-          value={teamId}
-          options={teamOptions}
-          placeholder={teamOptions.length > 0 ? 'Selecciona un equipo' : 'No hay equipos disponibles'}
-          onChange={v => onChange('teamId', v)}
-        />
+        <Text style={{ color: Colors.text.secondary, fontSize: theme.fontSize.sm, marginBottom: 8 }}>Dorsal</Text>
+        <View
+          className="flex-row items-center rounded-2xl px-4"
+          style={{ backgroundColor: Colors.bg.surface2, height: 54 }}
+        >
+          <Ionicons name="shirt-outline" size={18} color={Colors.text.secondary} />
+          <TextInput
+            value={jersey}
+            onChangeText={value => onJerseyChange(value.replace(/[^0-9]/g, '').slice(0, 3))}
+            keyboardType="number-pad"
+            placeholder="Ej: 10"
+            placeholderTextColor={Colors.text.disabled}
+            className="flex-1 ml-3"
+            style={{ color: Colors.text.primary, fontSize: theme.fontSize.md }}
+          />
+        </View>
       </View>
 
-      {isPlayer && (
-        <View className="flex-row gap-3 mb-4">
-          <View style={{ flex: 1 }}>
-            <Text className={styles.label} style={{ marginBottom: 6 }}>Dorsal</Text>
-            <View className={styles.inputRow}>
-              <TextInput
-                className={styles.input}
-                placeholder="10"
-                placeholderTextColor={styles.inputPlaceholder}
-                value={jersey}
-                onChangeText={v => onChange('jersey', v.replace(/[^0-9]/g, ''))}
-                keyboardType="numeric"
-                maxLength={3}
-              />
-            </View>
-          </View>
+      <OptionChips
+        label="Posición"
+        value={position}
+        options={PLAYER_POSITIONS}
+        onChange={onPositionChange}
+      />
 
-          <View style={{ flex: 2 }}>
-            <OptionSelectField
-              label="Posición"
-              value={position}
-              options={POSITION_OPTIONS}
-              placeholder="Selecciona posición"
-              onChange={v => onChange('position', v)}
-            />
-          </View>
-        </View>
-      )}
-
-      {needsTeam && teamOptions.length === 0 && (
-        <Text style={{ color: Colors.semantic.warning, fontSize: 12, marginTop: -8, marginBottom: 12 }}>
-          Crea al menos un equipo antes de invitar usuarios con equipo asociado.
-        </Text>
-      )}
+      <OptionChips
+        label="Tipo de jugador"
+        value={playerType}
+        options={PLAYER_TYPES}
+        onChange={onPlayerTypeChange}
+      />
     </View>
   );
 }

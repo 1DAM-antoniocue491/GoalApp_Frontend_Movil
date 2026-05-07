@@ -89,9 +89,10 @@ export async function updateLeague(
   return response.data;
 }
 
+
 /**
  * DELETE /ligas/{liga_id}
- * Elimina una liga y todos sus datos asociados. Solo admins.
+ * Elimina una liga. Solo debe invocarse desde flujos de administrador.
  */
 export async function deleteLeague(ligaId: number): Promise<void> {
   await apiClient.delete(`/ligas/${ligaId}`);

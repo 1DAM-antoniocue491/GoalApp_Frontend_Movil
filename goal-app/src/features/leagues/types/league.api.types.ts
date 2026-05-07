@@ -111,3 +111,36 @@ export interface LeagueConfigResponse {
   created_at?: string;
   updated_at?: string;
 }
+
+/**
+ * Respuesta flexible del endpoint de unirse a liga mediante código.
+ * El backend puede devolver solo mensaje o también los IDs de seguimiento/liga.
+ */
+export interface JoinLeagueByCodeResponse {
+  mensaje?: string;
+  detail?: string;
+  id_seguimiento?: number;
+  id_usuario?: number;
+  id_liga?: number;
+  id_usuario_rol?: number;
+  rol?: string;
+  liga_nombre?: string;
+}
+
+/**
+ * Respuesta de GET /invitaciones/validar-codigo/{codigo}.
+ * Es el contrato real expuesto por el backend para comprobar códigos
+ * antes de aceptarlos con el usuario autenticado.
+ */
+export interface InvitacionValidarResponse {
+  valido: boolean;
+  email?: string | null;
+  nombre?: string | null;
+  liga_nombre?: string | null;
+  equipo_nombre?: string | null;
+  rol?: string | null;
+  dorsal?: string | null;
+  posicion?: string | null;
+  tipo_jugador?: string | null;
+  motivo?: string | null;
+}

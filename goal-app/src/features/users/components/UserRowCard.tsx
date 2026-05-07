@@ -15,52 +15,14 @@
 import React, { memo } from 'react';
 import { View, Text, TouchableOpacity } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { getRoleBadgeConfig } from '@/src/shared/utils/roles';
 import { RoleBadge } from '@/src/shared/components/ui/RoleBadge';
 import { StatusDotLabel } from '@/src/shared/components/ui/StatusDotLabel';
 import { Colors } from '@/src/shared/constants/colors';
 import { theme } from '@/src/shared/styles/theme';
 import type { LeagueUser, UserRole } from '../types/users.types';
 
-// ─── Config visual de roles ───────────────────────────────────────────────────
-
-// Definida aquí porque solo se usa en esta tarjeta
-const ROLE_CONFIG: Record<UserRole, {
-  label: string;
-  bgColor: string;
-  textColor: string;
-  icon: keyof typeof Ionicons.glyphMap;
-}> = {
-  admin: {
-    label: 'Administrador',
-    bgColor: 'rgba(200,245,88,0.15)',
-    textColor: Colors.brand.primary,
-    icon: 'shield-outline',
-  },
-  coach: {
-    label: 'Entrenador',
-    bgColor: 'rgba(0,180,216,0.15)',
-    textColor: Colors.brand.secondary,
-    icon: 'ribbon-outline',
-  },
-  player: {
-    label: 'Jugador',
-    bgColor: 'rgba(24,162,251,0.15)',
-    textColor: Colors.brand.accent,
-    icon: 'football-outline',
-  },
-  delegate: {
-    label: 'Delegado',
-    bgColor: 'rgba(255,214,10,0.15)',
-    textColor: Colors.semantic.warning,
-    icon: 'clipboard-outline',
-  },
-  observer: {
-    label: 'Observador',
-    bgColor: 'rgba(161,161,170,0.12)',
-    textColor: Colors.text.secondary,
-    icon: 'eye-outline',
-  },
-};
+// ─── Estado visual de usuarios ───────────────────────────────────────────────
 
 const STATUS_COLOR: Record<string, string> = {
   active: Colors.semantic.success,
@@ -80,7 +42,7 @@ interface UserRowCardProps {
 }
 
 function UserRowCardComponent({ user, onManage }: UserRowCardProps) {
-  const roleConfig = ROLE_CONFIG[user.role];
+  const roleConfig = getRoleBadgeConfig(user.role);
   const statusColor = STATUS_COLOR[user.status] ?? Colors.text.disabled;
   const statusLabel = STATUS_LABEL[user.status] ?? user.status;
 

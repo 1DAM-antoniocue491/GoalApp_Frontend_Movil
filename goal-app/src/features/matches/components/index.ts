@@ -1,7 +1,6 @@
 // Tabs — fuente de verdad semántica para cada contexto de navegación interna
 export { MatchStatusTabs } from "@/src/features/matches/components/tabs/MatchStatusTabs";
 export { ProgrammedMatchDetailTabs } from "@/src/features/matches/components/tabs/ProgrammedMatchDetailTabs";
-export { FinishedMatchDetailTabs } from "@/src/features/matches/components/tabs/FinishedMatchDetailTabs";
 
 // Cards reutilizables — fuente de verdad visual para cada estado de partido
 export { LiveMatchCard } from "@/src/features/matches/components/cards/LiveMatchCard";

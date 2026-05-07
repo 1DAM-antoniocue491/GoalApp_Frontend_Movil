@@ -7,6 +7,7 @@ import { theme } from '@/src/shared/styles/theme';
 import { StatusDotLabel } from '@/src/shared/components/ui/StatusDotLabel';
 import { RoleBadge } from '@/src/shared/components/ui/RoleBadge';
 import { PrimaryPillButton } from '@/src/shared/components/ui/PrimaryPillButton';
+import { getRoleBadgeConfig } from '@/src/shared/utils/roles';
 /**
  * Tipos importados desde shared/types/league — fuente de verdad única.
  * No se duplican aquí para evitar divergencias entre la card y el resto de la app.
@@ -19,64 +20,6 @@ interface LeagueCardProps {
   onToggleFavorite?: (leagueId: string) => void;
   onPressSettings?: (league: LeagueItem) => void;
 }
-
-/**
- * Configuración visual de cada rol.
- *
- * Alineada con UserRowCard.ROLE_CONFIG para mantener consistencia visual
- * en toda la app. RoleBadge es la única fuente de verdad visual del rol:
- * no se definen colores, iconos ni labels fuera de este mapa.
- *
- * Claves bgColor/textColor coinciden con las props de RoleBadge
- * para evitar renombrados intermedios.
- *
- * Colores: rgba() con transparencia baja, igual que UserRowCard,
- * para mantener el estilo premium dark sin fondos opacos.
- *
- * field_delegate conserva el label "Delegado de campo" porque en el
- * contexto de liga ese rol es más específico que el "Delegado" de usuarios.
- * Icono y colores sí son idénticos al delegate de UserRowCard.
- */
-const ROLE_CONFIG: Record<
-  LeagueRole,
-  {
-    label: string;
-    bgColor: string;
-    textColor: string;
-    icon: keyof typeof Ionicons.glyphMap;
-  }
-> = {
-  admin: {
-    label: 'Administrador',
-    bgColor: 'rgba(200,245,88,0.15)',
-    textColor: Colors.brand.primary,
-    icon: 'shield-outline',
-  },
-  coach: {
-    label: 'Entrenador',
-    bgColor: 'rgba(0,180,216,0.15)',
-    textColor: Colors.brand.secondary,
-    icon: 'ribbon-outline',
-  },
-  field_delegate: {
-    label: 'Delegado de campo',
-    bgColor: 'rgba(255,214,10,0.15)',
-    textColor: Colors.semantic.warning,
-    icon: 'clipboard-outline',
-  },
-  player: {
-    label: 'Jugador',
-    bgColor: 'rgba(24,162,251,0.15)',
-    textColor: Colors.brand.accent,
-    icon: 'football-outline',
-  },
-  observer: {
-    label: 'Observador',
-    bgColor: 'rgba(148,163,184,0.15)',
-    textColor: '#94A3B8',
-    icon: 'eye-outline',
-  },
-};
 
 /**
  * Botón de favorito.
@@ -263,7 +206,7 @@ function LeagueCardComponent({
   /**
    * Configuración visual del rol actual.
    */
-  const roleConfig = ROLE_CONFIG[league.role];
+  const roleConfig = getRoleBadgeConfig(league.role);
 
   /**
    * Bloques de información secundaria condicionados al rol.

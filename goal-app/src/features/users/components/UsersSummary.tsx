@@ -1,10 +1,7 @@
 /**
  * UsersSummary
  *
- * Bloque de resumen con métricas de usuarios de la liga:
- * total, activos, pendientes y distribución por rol principal.
- *
- * Reutiliza Colors y theme (shared).
+ * Métricas reales de usuarios de la liga.
  */
 
 import React, { memo } from 'react';
@@ -19,41 +16,57 @@ interface UsersSummaryProps {
 
 function UsersSummaryComponent({ users }: UsersSummaryProps) {
   const total = users.length;
-  const activos = users.filter(u => u.status === 'active').length;
-  const pendientes = users.filter(u => u.status === 'pending').length;
+  const active = users.filter(user => user.active).length;
+  const pending = users.filter(user => !user.active).length;
+  const admins = users.filter(user => user.role === 'admin' && user.active).length;
 
   const stats = [
     { label: 'Total', value: total, color: Colors.text.primary },
-    { label: 'Activos', value: activos, color: Colors.semantic.success },
-    { label: 'Pendientes', value: pendientes, color: Colors.semantic.warning },
+    { label: 'Activos', value: active, color: Colors.semantic.success },
+    { label: 'Pendientes', value: pending, color: Colors.semantic.warning },
+    { label: 'Admins', value: admins, color: Colors.brand.primary },
   ];
 
   return (
-    <View className="flex-row gap-3 mb-5">
+    <View style={summaryStyles.grid}>
       {stats.map(stat => (
-        <View
-          key={stat.label}
-          style={{
-            // style: flex para distribución igual + color del design system
-            flex: 1,
-            backgroundColor: Colors.bg.surface1,
-            borderRadius: theme.borderRadius.lg,
-            borderWidth: 1,
-            borderColor: Colors.bg.surface2,
-            paddingVertical: theme.spacing.md,
-            alignItems: 'center',
-          }}
-        >
-          <Text style={{ color: stat.color, fontSize: theme.fontSize.xxl, fontWeight: '700', lineHeight: 30 }}>
-            {stat.value}
-          </Text>
-          <Text style={{ color: Colors.text.disabled, fontSize: theme.fontSize.xs, marginTop: 2 }}>
-            {stat.label}
-          </Text>
+        <View key={stat.label} style={summaryStyles.card}>
+          <Text style={[summaryStyles.value, { color: stat.color }]}>{stat.value}</Text>
+          <Text style={summaryStyles.label}>{stat.label}</Text>
         </View>
       ))}
     </View>
   );
 }
+
+const summaryStyles = {
+  grid: {
+    flexDirection: 'row' as const,
+    flexWrap: 'wrap' as const,
+    gap: theme.spacing.sm,
+    marginBottom: theme.spacing.lg,
+  },
+  card: {
+    flexGrow: 1,
+    flexBasis: '47%' as const,
+    backgroundColor: Colors.bg.surface1,
+    borderRadius: theme.borderRadius.xl,
+    borderWidth: 1,
+    borderColor: Colors.bg.surface2,
+    paddingVertical: theme.spacing.md,
+    alignItems: 'center' as const,
+  },
+  value: {
+    fontSize: theme.fontSize.xxl,
+    fontWeight: '800' as const,
+    lineHeight: 30,
+  },
+  label: {
+    color: Colors.text.disabled,
+    fontSize: theme.fontSize.xs,
+    marginTop: 2,
+    fontWeight: '600' as const,
+  },
+};
 
 export const UsersSummary = memo(UsersSummaryComponent);

@@ -1,240 +1,171 @@
 /**
  * UsersRolesScreen
  *
- * Pantalla principal de usuarios y roles dentro de una liga.
- * Permite: ver el resumen de miembros, buscar, invitar usuarios nuevos
- * y gestionar los existentes.
- *
- * Reutiliza:
- * - SearchInput (shared) → buscador de usuarios
- * - SectionTitle (shared) → título de sección
- * - UsersSummary → bloque de métricas
- * - UserRowCard → fila de cada usuario
- * - InviteUserModal → modal para invitar
- * - ManageUserModal → modal para gestionar
- * - Colors, theme (shared)
+ * Pantalla principal de usuarios y roles.
+ * Todo se carga desde API real: usuarios, roles y equipos.
  */
 
-import React, { useState, useMemo, useRef } from 'react';
+import React, { useMemo, useRef, useState } from 'react';
 import {
-  View,
-  Text,
+  ActivityIndicator,
+  RefreshControl,
   ScrollView,
+  Text,
   TouchableOpacity,
+  View,
 } from 'react-native';
-// SafeAreaView de react-native-safe-area-context respeta correctamente
-// las zonas seguras en iOS y Android, incluyendo notch, Dynamic Island y barras de sistema
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { SearchInput } from '@/src/shared/components/ui/SearchInput';
 import { SectionTitle } from '@/src/shared/components/ui/SectionTitle';
+import { ScrollEdgeButton } from '@/src/shared/components/navigation/ScrollEdgeButton';
 import { Colors } from '@/src/shared/constants/colors';
 import { theme } from '@/src/shared/styles/theme';
+import { useActiveLeague } from '@/src/state/activeLeague/activeLeagueStore';
+import { roleOptionsFromApi, teamOptionsFromApi } from '../services/userService';
+import { useLeagueUsers } from '../hooks/UseLeagueUsers';
 import { UsersSummary } from './UsersSummary';
 import { UserRowCard } from './UserRowCard';
 import { InviteUserModal } from './modals/InviteUserModal';
 import { ManageUserModal } from './modals/ManageUserModal';
-import type { LeagueUser, InviteUserFormData, ManageUserFormData } from '../types/users.types';
-import { ScrollEdgeButton } from '@/src/shared/components/navigation/ScrollEdgeButton';
-
-
-// ─── Mock data ─────────────────────────────────────────────────────────────────
-// TODO: reemplazar con hook useLeagueUsers cuando el servicio esté disponible
-
-const MOCK_USERS: LeagueUser[] = [
-  {
-    id: 'u1',
-    name: 'Carlos Martínez',
-    email: 'carlos@goalapp.com',
-    role: 'admin',
-    status: 'active',
-  },
-  {
-    id: 'u2',
-    name: 'Ana García',
-    email: 'ana@goalapp.com',
-    role: 'coach',
-    status: 'active',
-    teamId: 'team_1',
-    teamName: 'Real Madrid CF',
-  },
-  {
-    id: 'u3',
-    name: 'Luis Rodríguez',
-    email: 'luis@goalapp.com',
-    role: 'player',
-    status: 'active',
-    teamId: 'team_1',
-    teamName: 'Real Madrid CF',
-    jersey: 10,
-    position: 'Mediapunta',
-    isCaptain: true,
-  },
-  {
-    id: 'u4',
-    name: 'Marta López',
-    email: 'marta@goalapp.com',
-    role: 'delegate',
-    status: 'pending',
-    teamId: 'team_2',
-    teamName: 'FC Barcelona',
-  },
-  {
-    id: 'u5',
-    name: 'Pedro Sánchez',
-    email: 'pedro@goalapp.com',
-    role: 'observer',
-    status: 'pending',
-  },
-];
-
-// ─── Componente ───────────────────────────────────────────────────────────────
+import { GenerateUnionCodeModal } from './modals/GenerateUnionCodeModal';
+import type { LeagueUser } from '../types/users.types';
 
 export function UsersRolesScreen() {
   const router = useRouter();
-  const [users, setUsers] = useState<LeagueUser[]>(MOCK_USERS);
-  const [search, setSearch] = useState('');
+  const { session } = useActiveLeague();
+  const ligaId = session?.leagueId ? Number(session.leagueId) : 0;
+
+  const {
+    users,
+    roles,
+    teams,
+    filteredUsers,
+    isLoading,
+    isRefreshing,
+    isSubmitting,
+    error,
+    search,
+    setSearch,
+    refresh,
+    inviteUser,
+    updateUser,
+    removeUser,
+    generateUnionCode,
+  } = useLeagueUsers(ligaId);
+
   const [inviteOpen, setInviteOpen] = useState(false);
+  const [unionCodeOpen, setUnionCodeOpen] = useState(false);
   const [managingUser, setManagingUser] = useState<LeagueUser | null>(null);
 
-  // Ref del ScrollView para que ScrollEdgeButton pueda llamar a scrollTo
   const scrollRef = useRef<ScrollView>(null);
-  // Posición vertical actual del scroll (actualizada en onScroll)
   const [scrollY, setScrollY] = useState(0);
-  // Altura total del contenido renderizado (actualizada en onContentSizeChange)
   const [contentHeight, setContentHeight] = useState(0);
-  // Altura visible del ScrollView (actualizada en onLayout)
   const [viewportHeight, setViewportHeight] = useState(0);
 
-  // Filtrado por búsqueda en nombre o email
-  const filteredUsers = useMemo(() => {
-    const q = search.toLowerCase().trim();
-    if (!q) return users;
-    return users.filter(
-      u => u.name.toLowerCase().includes(q) || u.email.toLowerCase().includes(q)
+  const roleOptions = useMemo(() => roleOptionsFromApi(roles), [roles]);
+  const teamOptions = useMemo(() => teamOptionsFromApi(teams), [teams]);
+
+  if (!ligaId) {
+    return (
+      <SafeAreaView style={screenStyles.safeArea}>
+        <View style={screenStyles.centerState}>
+          <Ionicons name="warning-outline" size={42} color={Colors.semantic.warning} />
+          <Text style={screenStyles.stateTitle}>No hay liga activa</Text>
+          <Text style={screenStyles.stateText}>Selecciona una liga para gestionar sus usuarios.</Text>
+        </View>
+      </SafeAreaView>
     );
-  }, [users, search]);
-
-  function handleInviteSubmit(data: InviteUserFormData) {
-    // TODO: llamar a usersService.invite(data) cuando esté disponible
-    console.log('Invitar usuario:', data);
-    setInviteOpen(false);
   }
 
-  function handleUpdateUser(userId: string, data: ManageUserFormData) {
-    // TODO: llamar a usersService.update(userId, data)
-    console.log('Actualizar usuario:', userId, data);
-    setManagingUser(null);
-  }
-
-  function handleRemoveUser(userId: string) {
-    // TODO: llamar a usersService.remove(userId)
-    console.log('Eliminar usuario:', userId);
-    setUsers(prev => prev.filter(u => u.id !== userId));
-    setManagingUser(null);
+  if (isLoading) {
+    return (
+      <SafeAreaView style={screenStyles.safeArea}>
+        <View style={screenStyles.centerState}>
+          <ActivityIndicator color={Colors.brand.primary} />
+          <Text style={screenStyles.stateText}>Cargando usuarios...</Text>
+        </View>
+      </SafeAreaView>
+    );
   }
 
   return (
-    <SafeAreaView style={{ flex: 1, backgroundColor: Colors.bg.base }}>
-
-      {/* ── Header ── */}
-      <View
-        className="flex-row items-center justify-between px-6 py-4"
-        style={{ borderBottomWidth: 1, borderBottomColor: Colors.bg.surface2 }}
-      >
-        <View className="flex-row items-center gap-3">
-          <TouchableOpacity
-            onPress={() => router.back()}
-            hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-          >
+    <SafeAreaView style={screenStyles.safeArea}>
+      <View style={screenStyles.header}>
+        <View className="flex-row items-center gap-3" style={{ flex: 1 }}>
+          <TouchableOpacity onPress={() => router.back()} hitSlop={12}>
             <Ionicons name="arrow-back" size={22} color={Colors.text.primary} />
           </TouchableOpacity>
-          <SectionTitle title="Usuarios y roles" />
+          <View style={{ flex: 1 }}>
+            <SectionTitle title="Usuarios y roles" />
+            <Text style={screenStyles.headerSubtitle} numberOfLines={1}>{session?.leagueName ?? 'Liga activa'}</Text>
+          </View>
         </View>
 
-        {/* Botón principal: Invitar usuario */}
-        <TouchableOpacity
-          onPress={() => setInviteOpen(true)}
-          activeOpacity={0.8}
-          style={{
-            // style: fondo brand.primary + padding exacto — no representable solo con className
-            flexDirection: 'row',
-            alignItems: 'center',
-            backgroundColor: Colors.brand.primary,
-            borderRadius: theme.borderRadius.lg,
-            paddingHorizontal: theme.spacing.md,
-            height: 36,
-            gap: 6,
-          }}
-        >
-          <Ionicons name="person-add-outline" size={16} color="#000" />
-          <Text style={{ color: '#000', fontSize: theme.fontSize.sm, fontWeight: '700' }}>
-            Invitar
-          </Text>
-        </TouchableOpacity>
+        <View style={screenStyles.headerActions}>
+          <TouchableOpacity style={screenStyles.iconButton} onPress={() => setUnionCodeOpen(true)} activeOpacity={0.85}>
+            <Ionicons name="key-outline" size={18} color={Colors.brand.primary} />
+          </TouchableOpacity>
+          <TouchableOpacity style={screenStyles.primaryButton} onPress={() => setInviteOpen(true)} activeOpacity={0.85}>
+            <Ionicons name="person-add-outline" size={16} color="#000" />
+            <Text style={screenStyles.primaryButtonText}>Invitar</Text>
+          </TouchableOpacity>
+        </View>
       </View>
 
       <ScrollView
         ref={scrollRef}
         className="flex-1"
         showsVerticalScrollIndicator={false}
-        contentContainerStyle={{ paddingHorizontal: theme.spacing.xl, paddingVertical: theme.spacing.xl }}
         keyboardShouldPersistTaps="handled"
-
-        // scrollEventThrottle=16 garantiza actualizaciones ~60fps sin saturar el bridge
+        contentContainerStyle={screenStyles.content}
+        refreshControl={<RefreshControl refreshing={isRefreshing} onRefresh={refresh} tintColor={Colors.brand.primary} />}
         scrollEventThrottle={16}
-        onScroll={(e) => setScrollY(e.nativeEvent.contentOffset.y)}
-        // Capturamos la altura total del contenido para saber cuándo hay scroll real
-        onContentSizeChange={(_, h) => setContentHeight(h)}
-        // Capturamos la altura del área visible para calcular el surplus scrollable
-        onLayout={(e) => setViewportHeight(e.nativeEvent.layout.height)}
+        onScroll={event => setScrollY(event.nativeEvent.contentOffset.y)}
+        onContentSizeChange={(_, height) => setContentHeight(height)}
+        onLayout={event => setViewportHeight(event.nativeEvent.layout.height)}
       >
-        {/* Resumen de métricas */}
         <UsersSummary users={users} />
 
-        {/* Buscador */}
         <View className="mb-5">
           <SearchInput
             value={search}
-            placeholder="Buscar por nombre o email..."
+            placeholder="Buscar por nombre, email o rol..."
             onChangeText={setSearch}
             onClear={() => setSearch('')}
           />
         </View>
 
-        {/* Encabezado de lista */}
-        <View className="flex-row items-center justify-between mb-3">
-          <Text style={{ color: Colors.text.secondary, fontSize: theme.fontSize.sm }}>
+        {error ? (
+          <View style={screenStyles.errorBox}>
+            <Ionicons name="alert-circle-outline" size={18} color={Colors.semantic.error} />
+            <Text style={screenStyles.errorText}>{error}</Text>
+          </View>
+        ) : null}
+
+        <View style={screenStyles.listHeader}>
+          <Text style={screenStyles.listTitle}>
             {filteredUsers.length} miembro{filteredUsers.length !== 1 ? 's' : ''}
           </Text>
+          <TouchableOpacity onPress={refresh} hitSlop={12}>
+            <Ionicons name="refresh-outline" size={18} color={Colors.text.secondary} />
+          </TouchableOpacity>
         </View>
 
-        {/* Lista de usuarios */}
         {filteredUsers.length > 0 ? (
           filteredUsers.map(user => (
-            <UserRowCard
-              key={user.id}
-              user={user}
-              onManage={setManagingUser}
-            />
+            <UserRowCard key={user.id} user={user} onManage={setManagingUser} />
           ))
         ) : (
-          // Estado vacío
-          <View className="items-center py-12">
+          <View style={screenStyles.emptyState}>
             <Ionicons name="people-outline" size={44} color={Colors.text.disabled} />
-            <Text style={{ color: Colors.text.disabled, fontSize: theme.fontSize.sm, marginTop: theme.spacing.md }}>
-              No se encontraron usuarios
-            </Text>
+            <Text style={screenStyles.emptyTitle}>No se encontraron usuarios</Text>
+            <Text style={screenStyles.emptyText}>Prueba con otra búsqueda o invita a un nuevo miembro.</Text>
           </View>
         )}
       </ScrollView>
 
-      {/*
-              ScrollEdgeButton flota fuera del ScrollView para que su position:absolute
-              se resuelva respecto al View padre (flex:1) y no quede enterrado dentro
-              del contenido scrollable.
-            */}
       <ScrollEdgeButton
         scrollRef={scrollRef}
         scrollY={scrollY}
@@ -242,22 +173,153 @@ export function UsersRolesScreen() {
         viewportHeight={viewportHeight}
       />
 
-
-      {/* ── Modal Invitar usuario ── */}
       <InviteUserModal
         visible={inviteOpen}
         onClose={() => setInviteOpen(false)}
-        onSubmit={handleInviteSubmit}
+        onSubmit={inviteUser}
+        roleOptions={roleOptions}
+        teamOptions={teamOptions}
+        isSubmitting={isSubmitting}
+        error={error}
       />
 
-      {/* ── Modal Gestionar usuario ── */}
-      <ManageUserModal
-        user={managingUser}
-        visible={!!managingUser}
-        onClose={() => setManagingUser(null)}
-        onUpdate={handleUpdateUser}
-        onRemove={handleRemoveUser}
+      <GenerateUnionCodeModal
+        visible={unionCodeOpen}
+        onClose={() => setUnionCodeOpen(false)}
+        onGenerate={generateUnionCode}
+        roleOptions={roleOptions}
+        teamOptions={teamOptions}
+        isSubmitting={isSubmitting}
+        error={error}
       />
+
+      {managingUser ? (
+        <ManageUserModal
+          user={managingUser}
+          visible={true}
+          onClose={() => setManagingUser(null)}
+          onUpdate={updateUser}
+          onRemove={removeUser}
+          roleOptions={roleOptions}
+          isSubmitting={isSubmitting}
+          error={error}
+        />
+      ) : null}
     </SafeAreaView>
   );
 }
+
+const screenStyles = {
+  safeArea: {
+    flex: 1,
+    backgroundColor: Colors.bg.base,
+  },
+  header: {
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    justifyContent: 'space-between' as const,
+    paddingHorizontal: theme.spacing.xl,
+    paddingVertical: theme.spacing.lg,
+    borderBottomWidth: 1,
+    borderBottomColor: Colors.bg.surface2,
+    gap: theme.spacing.md,
+  },
+  headerSubtitle: {
+    color: Colors.text.secondary,
+    fontSize: theme.fontSize.xs,
+    marginTop: 2,
+  },
+  headerActions: {
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    gap: theme.spacing.sm,
+  },
+  iconButton: {
+    width: 38,
+    height: 38,
+    borderRadius: theme.borderRadius.lg,
+    backgroundColor: Colors.bg.surface1,
+    borderWidth: 1,
+    borderColor: Colors.bg.surface2,
+    alignItems: 'center' as const,
+    justifyContent: 'center' as const,
+  },
+  primaryButton: {
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    backgroundColor: Colors.brand.primary,
+    borderRadius: theme.borderRadius.lg,
+    paddingHorizontal: theme.spacing.md,
+    height: 38,
+    gap: 6,
+  },
+  primaryButtonText: {
+    color: '#000',
+    fontSize: theme.fontSize.sm,
+    fontWeight: '800' as const,
+  },
+  content: {
+    paddingHorizontal: theme.spacing.xl,
+    paddingVertical: theme.spacing.xl,
+    paddingBottom: theme.spacing.xxl * 2,
+  },
+  listHeader: {
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    justifyContent: 'space-between' as const,
+    marginBottom: theme.spacing.md,
+  },
+  listTitle: {
+    color: Colors.text.secondary,
+    fontSize: theme.fontSize.sm,
+    fontWeight: '600' as const,
+  },
+  errorBox: {
+    flexDirection: 'row' as const,
+    gap: 8,
+    alignItems: 'center' as const,
+    backgroundColor: 'rgba(255,69,52,0.10)',
+    borderRadius: theme.borderRadius.lg,
+    padding: theme.spacing.md,
+    marginBottom: theme.spacing.md,
+  },
+  errorText: {
+    flex: 1,
+    color: Colors.semantic.error,
+    fontSize: theme.fontSize.sm,
+  },
+  emptyState: {
+    alignItems: 'center' as const,
+    paddingVertical: theme.spacing.xxl,
+  },
+  emptyTitle: {
+    color: Colors.text.primary,
+    fontSize: theme.fontSize.md,
+    fontWeight: '700' as const,
+    marginTop: theme.spacing.md,
+  },
+  emptyText: {
+    color: Colors.text.secondary,
+    fontSize: theme.fontSize.sm,
+    textAlign: 'center' as const,
+    marginTop: 4,
+  },
+  centerState: {
+    flex: 1,
+    alignItems: 'center' as const,
+    justifyContent: 'center' as const,
+    padding: theme.spacing.xl,
+  },
+  stateTitle: {
+    color: Colors.text.primary,
+    fontSize: theme.fontSize.lg,
+    fontWeight: '700' as const,
+    marginTop: theme.spacing.md,
+  },
+  stateText: {
+    color: Colors.text.secondary,
+    fontSize: theme.fontSize.sm,
+    textAlign: 'center' as const,
+    marginTop: theme.spacing.sm,
+  },
+};

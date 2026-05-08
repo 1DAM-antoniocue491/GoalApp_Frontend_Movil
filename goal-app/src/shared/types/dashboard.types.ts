@@ -23,18 +23,13 @@ export interface LeagueMetricsData {
   /** Para las tarjetas de progreso inferiores */
   activeTeams: number;
   /**
-   * Total visual heredado usado por el dashboard.
-   * IMPORTANTE: para el progreso de equipos activos, el objetivo real debe ser
-   * el máximo permitido de equipos cuando el backend lo entregue.
+   * Denominador de "Equipos activos".
+   * Debe venir del máximo configurado en liga (`max_equipos`), no del mínimo.
    */
   totalTeams: number;
   /**
-   * Máximo de equipos permitido por configuración de liga.
-   * Si existe, es el denominador correcto de la barra "Equipos activos".
+   * Jornadas completadas: una jornada solo cuenta cuando TODOS sus partidos están finalizados.
    */
-  maxTeams?: number;
-  /** Mínimo de equipos requerido por configuración. No debe completar la barra de activos. */
-  minTeams?: number;
   completedRounds: number;
   totalRounds: number;
 }

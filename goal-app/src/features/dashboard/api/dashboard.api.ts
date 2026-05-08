@@ -118,8 +118,8 @@ const MESES = ['ENE', 'FEB', 'MAR', 'ABR', 'MAY', 'JUN', 'JUL', 'AGO', 'SEP', 'O
  * Normaliza el estado del partido a un valor canónico.
  * El backend puede devolver 'en_juego' o 'en_vivo' según versión.
  */
-function normalizarEstado(estado: string): 'en_juego' | 'programado' | 'finalizado' | 'otro' {
-  const s = estado.toLowerCase().trim();
+function normalizarEstado(estado: string | null | undefined): 'en_juego' | 'programado' | 'finalizado' | 'otro' {
+  const s = String(estado ?? '').toLowerCase().trim();
   if (s === 'en_juego' || s === 'en_vivo') return 'en_juego';
   if (s === 'programado') return 'programado';
   if (s === 'finalizado') return 'finalizado';
@@ -207,6 +207,108 @@ interface PartidoJornadaRaw {
   numero?: number | null;
 }
 
+interface JornadaProgressResult {
+  totalRounds: number;
+  completedRounds: number;
+}
+
+function toSafeNumber(value: unknown): number | null {
+  const n = Number(value);
+  return Number.isFinite(n) ? n : null;
+}
+
+function getJornadaNumberFromGroup(group: Record<string, unknown>, fallbackIndex: number): number | null {
+  return (
+    toSafeNumber(group.jornada) ??
+    toSafeNumber(group.numero_jornada) ??
+    toSafeNumber(group.num_jornada) ??
+    toSafeNumber(group.numero) ??
+    toSafeNumber(group.id_jornada) ??
+    fallbackIndex + 1
+  );
+}
+
+function getPartidoJornadaKey(partido: PartidoConEquiposResponse | PartidoJornadaRaw): string | null {
+  const p = partido as unknown as Record<string, unknown>;
+  const jornada = p.jornada;
+
+  if (jornada && typeof jornada === 'object') {
+    const j = jornada as Record<string, unknown>;
+    const fromObject =
+      toSafeNumber(j.id_jornada) ??
+      toSafeNumber(j.numero) ??
+      toSafeNumber(j.jornada) ??
+      toSafeNumber(j.numero_jornada) ??
+      toSafeNumber(j.num_jornada);
+    return fromObject != null ? String(fromObject) : null;
+  }
+
+  const fromFlat =
+    toSafeNumber(p.id_jornada) ??
+    toSafeNumber(p.jornada) ??
+    toSafeNumber(p.numero_jornada) ??
+    toSafeNumber(p.num_jornada) ??
+    toSafeNumber(p.numero);
+
+  return fromFlat != null ? String(fromFlat) : null;
+}
+
+function getJornadaGroups(raw: unknown): Array<{ key: string; partidos: PartidoJornadaRaw[] }> {
+  if (!raw || typeof raw !== 'object') return [];
+
+  const source = Array.isArray(raw)
+    ? raw
+    : Array.isArray((raw as Record<string, unknown>).jornadas)
+      ? ((raw as Record<string, unknown>).jornadas as unknown[])
+      : [];
+
+  if (source.length === 0) return [];
+
+  const first = source[0] as Record<string, unknown>;
+
+  // Forma agrupada: [{ jornada: N, partidos: [...] }].
+  // Esta es la fuente más fiable para saber si una jornada está COMPLETA:
+  // solo cuenta como completada si todos sus partidos están finalizados.
+  if (Array.isArray(first?.partidos)) {
+    return (source as Record<string, unknown>[]).map((group, index) => {
+      const jornadaNumber = getJornadaNumberFromGroup(group, index);
+      return {
+        key: String(jornadaNumber ?? index + 1),
+        partidos: Array.isArray(group.partidos) ? (group.partidos as PartidoJornadaRaw[]) : [],
+      };
+    });
+  }
+
+  // Forma plana: [{ id_partido, jornada, ... }]. Agrupamos manualmente.
+  const grouped = new Map<string, PartidoJornadaRaw[]>();
+  (source as PartidoJornadaRaw[]).forEach((partido, index) => {
+    const key = getPartidoJornadaKey(partido) ?? `sin-jornada-${index}`;
+    const current = grouped.get(key) ?? [];
+    current.push(partido);
+    grouped.set(key, current);
+  });
+
+  return Array.from(grouped, ([key, partidos]) => ({ key, partidos }));
+}
+
+function deriveRoundProgressFromJornadas(raw: unknown): JornadaProgressResult | null {
+  const groups = getJornadaGroups(raw);
+  if (groups.length === 0) return null;
+
+  const completedRounds = groups.filter((group) => {
+    // Una jornada vacía no se considera completada: necesita partidos y todos finalizados.
+    return (
+      group.partidos.length > 0 &&
+      group.partidos.every((partido) => normalizarEstado(partido.estado) === 'finalizado')
+    );
+  }).length;
+
+  return {
+    totalRounds: groups.length,
+    completedRounds,
+  };
+}
+
 /**
  * Extrae un array plano de partidos desde la respuesta cruda de /jornadas.
  * Maneja las 3 formas posibles que devuelve el backend:
@@ -222,9 +324,17 @@ function extractPartidosFromJornadas(raw: unknown): PartidoJornadaRaw[] {
     const first = raw[0] as Record<string, unknown>;
     // Case A: array de jornadas agrupadas
     if (Array.isArray(first?.partidos)) {
-      return (raw as Record<string, unknown>[]).flatMap(
-        (j) => (Array.isArray(j.partidos) ? (j.partidos as PartidoJornadaRaw[]) : []),
-      );
+      return (raw as Record<string, unknown>[]).flatMap((j, index) => {
+        const jornadaNumber = getJornadaNumberFromGroup(j, index);
+        const partidos = Array.isArray(j.partidos) ? (j.partidos as PartidoJornadaRaw[]) : [];
+
+        // Conservamos el número de jornada en cada partido para que el dashboard
+        // no tenga que mostrar siempre el fallback "Jornada 1".
+        return partidos.map((partido) => ({
+          ...partido,
+          jornada: partido.jornada ?? jornadaNumber,
+        }));
+      });
     }
     // Case C: array plano de partidos
     if ('id_partido' in first) {
@@ -236,9 +346,15 @@ function extractPartidosFromJornadas(raw: unknown): PartidoJornadaRaw[] {
   // Case B: { jornadas: [...] }
   const obj = raw as Record<string, unknown>;
   if (Array.isArray(obj.jornadas)) {
-    return (obj.jornadas as Record<string, unknown>[]).flatMap(
-      (j) => (Array.isArray(j.partidos) ? (j.partidos as PartidoJornadaRaw[]) : []),
-    );
+    return (obj.jornadas as Record<string, unknown>[]).flatMap((j, index) => {
+      const jornadaNumber = getJornadaNumberFromGroup(j, index);
+      const partidos = Array.isArray(j.partidos) ? (j.partidos as PartidoJornadaRaw[]) : [];
+
+      return partidos.map((partido) => ({
+        ...partido,
+        jornada: partido.jornada ?? jornadaNumber,
+      }));
+    });
   }
 
   return [];
@@ -416,21 +532,29 @@ function mapPartidoToUpcoming(partido: PartidoConEquiposResponse): UpcomingMatch
 function buildMetrics(
   liga: LigaResponse,
   equipos: EquipoListResponse[],
-  partidos: PartidoConEquiposResponse[],
+  partidos: Array<PartidoConEquiposResponse | PartidoJornadaRaw>,
   clasificacion: ClasificacionResumen[],
   stats: EstadisticasTemporadaResponse | null,
   usuarios: UsuarioLigaApi[],
   /** ID del usuario autenticado — para incluirlo si no aparece en /usuarios */
   currentUserId: number | null,
-  /** min_equipos de la configuración de la liga — el progreso llega al 100% cuando se alcanza */
-  minEquipos: number | null,
+  /** max_equipos de la configuración de la liga — el progreso llega al 100% al alcanzar el máximo permitido */
+  maxEquipos: number | null,
+  /** Progreso real de jornadas calculado desde /jornadas: una jornada solo cuenta si todos sus partidos finalizaron */
+  roundProgress: JornadaProgressResult | null,
 ): LeagueMetricsData {
   // registeredTeams: equipos realmente inscritos (fuente: array del endpoint).
-  // configuredMinTeams: mínimo de equipos requerido por la configuración de la liga.
-  //   Es el denominador en ProgressMetrics: la barra se llena cuando se alcanzan los equipos mínimos.
-  //   Fallback: liga.equipos_total (max configurado) → conteo real.
+  // configuredMaxTeams: máximo de equipos permitido por la configuración de la liga.
+  //   REGLA DE PRODUCTO: la barra de "Equipos activos" se completa contra el máximo,
+  //   no contra el mínimo. El mínimo sirve para validar la liga, no para completar el progreso.
+  //   Fallback: liga.equipos_total → conteo real.
   const registeredTeams = equipos.length;
-  const configuredMaxTeams = minEquipos ?? liga.equipos_total ?? registeredTeams;
+  const configuredMaxTeams =
+    maxEquipos != null && maxEquipos > 0
+      ? maxEquipos
+      : liga.equipos_total != null && liga.equipos_total > 0
+        ? liga.equipos_total
+        : registeredTeams;
 
   // activeTeams: equipos con activo !== false. Si el campo no existe en ninguno, todos se consideran activos.
   const activeTeams = equipos.some(e => e.activo !== undefined)
@@ -463,22 +587,24 @@ function buildMetrics(
   // Líder actual (primer elemento de clasificación, ya viene ordenada por el backend)
   const leader = clasificacion[0] ?? null;
 
-  // Derivar jornadas únicas desde partidos cuando stats no está disponible.
-  // Se usan id_jornada si existe, sino numero, para no contarlas doble.
+  // Progreso de jornadas:
+  // - Fuente preferente: /jornadas, porque permite verificar TODOS los partidos de cada jornada.
+  // - Una jornada solo se marca como completada si todos sus partidos están finalizados.
+  // - stats se mantiene como fallback para no dejar la métrica vacía si /jornadas falla.
   const allJornadas = new Set(
     partidos
-      .map(p => p.jornada?.id_jornada ?? p.jornada?.numero)
-      .filter((v): v is number => v != null),
+      .map(getPartidoJornadaKey)
+      .filter((v): v is string => v != null),
   );
   const finishedJornadas = new Set(
     partidos
       .filter(p => normalizarEstado(p.estado) === 'finalizado')
-      .map(p => p.jornada?.id_jornada ?? p.jornada?.numero)
-      .filter((v): v is number => v != null),
+      .map(getPartidoJornadaKey)
+      .filter((v): v is string => v != null),
   );
 
-  const totalRounds = stats?.total_jornadas ?? allJornadas.size;
-  const completedRounds = stats?.jornadas_completadas ?? finishedJornadas.size;
+  const totalRounds = roundProgress?.totalRounds ?? stats?.total_jornadas ?? allJornadas.size;
+  const completedRounds = roundProgress?.completedRounds ?? stats?.jornadas_completadas ?? finishedJornadas.size;
 
   const metrics: LeagueMetricsData = {
     // LeagueMetrics (grid 2×2): conteos reales
@@ -750,9 +876,10 @@ export async function fetchDashboardData(ligaId: number): Promise<DashboardData>
   const currentUser = await getUser().catch(() => null);
   const currentUserId = currentUser?.id_usuario ?? null;
 
-  // min_equipos desde configuración de liga — determina cuándo se completa la barra de progreso
-  const minEquipos: number | null = ligaConfigResult.status === 'fulfilled'
-    ? (ligaConfigResult.value?.min_equipos ?? null)
+  // max_equipos desde configuración de liga — determina cuándo se completa la barra de progreso.
+  // No usamos min_equipos aquí: la barra debe llegar al 100% solo cuando se alcanza el máximo configurado.
+  const maxEquipos: number | null = ligaConfigResult.status === 'fulfilled'
+    ? (ligaConfigResult.value?.max_equipos ?? null)
     : null;
 
   if (ligaConfigResult.status === 'rejected') {
@@ -762,7 +889,24 @@ export async function fetchDashboardData(ligaId: number): Promise<DashboardData>
     });
   }
 
-  const metrics = buildMetrics(liga, equipos, partidos, clasificacion, stats, usuarios, currentUserId, minEquipos);
+  const roundProgress = jornadasRaw != null ? deriveRoundProgressFromJornadas(jornadasRaw) : null;
+
+  // Para métricas usamos /jornadas como fuente principal cuando /con-equipos no trae datos.
+  // Así las barras de progreso siguen funcionando aunque /con-equipos falle o tarde.
+  const partidosParaMetricas: Array<PartidoConEquiposResponse | PartidoJornadaRaw> =
+    partidos.length > 0 ? partidos : partidosDeJornadas;
+
+  const metrics = buildMetrics(
+    liga,
+    equipos,
+    partidosParaMetricas,
+    clasificacion,
+    stats,
+    usuarios,
+    currentUserId,
+    maxEquipos,
+    roundProgress,
+  );
 
   logger.info('dashboard.api', 'Dashboard cargado', {
     ligaId,

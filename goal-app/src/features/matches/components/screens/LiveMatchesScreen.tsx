@@ -1,173 +1,73 @@
 /**
  * LiveMatchesScreen
- *
- * Lista de partidos en directo agrupados por jornada.
- * Usa LiveMatchCard como fuente visual única para partidos en vivo.
- *
- * DATOS:
- * Consume mockLiveMatch mientras la API no esté disponible.
- * Cuando exista el endpoint, sustituir mockLiveMatches por un hook
- * tipo useLiveMatches() que devuelva LiveMatchData[].
- *
- * PERMISOS:
- * getDashboardPermissions se llama con 'admin' como placeholder.
- * Cuando exista el contexto de sesión, reemplazar por:
- *   const { role } = useSession();
- *   const permissions = getDashboardPermissions(role);
- *
- * MODALES:
- * Estado centralizado en useMatchActionModals — mismo flujo que el calendario.
+ * Partidos en vivo reales. Eventos con minuto automático y finalización con MVP real.
  */
 
-import React from 'react';
-import { View, Text, ScrollView } from 'react-native';
-
-import { mockLiveMatch } from '@/src/mocks/dashboard.mocks';
-import { getDashboardPermissions } from '@/src/features/dashboard/services/dashboardService';
-import { LiveMatchCard } from '@/src/features/matches/components/cards/LiveMatchCard';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import { ActivityIndicator, RefreshControl, ScrollView, StatusBar, Text, TouchableOpacity, View } from 'react-native';
+import { useRouter } from 'expo-router';
+import { Ionicons } from '@expo/vector-icons';
 import { Colors } from '@/src/shared/constants/colors';
-import { useMatchActionModals } from '@/src/features/matches/hooks/useMatchActionModals';
-import { RegisterEventModal } from '@/src/features/matches/components/modals/RegisterEventModal';
-import { GoalEventModal } from '@/src/features/matches/components/modals/GoalEventModal';
-import { YellowCardModal } from '@/src/features/matches/components/modals/YellowCardModal';
-import { RedCardModal } from '@/src/features/matches/components/modals/RedCardModal';
-import { SubstitutionModal } from '@/src/features/matches/components/modals/SubstitutionModal';
-import { EndMatchModal } from '@/src/features/matches/components/modals/EndMatchModal';
-
-// Mock temporal: array de partidos en vivo
-// Sustituir por hook cuando la API esté disponible
-const mockLiveMatches = [mockLiveMatch];
-
-// Placeholder de permisos — reemplazar por getDashboardPermissions(role) del contexto de sesión
-const permissions = getDashboardPermissions('admin');
+import { useActiveLeague } from '@/src/state/activeLeague/activeLeagueStore';
+import { useMatchActionModals } from '../../hooks/useMatchActionModals';
+import { getAwayTeamName, getHomeTeamName, getLiveMatchesService, getLiveMinute } from '../../services/matchesService';
+import type { PartidoApi } from '../../types/matches.types';
+import { RegisterEventModal } from '../modals/RegisterEventModal';
+import { GoalEventModal } from '../modals/GoalEventModal';
+import { YellowCardModal } from '../modals/YellowCardModal';
+import { RedCardModal } from '../modals/RedCardModal';
+import { SubstitutionModal } from '../modals/SubstitutionModal';
+import { EndMatchModal } from '../modals/EndMatchModal';
 
 export function LiveMatchesScreen() {
-    const {
-        modals,
-        activeEventMatch,
-        activeEndMatch,
-        openRegisterEvent,
-        openEndMatch,
-        modalProps,
-    } = useMatchActionModals();
+  const router = useRouter();
+  const { session } = useActiveLeague();
+  const leagueId = Number(session?.leagueId ?? 0);
+  const [matches, setMatches] = useState<PartidoApi[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [tick, setTick] = useState(0);
 
-    if (mockLiveMatches.length === 0) {
-        return (
-            <View style={{ paddingHorizontal: 16, paddingTop: 24, alignItems: 'center' }}>
-                <Text style={{ color: Colors.text.disabled, fontSize: 14 }}>
-                    No hay partidos en vivo ahora mismo
-                </Text>
-            </View>
-        );
-    }
+  const load = useCallback(async () => {
+    if (!leagueId) return;
+    setLoading(true); setError(null);
+    try { setMatches(await getLiveMatchesService(leagueId)); }
+    catch (e) { setError(e instanceof Error ? e.message : 'No se pudieron cargar los partidos en vivo.'); }
+    finally { setLoading(false); }
+  }, [leagueId]);
 
-    return (
-        <>
-            <ScrollView
-                contentContainerStyle={{ paddingBottom: 24 }}
-                showsVerticalScrollIndicator={false}
-            >
-                {/* ── Cabecera de jornada ── */}
-                <View
-                    style={{
-                        flexDirection: 'row',
-                        alignItems: 'center',
-                        paddingHorizontal: 20,
-                        paddingTop: 20,
-                        paddingBottom: 12,
-                        gap: 10,
-                    }}
-                >
-                    <Text
-                        style={{
-                            backgroundColor: Colors.brand.primary,
-                            color: Colors.bg.base,
-                            fontWeight: '700',
-                            fontSize: 12,
-                            paddingHorizontal: 12,
-                            paddingVertical: 4,
-                            borderRadius: 6,
-                            overflow: 'hidden',
-                        }}
-                    >
-                        Jornada 10
-                    </Text>
-                    {/* Línea separadora */}
-                    <View style={{ flex: 1, height: 1, backgroundColor: Colors.bg.surface2 }} />
-                </View>
+  useEffect(() => { load(); }, [load]);
+  useEffect(() => { const id = setInterval(() => setTick(v => v + 1), 30000); return () => clearInterval(id); }, []);
 
-                {/* ── Tarjetas de partidos en vivo ── */}
-                {mockLiveMatches.map((match) => (
-                    <LiveMatchCard
-                        key={match.id}
-                        match={match}
-                        permissions={permissions}
-                        onRegisterEvent={() =>
-                            openRegisterEvent({
-                                id: match.id,
-                                homeTeam: match.homeTeam,
-                                awayTeam: match.awayTeam,
-                                homeScore: match.homeScore,
-                                awayScore: match.awayScore,
-                                minute: match.minute,
-                            })
-                        }
-                        onEndMatch={() =>
-                            openEndMatch({
-                                id: match.id,
-                                homeTeam: match.homeTeam,
-                                awayTeam: match.awayTeam,
-                                homeScore: match.homeScore,
-                                awayScore: match.awayScore,
-                            })
-                        }
-                    />
-                ))}
-            </ScrollView>
+  const { modals, activeEventMatch, activeEndMatch, openRegisterEvent, openEndMatch, modalProps } = useMatchActionModals(load);
 
-            {/* ── Modales operativos — estado gestionado por useMatchActionModals ── */}
+  const liveMatches = useMemo(() => matches.filter(m => String(m.estado ?? '').toLowerCase() !== 'finalizado'), [matches]);
 
-            <RegisterEventModal
-                visible={modals.registerEvent}
-                match={activeEventMatch}
-                onSelectEvent={modalProps.onSelectEvent}
-                onCancel={modalProps.onCloseRegisterEvent}
-            />
-
-            <GoalEventModal
-                visible={modals.goal}
-                match={activeEventMatch}
-                onConfirm={modalProps.onGoalConfirm}
-                onCancel={modalProps.onCloseGoal}
-            />
-
-            <YellowCardModal
-                visible={modals.yellowCard}
-                match={activeEventMatch}
-                onConfirm={modalProps.onYellowCardConfirm}
-                onCancel={modalProps.onCloseYellowCard}
-            />
-
-            <RedCardModal
-                visible={modals.redCard}
-                match={activeEventMatch}
-                onConfirm={modalProps.onRedCardConfirm}
-                onCancel={modalProps.onCloseRedCard}
-            />
-
-            <SubstitutionModal
-                visible={modals.substitution}
-                match={activeEventMatch}
-                onConfirm={modalProps.onSubstitutionConfirm}
-                onCancel={modalProps.onCloseSubstitution}
-            />
-
-            <EndMatchModal
-                visible={modals.endMatch}
-                match={activeEndMatch}
-                onConfirm={modalProps.onEndMatchConfirm}
-                onCancel={modalProps.onCloseEndMatch}
-            />
-        </>
-    );
+  return <View style={{ flex: 1, backgroundColor: Colors.bg.base }}><StatusBar barStyle="light-content" />
+    <ScrollView refreshControl={<RefreshControl refreshing={loading} onRefresh={load} tintColor={Colors.brand.primary} />} contentContainerStyle={{ padding: 16, paddingBottom: 120 }}>
+      <Text style={{ color: Colors.text.primary, fontSize: 24, fontWeight: '900', marginBottom: 16 }}>En vivo</Text>
+      {loading && liveMatches.length === 0 ? <ActivityIndicator color={Colors.brand.primary} style={{ marginTop: 40 }} /> : null}
+      {error ? <Text style={{ color: Colors.semantic.error, marginBottom: 16 }}>{error}</Text> : null}
+      {liveMatches.length === 0 && !loading ? <Text style={{ color: Colors.text.disabled, textAlign: 'center', marginTop: 80 }}>No hay partidos en vivo.</Text> : null}
+      {liveMatches.map(match => {
+        const minute = getLiveMinute(match, tick);
+        const context = { id: String(match.id_partido), homeTeam: getHomeTeamName(match), awayTeam: getAwayTeamName(match), homeScore: match.goles_local ?? 0, awayScore: match.goles_visitante ?? 0, minute };
+        return <View key={match.id_partido} style={{ backgroundColor: Colors.bg.surface1, borderRadius: 24, padding: 18, marginBottom: 16, borderWidth: 1, borderColor: Colors.brand.primary + '45' }}>
+          <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}><Text style={{ color: Colors.brand.primary, fontWeight: '900' }}>● EN VIVO</Text><Text style={{ color: Colors.text.primary, fontWeight: '900' }}>{minute}'</Text></View>
+          <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: 22 }}><Text style={{ color: Colors.text.primary, fontSize: 16, fontWeight: '800', flex: 1 }}>{context.homeTeam}</Text><Text style={{ color: Colors.text.primary, fontSize: 34, fontWeight: '900' }}>{context.homeScore} - {context.awayScore}</Text><Text style={{ color: Colors.text.primary, fontSize: 16, fontWeight: '800', flex: 1, textAlign: 'right' }}>{context.awayTeam}</Text></View>
+          <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 10, marginTop: 20 }}>
+            <TouchableOpacity onPress={() => router.push(`/matches/live/${match.id_partido}/squad`)} style={{ flexGrow: 1, height: 44, borderRadius: 14, backgroundColor: Colors.bg.surface2, alignItems: 'center', justifyContent: 'center', flexDirection: 'row', gap: 8 }}><Ionicons name="people-outline" size={18} color={Colors.text.primary} /><Text style={{ color: Colors.text.primary, fontWeight: '800' }}>Alineación</Text></TouchableOpacity>
+            <TouchableOpacity onPress={() => openRegisterEvent(context)} style={{ flexGrow: 1, height: 44, borderRadius: 14, backgroundColor: Colors.brand.primary, alignItems: 'center', justifyContent: 'center', flexDirection: 'row', gap: 8 }}><Ionicons name="add-circle-outline" size={18} color={Colors.bg.base} /><Text style={{ color: Colors.bg.base, fontWeight: '900' }}>Evento</Text></TouchableOpacity>
+            <TouchableOpacity onPress={() => openEndMatch(context)} style={{ flexGrow: 1, height: 44, borderRadius: 14, backgroundColor: Colors.semantic.error + '22', alignItems: 'center', justifyContent: 'center' }}><Text style={{ color: Colors.semantic.error, fontWeight: '900' }}>Finalizar</Text></TouchableOpacity>
+          </View>
+        </View>;
+      })}
+    </ScrollView>
+    <RegisterEventModal visible={modals.registerEvent} match={activeEventMatch} onSelectEvent={modalProps.onSelectEvent} onCancel={modalProps.onCloseRegisterEvent} />
+    <GoalEventModal visible={modals.goal} match={activeEventMatch} onConfirm={modalProps.onGoalConfirm} onCancel={modalProps.onCloseGoal} />
+    <YellowCardModal visible={modals.yellowCard} match={activeEventMatch} onConfirm={modalProps.onYellowCardConfirm} onCancel={modalProps.onCloseYellowCard} />
+    <RedCardModal visible={modals.redCard} match={activeEventMatch} onConfirm={modalProps.onRedCardConfirm} onCancel={modalProps.onCloseRedCard} />
+    <SubstitutionModal visible={modals.substitution} match={activeEventMatch} onConfirm={modalProps.onSubstitutionConfirm} onCancel={modalProps.onCloseSubstitution} />
+    <EndMatchModal visible={modals.endMatch} match={activeEndMatch} onConfirm={modalProps.onEndMatchConfirm} onCancel={modalProps.onCloseEndMatch} />
+  </View>;
 }

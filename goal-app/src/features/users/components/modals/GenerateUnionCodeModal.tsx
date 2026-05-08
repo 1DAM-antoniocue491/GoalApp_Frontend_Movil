@@ -1,9 +1,11 @@
-/** Modal React Native para generar códigos de unión. */
+/** Modal React Native para generar códigos de unión. No importa servicios web. */
 
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   ActivityIndicator,
+  KeyboardAvoidingView,
   Modal,
+  Platform,
   Pressable,
   ScrollView,
   Share,
@@ -14,19 +16,15 @@ import {
 import { Ionicons } from '@expo/vector-icons';
 import { Colors } from '@/src/shared/constants/colors';
 import { theme } from '@/src/shared/styles/theme';
-import type {
-  GenerateUnionCodeFormData,
-  SelectOption,
-  UnionCodeResponse,
-  UserRole,
-} from '../../types/users.types';
+import { getRoleBadgeConfig } from '@/src/shared/utils/roles';
+import type { GenerateUnionCodeFormData, SelectOption, UnionCodeResponse, UserRole } from '../../types/users.types';
 import { PlayerExtraFields } from './PlayerExtraFields';
 
 interface GenerateUnionCodeModalProps {
   visible: boolean;
   onClose: () => void;
   onGenerate: (data: GenerateUnionCodeFormData) => Promise<UnionCodeResponse | null>;
-  onDeleteCode?: (codigo: string) => Promise<boolean> | boolean;
+  onDelete?: (codigo: string) => Promise<boolean>;
   roleOptions: SelectOption[];
   teamOptions: SelectOption[];
   isSubmitting?: boolean;
@@ -36,40 +34,16 @@ interface GenerateUnionCodeModalProps {
 const EMPTY_FORM: GenerateUnionCodeFormData = {
   role: '',
   teamId: '',
-  playerType: '',
+  playerType: 'normal',
   jersey: '',
   position: '',
 };
-
-function roleIcon(role: string): keyof typeof Ionicons.glyphMap {
-  switch (role) {
-    case 'admin': return 'shield-outline';
-    case 'coach': return 'ribbon-outline';
-    case 'delegate': return 'clipboard-outline';
-    case 'player': return 'football-outline';
-    default: return 'eye-outline';
-  }
-}
-
-function formatExpiration(response: UnionCodeResponse | null): string | null {
-  const raw = response?.expira_en ?? response?.expiracion ?? null;
-  if (!raw) return null;
-  const date = new Date(raw);
-  if (Number.isNaN(date.getTime())) return raw;
-  return date.toLocaleDateString('es-ES', {
-    day: '2-digit',
-    month: 'short',
-    year: 'numeric',
-    hour: '2-digit',
-    minute: '2-digit',
-  });
-}
 
 export function GenerateUnionCodeModal({
   visible,
   onClose,
   onGenerate,
-  onDeleteCode,
+  onDelete,
   roleOptions,
   teamOptions,
   isSubmitting = false,
@@ -78,286 +52,188 @@ export function GenerateUnionCodeModal({
   const [form, setForm] = useState<GenerateUnionCodeFormData>(EMPTY_FORM);
   const [generatedCode, setGeneratedCode] = useState<UnionCodeResponse | null>(null);
   const [localError, setLocalError] = useState<string | null>(null);
-  const [copiedFeedback, setCopiedFeedback] = useState(false);
-
-  const selectedRole = form.role;
-  const needsTeam = selectedRole === 'coach' || selectedRole === 'delegate' || selectedRole === 'player';
-  const isPlayer = selectedRole === 'player';
-  const expiration = useMemo(() => formatExpiration(generatedCode), [generatedCode]);
+  const [deleting, setDeleting] = useState(false);
 
   useEffect(() => {
-    if (!visible) {
+    if (visible) {
       setForm(EMPTY_FORM);
       setGeneratedCode(null);
       setLocalError(null);
-      setCopiedFeedback(false);
+      setDeleting(false);
     }
   }, [visible]);
 
-  function update<K extends keyof GenerateUnionCodeFormData>(field: K, value: GenerateUnionCodeFormData[K]) {
+  function handleChange(field: keyof GenerateUnionCodeFormData, value: string) {
+    setForm(prev => ({ ...prev, [field]: value }));
+  }
+
+  function handleRoleChange(role: UserRole) {
+    setForm(prev => ({
+      ...prev,
+      role,
+      teamId: '',
+      playerType: 'normal',
+      jersey: '',
+      position: '',
+    }));
+    setGeneratedCode(null);
     setLocalError(null);
-    setForm(prev => {
-      const next = { ...prev, [field]: value };
-      if (field === 'role') {
-        next.teamId = '';
-        next.jersey = '';
-        next.position = '';
-        next.playerType = '';
-      }
-      return next;
-    });
   }
 
   async function handleGenerate() {
-    if (!form.role) {
-      setLocalError('Selecciona el rol que tendrá el usuario.');
-      return;
-    }
+    setLocalError(null);
+    setGeneratedCode(null);
 
-    const response = await onGenerate(form);
-    if (response?.codigo) {
-      setGeneratedCode(response);
-    }
+    if (!form.role) return setLocalError('Selecciona un rol para generar el código.');
+
+    const code = await onGenerate(form);
+    if (code) setGeneratedCode(code);
   }
 
   async function handleShare() {
     if (!generatedCode?.codigo) return;
     await Share.share({
       title: 'Código de unión a liga',
-      message: `Usa este código para unirte a la liga: ${generatedCode.codigo}`,
+      message: `Únete a la liga usando este código: ${generatedCode.codigo}`,
     });
-    setCopiedFeedback(true);
-    setTimeout(() => setCopiedFeedback(false), 1800);
   }
 
   async function handleDelete() {
-    if (!generatedCode?.codigo || !onDeleteCode) return;
-    const success = await onDeleteCode(generatedCode.codigo);
-    if (success) {
-      setGeneratedCode(null);
-      setForm(EMPTY_FORM);
-    }
+    if (!generatedCode?.codigo || !onDelete) return;
+    setDeleting(true);
+    const ok = await onDelete(generatedCode.codigo);
+    setDeleting(false);
+    if (ok) setGeneratedCode(null);
   }
 
   return (
-    <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
-      <Pressable style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.72)', justifyContent: 'flex-end' }} onPress={onClose}>
-        <Pressable>
-          <View
-            style={{
-              backgroundColor: Colors.bg.surface1,
-              borderTopLeftRadius: 28,
-              borderTopRightRadius: 28,
-              maxHeight: '92%',
-            }}
-          >
-            <View className="px-6 pt-5 pb-4 flex-row items-start justify-between">
-              <View style={{ flex: 1 }}>
-                <Text style={{ color: Colors.text.primary, fontSize: theme.fontSize.xxl, fontWeight: '800' }}>
-                  {generatedCode ? 'Código generado' : 'Generar código'}
-                </Text>
-                <Text style={{ color: Colors.text.secondary, fontSize: theme.fontSize.sm, marginTop: 6 }}>
-                  Crea un código para que otra persona se una a esta liga con un rol concreto.
-                </Text>
-              </View>
-              <TouchableOpacity
-                onPress={onClose}
-                disabled={isSubmitting}
-                className="items-center justify-center rounded-2xl ml-4"
-                style={{ width: 48, height: 48, backgroundColor: Colors.bg.surface2 }}
-              >
-                <Ionicons name="close" size={24} color={Colors.text.secondary} />
-              </TouchableOpacity>
-            </View>
-
-            <ScrollView contentContainerStyle={{ paddingHorizontal: 24, paddingBottom: 28 }} showsVerticalScrollIndicator={false}>
-              {generatedCode ? (
-                <View>
-                  <View
-                    className="items-center rounded-3xl p-6 mb-5"
-                    style={{
-                      backgroundColor: 'rgba(196,241,53,0.10)',
-                      borderWidth: 1,
-                      borderColor: 'rgba(196,241,53,0.35)',
-                    }}
-                  >
-                    <Ionicons name="key-outline" size={32} color={Colors.brand.primary} />
-                    <Text style={{ color: Colors.text.secondary, fontSize: theme.fontSize.sm, marginTop: 12 }}>Código de unión</Text>
-                    <Text
-                      selectable
-                      style={{
-                        color: Colors.brand.primary,
-                        fontSize: 34,
-                        fontWeight: '900',
-                        letterSpacing: 3,
-                        marginTop: 8,
-                      }}
-                    >
-                      {generatedCode.codigo}
-                    </Text>
-                    {expiration ? (
-                      <Text style={{ color: Colors.text.disabled, fontSize: theme.fontSize.xs, marginTop: 10 }}>
-                        Válido hasta: {expiration}
-                      </Text>
-                    ) : null}
-                  </View>
-
-                  {copiedFeedback ? (
-                    <View className="flex-row items-center rounded-2xl p-3 mb-4" style={{ backgroundColor: 'rgba(50,215,75,0.12)' }}>
-                      <Ionicons name="checkmark-circle-outline" size={18} color={Colors.semantic.success} />
-                      <Text style={{ color: Colors.semantic.success, fontSize: theme.fontSize.sm, marginLeft: 8 }}>
-                        Código listo para compartir.
-                      </Text>
-                    </View>
-                  ) : null}
-
-                  {(error || localError) ? (
-                    <View
-                      className="flex-row items-start rounded-2xl p-4 mb-4"
-                      style={{ backgroundColor: 'rgba(255,69,52,0.10)', borderWidth: 1, borderColor: 'rgba(255,69,52,0.35)' }}
-                    >
-                      <Ionicons name="alert-circle-outline" size={20} color={Colors.semantic.error} />
-                      <Text style={{ flex: 1, color: Colors.semantic.error, fontSize: theme.fontSize.sm, marginLeft: 10 }}>
-                        {localError ?? error}
-                      </Text>
-                    </View>
-                  ) : null}
-
-                  <View className="flex-row" style={{ gap: 12 }}>
-                    <TouchableOpacity
-                      onPress={handleShare}
-                      className="flex-1 flex-row items-center justify-center rounded-2xl"
-                      style={{ height: 54, backgroundColor: Colors.brand.primary }}
-                    >
-                      <Ionicons name="share-social-outline" size={18} color="#000" />
-                      <Text style={{ color: '#000', fontSize: theme.fontSize.md, fontWeight: '900', marginLeft: 8 }}>
-                        Compartir
-                      </Text>
-                    </TouchableOpacity>
-
-                    {onDeleteCode ? (
-                      <TouchableOpacity
-                        onPress={handleDelete}
-                        disabled={isSubmitting}
-                        className="items-center justify-center rounded-2xl"
-                        style={{ width: 58, height: 54, backgroundColor: 'rgba(255,69,52,0.12)' }}
-                      >
-                        <Ionicons name="trash-outline" size={20} color={Colors.semantic.error} />
-                      </TouchableOpacity>
-                    ) : null}
-                  </View>
+    <Modal visible={visible} animationType="slide" transparent onRequestClose={onClose}>
+      <Pressable style={modalStyles.backdrop} onPress={onClose}>
+        <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
+          <Pressable>
+            <View style={modalStyles.sheet}>
+              <View className="flex-row items-start justify-between mb-4">
+                <View style={{ flex: 1 }}>
+                  <Text style={modalStyles.title}>{generatedCode ? 'Código generado' : 'Código de unión'}</Text>
+                  <Text style={modalStyles.subtitle}>Genera un código para que otra persona se una desde onboarding.</Text>
                 </View>
-              ) : (
-                <View>
-                  <View className="rounded-2xl p-4 mb-5" style={{ backgroundColor: Colors.bg.surface2 }}>
-                    <Text style={{ color: Colors.text.secondary, fontSize: theme.fontSize.sm, lineHeight: 20 }}>
-                      El usuario introducirá este código desde “Unirme a una liga”. El rol, equipo y datos de jugador se aplicarán automáticamente.
-                    </Text>
-                  </View>
+                <TouchableOpacity onPress={onClose} disabled={isSubmitting || deleting} hitSlop={12} style={modalStyles.closeButton}>
+                  <Ionicons name="close" size={22} color={Colors.text.secondary} />
+                </TouchableOpacity>
+              </View>
 
-                  {(error || localError) ? (
-                    <View
-                      className="flex-row items-start rounded-2xl p-4 mb-5"
-                      style={{ backgroundColor: 'rgba(255,69,52,0.10)', borderWidth: 1, borderColor: 'rgba(255,69,52,0.35)' }}
-                    >
-                      <Ionicons name="alert-circle-outline" size={20} color={Colors.semantic.error} />
-                      <Text style={{ flex: 1, color: Colors.semantic.error, fontSize: theme.fontSize.sm, marginLeft: 10 }}>
-                        {localError ?? error}
-                      </Text>
+              <ScrollView showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
+                {!generatedCode ? (
+                  <>
+                    <Text style={modalStyles.sectionLabel}>Rol que recibirá el usuario</Text>
+                    <View className="flex-row flex-wrap mb-5" style={{ gap: 10 }}>
+                      {roleOptions.map(option => {
+                        const value = option.value as UserRole;
+                        const selected = form.role === value;
+                        const config = getRoleBadgeConfig(value);
+
+                        return (
+                          <TouchableOpacity
+                            key={option.value}
+                            onPress={() => handleRoleChange(value)}
+                            disabled={isSubmitting}
+                            activeOpacity={0.85}
+                            style={[modalStyles.roleButton, selected ? { backgroundColor: Colors.brand.primary } : null]}
+                          >
+                            <Ionicons name={config.icon} size={17} color={selected ? '#000' : config.textColor} />
+                            <Text style={[modalStyles.roleText, selected ? { color: '#000' } : null]}>{option.label}</Text>
+                          </TouchableOpacity>
+                        );
+                      })}
                     </View>
-                  ) : null}
 
-                  <Text style={{ color: Colors.text.secondary, fontSize: theme.fontSize.sm, marginBottom: 10 }}>Rol del código</Text>
-                  <View className="flex-row flex-wrap mb-5" style={{ gap: 10 }}>
-                    {roleOptions.map(option => {
-                      const selected = selectedRole === option.value;
-                      return (
-                        <TouchableOpacity
-                          key={option.value}
-                          onPress={() => update('role', option.value as UserRole)}
-                          activeOpacity={0.85}
-                          className="flex-row items-center rounded-2xl px-4 py-3"
-                          style={{
-                            backgroundColor: selected ? Colors.brand.primary : Colors.bg.surface2,
-                            borderWidth: 1,
-                            borderColor: selected ? Colors.brand.primary : Colors.bg.surface2,
-                          }}
-                        >
-                          <Ionicons name={roleIcon(option.value)} size={17} color={selected ? '#000' : Colors.text.secondary} />
-                          <Text style={{ color: selected ? '#000' : Colors.text.primary, marginLeft: 8, fontWeight: '800' }}>
-                            {option.label}
-                          </Text>
-                        </TouchableOpacity>
-                      );
-                    })}
-                  </View>
-
-                  {needsTeam ? (
-                    <View className="mb-5">
-                      <Text style={{ color: Colors.text.secondary, fontSize: theme.fontSize.sm, marginBottom: 10 }}>Equipo asignado</Text>
-                      <View className="flex-row flex-wrap" style={{ gap: 10 }}>
-                        {teamOptions.map(option => {
-                          const selected = form.teamId === option.value;
-                          return (
-                            <TouchableOpacity
-                              key={option.value}
-                              onPress={() => update('teamId', option.value)}
-                              activeOpacity={0.85}
-                              className="rounded-2xl px-4 py-3"
-                              style={{
-                                backgroundColor: selected ? 'rgba(196,241,53,0.18)' : Colors.bg.surface2,
-                                borderWidth: 1,
-                                borderColor: selected ? Colors.brand.primary : Colors.bg.surface2,
-                              }}
-                            >
-                              <Text style={{ color: selected ? Colors.brand.primary : Colors.text.primary, fontWeight: '700' }}>
-                                {option.label}
-                              </Text>
-                            </TouchableOpacity>
-                          );
-                        })}
-                      </View>
-                    </View>
-                  ) : null}
-
-                  {isPlayer ? (
                     <PlayerExtraFields
+                      role={form.role}
+                      teamId={form.teamId}
+                      playerType={form.playerType}
                       jersey={form.jersey}
                       position={form.position}
-                      playerType={form.playerType}
-                      onJerseyChange={value => update('jersey', value)}
-                      onPositionChange={value => update('position', value)}
-                      onPlayerTypeChange={value => update('playerType', value)}
+                      teamOptions={teamOptions}
+                      onChange={(field, value) => handleChange(field, value)}
                     />
-                  ) : null}
+                  </>
+                ) : (
+                  <View style={modalStyles.codeCard}>
+                    <Text style={modalStyles.codeLabel}>Código de unión</Text>
+                    <Text style={modalStyles.codeText} selectable>{generatedCode.codigo}</Text>
+                    <Text style={modalStyles.codeHint}>Mantén pulsado el código para copiarlo o compártelo desde el botón.</Text>
 
-                  <View className="flex-row mt-6" style={{ gap: 12 }}>
-                    <TouchableOpacity
-                      onPress={onClose}
-                      disabled={isSubmitting}
-                      className="flex-1 items-center justify-center rounded-2xl"
-                      style={{ height: 54, backgroundColor: Colors.bg.surface2 }}
-                    >
-                      <Text style={{ color: Colors.text.primary, fontSize: theme.fontSize.md, fontWeight: '800' }}>Cancelar</Text>
-                    </TouchableOpacity>
-                    <TouchableOpacity
-                      onPress={handleGenerate}
-                      disabled={isSubmitting}
-                      className="flex-1 flex-row items-center justify-center rounded-2xl"
-                      style={{ height: 54, backgroundColor: Colors.brand.primary, opacity: isSubmitting ? 0.65 : 1 }}
-                    >
-                      {isSubmitting ? <ActivityIndicator color="#000" /> : <Ionicons name="key-outline" size={18} color="#000" />}
-                      <Text style={{ color: '#000', fontSize: theme.fontSize.md, fontWeight: '900', marginLeft: 8 }}>
-                        {isSubmitting ? 'Generando' : 'Generar'}
-                      </Text>
-                    </TouchableOpacity>
+                    {(generatedCode.expira_en || generatedCode.expiracion) ? (
+                      <Text style={modalStyles.expiration}>Expira: {generatedCode.expira_en ?? generatedCode.expiracion}</Text>
+                    ) : null}
+
+                    <View className="flex-row gap-3 mt-4">
+                      <TouchableOpacity style={modalStyles.secondaryAction} onPress={handleShare} activeOpacity={0.85}>
+                        <Ionicons name="share-social-outline" size={17} color={Colors.text.primary} />
+                        <Text style={modalStyles.secondaryActionText}>Compartir</Text>
+                      </TouchableOpacity>
+
+                      {onDelete ? (
+                        <TouchableOpacity style={modalStyles.dangerAction} onPress={handleDelete} disabled={deleting} activeOpacity={0.85}>
+                          {deleting ? <ActivityIndicator color={Colors.semantic.error} /> : <Ionicons name="trash-outline" size={17} color={Colors.semantic.error} />}
+                          <Text style={modalStyles.dangerActionText}>{deleting ? 'Eliminando...' : 'Eliminar'}</Text>
+                        </TouchableOpacity>
+                      ) : null}
+                    </View>
                   </View>
-                </View>
-              )}
-            </ScrollView>
-          </View>
-        </Pressable>
+                )}
+
+                {(localError || error) ? (
+                  <View style={modalStyles.errorBox}>
+                    <Ionicons name="alert-circle-outline" size={18} color={Colors.semantic.error} />
+                    <Text style={modalStyles.errorText}>{localError || error}</Text>
+                  </View>
+                ) : null}
+              </ScrollView>
+
+              <View className="flex-row gap-3 mt-4">
+                <TouchableOpacity onPress={onClose} disabled={isSubmitting || deleting} style={modalStyles.secondaryButton}>
+                  <Text style={modalStyles.secondaryText}>Cerrar</Text>
+                </TouchableOpacity>
+                {!generatedCode ? (
+                  <TouchableOpacity onPress={handleGenerate} disabled={isSubmitting} style={modalStyles.primaryButton}>
+                    {isSubmitting ? <ActivityIndicator color="#000" style={{ marginRight: 8 }} /> : null}
+                    <Text style={modalStyles.primaryText}>{isSubmitting ? 'Generando...' : 'Generar'}</Text>
+                  </TouchableOpacity>
+                ) : null}
+              </View>
+            </View>
+          </Pressable>
+        </KeyboardAvoidingView>
       </Pressable>
     </Modal>
   );
 }
+
+export default GenerateUnionCodeModal;
+
+const modalStyles = {
+  backdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.72)', justifyContent: 'flex-end' as const },
+  sheet: { maxHeight: '90%' as const, backgroundColor: Colors.bg.surface1, borderTopLeftRadius: 28, borderTopRightRadius: 28, paddingHorizontal: theme.spacing.xl, paddingTop: theme.spacing.lg, paddingBottom: theme.spacing.xxl },
+  title: { color: Colors.text.primary, fontSize: theme.fontSize.xxl, fontWeight: '900' as const },
+  subtitle: { color: Colors.text.secondary, fontSize: theme.fontSize.sm, marginTop: 6, lineHeight: 20 },
+  closeButton: { width: 48, height: 48, borderRadius: 18, backgroundColor: Colors.bg.surface2, alignItems: 'center' as const, justifyContent: 'center' as const },
+  sectionLabel: { color: Colors.text.secondary, fontSize: theme.fontSize.sm, marginBottom: 10 },
+  roleButton: { flexDirection: 'row' as const, alignItems: 'center' as const, borderRadius: 16, paddingHorizontal: 14, paddingVertical: 12, backgroundColor: Colors.bg.surface2, gap: 8 },
+  roleText: { color: Colors.text.primary, fontSize: theme.fontSize.sm, fontWeight: '800' as const },
+  codeCard: { backgroundColor: Colors.bg.surface2, borderRadius: 22, borderWidth: 1, borderColor: Colors.brand.primary, padding: theme.spacing.lg, marginBottom: theme.spacing.lg },
+  codeLabel: { color: Colors.text.secondary, fontSize: theme.fontSize.xs, marginBottom: 6 },
+  codeText: { color: Colors.brand.primary, fontSize: theme.fontSize.xxxl, fontWeight: '900' as const, letterSpacing: 2, textAlign: 'center' as const, marginVertical: theme.spacing.sm },
+  codeHint: { color: Colors.text.secondary, fontSize: theme.fontSize.sm, lineHeight: 20, textAlign: 'center' as const },
+  expiration: { color: Colors.text.disabled, fontSize: theme.fontSize.xs, textAlign: 'center' as const, marginTop: theme.spacing.sm },
+  secondaryAction: { flex: 1, height: 44, borderRadius: 14, backgroundColor: Colors.bg.base, flexDirection: 'row' as const, alignItems: 'center' as const, justifyContent: 'center' as const, gap: 6 },
+  secondaryActionText: { color: Colors.text.primary, fontSize: theme.fontSize.sm, fontWeight: '800' as const },
+  dangerAction: { flex: 1, height: 44, borderRadius: 14, backgroundColor: 'rgba(255,69,52,0.10)', flexDirection: 'row' as const, alignItems: 'center' as const, justifyContent: 'center' as const, gap: 6 },
+  dangerActionText: { color: Colors.semantic.error, fontSize: theme.fontSize.sm, fontWeight: '800' as const },
+  errorBox: { flexDirection: 'row' as const, gap: 8, borderWidth: 1, borderColor: 'rgba(255,69,52,0.35)', backgroundColor: 'rgba(255,69,52,0.10)', borderRadius: 16, padding: theme.spacing.md, marginBottom: theme.spacing.md },
+  errorText: { flex: 1, color: Colors.semantic.error, fontSize: theme.fontSize.sm },
+  secondaryButton: { flex: 1, height: 52, borderRadius: 18, backgroundColor: Colors.bg.surface2, alignItems: 'center' as const, justifyContent: 'center' as const },
+  secondaryText: { color: Colors.text.primary, fontSize: theme.fontSize.sm, fontWeight: '800' as const },
+  primaryButton: { flex: 1.25, height: 52, borderRadius: 18, backgroundColor: Colors.brand.primary, flexDirection: 'row' as const, alignItems: 'center' as const, justifyContent: 'center' as const },
+  primaryText: { color: '#000', fontSize: theme.fontSize.sm, fontWeight: '900' as const },
+};

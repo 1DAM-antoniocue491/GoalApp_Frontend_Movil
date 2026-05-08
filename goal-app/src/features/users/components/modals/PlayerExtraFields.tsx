@@ -1,112 +1,92 @@
-/** Campos específicos para rol Jugador. */
+/** Campos extra de invitación/código: equipo, tipo, dorsal y posición. */
 
 import React from 'react';
-import { Text, TextInput, TouchableOpacity, View } from 'react-native';
-import { Ionicons } from '@expo/vector-icons';
-import { Colors } from '@/src/shared/constants/colors';
-import { theme } from '@/src/shared/styles/theme';
-import type { SelectOption } from '../../types/users.types';
+import { Text, TextInput, View } from 'react-native';
+import { OptionSelectField, SelectOption } from '@/src/shared/components/ui/OptionSelectField';
+import { styles } from '@/src/shared/styles';
+import type { UserRole } from '../../types/users.types';
 import { PLAYER_POSITIONS, PLAYER_TYPES } from '../../types/users.types';
 
 interface PlayerExtraFieldsProps {
+  role: UserRole | '';
+  teamId: string;
+  playerType: string;
   jersey: string;
   position: string;
-  playerType: string;
-  onJerseyChange: (value: string) => void;
-  onPositionChange: (value: string) => void;
-  onPlayerTypeChange: (value: string) => void;
-}
-
-function OptionChips({
-  label,
-  value,
-  options,
-  onChange,
-}: {
-  label: string;
-  value: string;
-  options: SelectOption[];
-  onChange: (value: string) => void;
-}) {
-  return (
-    <View className="mb-4">
-      <Text style={{ color: Colors.text.secondary, fontSize: theme.fontSize.sm, marginBottom: 8 }}>{label}</Text>
-      <View className="flex-row flex-wrap" style={{ gap: 8 }}>
-        {options.map(option => {
-          const selected = value === option.value;
-          return (
-            <TouchableOpacity
-              key={option.value}
-              activeOpacity={0.85}
-              onPress={() => onChange(option.value)}
-              style={{
-                paddingHorizontal: 12,
-                paddingVertical: 10,
-                borderRadius: theme.borderRadius.lg,
-                backgroundColor: selected ? Colors.brand.primary : Colors.bg.surface2,
-                borderWidth: 1,
-                borderColor: selected ? Colors.brand.primary : Colors.bg.surface2,
-              }}
-            >
-              <Text
-                style={{
-                  color: selected ? '#000000' : Colors.text.primary,
-                  fontSize: theme.fontSize.sm,
-                  fontWeight: '700',
-                }}
-              >
-                {option.label}
-              </Text>
-            </TouchableOpacity>
-          );
-        })}
-      </View>
-    </View>
-  );
+  teamOptions: SelectOption[];
+  onChange: (field: 'teamId' | 'playerType' | 'jersey' | 'position', value: string) => void;
 }
 
 export function PlayerExtraFields({
+  role,
+  teamId,
+  playerType,
   jersey,
   position,
-  playerType,
-  onJerseyChange,
-  onPositionChange,
-  onPlayerTypeChange,
+  teamOptions,
+  onChange,
 }: PlayerExtraFieldsProps) {
+  const needsTeam = role === 'player' || role === 'coach' || role === 'delegate';
+  const isPlayer = role === 'player';
+
+  if (!needsTeam) return null;
+
   return (
-    <View className="mt-2">
+    <View>
       <View className="mb-4">
-        <Text style={{ color: Colors.text.secondary, fontSize: theme.fontSize.sm, marginBottom: 8 }}>Dorsal</Text>
-        <View
-          className="flex-row items-center rounded-2xl px-4"
-          style={{ backgroundColor: Colors.bg.surface2, height: 54 }}
-        >
-          <Ionicons name="shirt-outline" size={18} color={Colors.text.secondary} />
-          <TextInput
-            value={jersey}
-            onChangeText={value => onJerseyChange(value.replace(/[^0-9]/g, '').slice(0, 3))}
-            keyboardType="number-pad"
-            placeholder="Ej: 10"
-            placeholderTextColor={Colors.text.disabled}
-            className="flex-1 ml-3"
-            style={{ color: Colors.text.primary, fontSize: theme.fontSize.md }}
-          />
-        </View>
+        <OptionSelectField
+          label="Equipo"
+          value={teamId}
+          options={teamOptions}
+          placeholder="Selecciona un equipo"
+          emptyText="No hay equipos creados en esta liga"
+          searchable
+          onChange={value => onChange('teamId', value)}
+        />
       </View>
 
-      <OptionChips
-        label="Posición"
-        value={position}
-        options={PLAYER_POSITIONS}
-        onChange={onPositionChange}
-      />
+      {isPlayer ? (
+        <>
+          <View className="mb-4">
+            <OptionSelectField
+              label="Tipo de jugador"
+              value={playerType}
+              options={PLAYER_TYPES}
+              placeholder="Selecciona el tipo"
+              onChange={value => onChange('playerType', value)}
+            />
+          </View>
 
-      <OptionChips
-        label="Tipo de jugador"
-        value={playerType}
-        options={PLAYER_TYPES}
-        onChange={onPlayerTypeChange}
-      />
+          <View className="flex-row gap-3 mb-4">
+            <View style={{ flex: 1 }}>
+              <Text className={styles.label} style={{ marginBottom: 6 }}>Dorsal</Text>
+              <View className={styles.inputRow}>
+                <TextInput
+                  className={styles.input}
+                  placeholder="10"
+                  placeholderTextColor={styles.inputPlaceholder}
+                  value={jersey}
+                  onChangeText={value => onChange('jersey', value.replace(/[^0-9]/g, ''))}
+                  keyboardType="numeric"
+                  maxLength={2}
+                />
+              </View>
+            </View>
+
+            <View style={{ flex: 2 }}>
+              <OptionSelectField
+                label="Posición"
+                value={position}
+                options={PLAYER_POSITIONS}
+                placeholder="Selecciona posición"
+                onChange={value => onChange('position', value)}
+              />
+            </View>
+          </View>
+        </>
+      ) : null}
     </View>
   );
 }
+
+export default PlayerExtraFields;

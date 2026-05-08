@@ -1,5 +1,3 @@
-/** Exports del módulo móvil de Usuarios y Roles. */
-
 export { UsersRolesScreen } from './UsersRolesScreen';
 export { UsersSummary } from './UsersSummary';
 export { UserRowCard } from './UserRowCard';

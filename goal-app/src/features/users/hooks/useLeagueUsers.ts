@@ -1,4 +1,4 @@
-/** Hook de Usuarios y Roles con API real. */
+/** Hook de usuarios y roles con API real. Debe existir solo en minúscula. */
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import type {
@@ -13,7 +13,9 @@ import type {
 } from '../types/users.types';
 import {
   deleteUnionCodeService,
-  fetchUsersBootstrapService,
+  fetchLeagueUsersService,
+  fetchRolesService,
+  fetchTeamsForUsersService,
   generateUnionCodeService,
   inviteUserService,
   removeUserService,
@@ -31,28 +33,31 @@ export interface UseLeagueUsersResult {
   teamOptions: SelectOption[];
   search: string;
   setSearch: (value: string) => void;
-  loading: boolean;
-  refreshing: boolean;
-  submitting: boolean;
   isLoading: boolean;
   isRefreshing: boolean;
   isSubmitting: boolean;
+  loading: boolean;
+  refreshing: boolean;
+  submitting: boolean;
   error: string | null;
+  adminCount: number;
   refresh: () => Promise<void>;
+  clearError: () => void;
   inviteUser: (form: InviteUserFormData) => Promise<boolean>;
   updateUser: (userId: string, form: ManageUserFormData) => Promise<boolean>;
   removeUser: (userId: string) => Promise<boolean>;
-  generateCode: (form: GenerateUnionCodeFormData) => Promise<UnionCodeResponse | null>;
   generateUnionCode: (form: GenerateUnionCodeFormData) => Promise<UnionCodeResponse | null>;
+  generateCode: (form: GenerateUnionCodeFormData) => Promise<UnionCodeResponse | null>;
   deleteCode: (codigo: string) => Promise<boolean>;
 }
 
-function normalizeSearch(value: string): string {
-  return value
-    .trim()
-    .toLowerCase()
-    .normalize('NFD')
-    .replace(/[\u0300-\u036f]/g, '');
+function matchesSearch(user: LeagueUser, query: string): boolean {
+  const q = query.trim().toLowerCase();
+  if (!q) return true;
+
+  return [user.name, user.email, user.roleLabel, user.role, user.teamName, user.position]
+    .filter(Boolean)
+    .some(value => String(value).toLowerCase().includes(q));
 }
 
 export function useLeagueUsers(ligaId: number): UseLeagueUsersResult {
@@ -60,58 +65,58 @@ export function useLeagueUsers(ligaId: number): UseLeagueUsersResult {
   const [roles, setRoles] = useState<ApiRole[]>([]);
   const [teams, setTeams] = useState<TeamOptionApi[]>([]);
   const [search, setSearch] = useState('');
-  const [loading, setLoading] = useState(true);
-  const [refreshing, setRefreshing] = useState(false);
-  const [submitting, setSubmitting] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
+  const [isRefreshing, setIsRefreshing] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const roleOptions = useMemo(() => roleOptionsFromApi(roles), [roles]);
   const teamOptions = useMemo(() => teamOptionsFromApi(teams), [teams]);
-
-  const filteredUsers = useMemo(() => {
-    const q = normalizeSearch(search);
-    if (!q) return users;
-
-    return users.filter(user => {
-      const haystack = normalizeSearch(`${user.name} ${user.email} ${user.roleLabel} ${user.teamName ?? ''}`);
-      return haystack.includes(q);
-    });
-  }, [users, search]);
+  const filteredUsers = useMemo(() => users.filter(user => matchesSearch(user, search)), [users, search]);
+  const adminCount = useMemo(() => users.filter(user => user.role === 'admin' && user.active).length, [users]);
 
   const load = useCallback(async () => {
-    if (!ligaId || Number.isNaN(ligaId)) {
+    if (!Number.isFinite(ligaId) || ligaId <= 0) {
       setUsers([]);
       setRoles([]);
       setTeams([]);
-      setLoading(false);
-      setRefreshing(false);
+      setIsLoading(false);
+      setIsRefreshing(false);
       return;
     }
 
-    setError(null);
-    setRefreshing(true);
+    try {
+      setError(null);
+      setIsRefreshing(true);
 
-    const result = await fetchUsersBootstrapService(ligaId);
+      const [usersResult, rolesResult, teamsResult] = await Promise.all([
+        fetchLeagueUsersService(ligaId),
+        fetchRolesService(),
+        fetchTeamsForUsersService(ligaId),
+      ]);
 
-    if (!result.success || !result.data) {
-      setUsers([]);
-      setError(result.error ?? 'No se pudieron cargar los usuarios.');
-    } else {
-      setUsers(result.data.users);
-      setRoles(result.data.roles);
-      setTeams(result.data.teams);
+      if (usersResult.success) {
+        setUsers(usersResult.data ?? []);
+      } else {
+        setUsers([]);
+        setError(usersResult.error ?? 'No se pudieron cargar los usuarios.');
+      }
+
+      if (rolesResult.success) setRoles(rolesResult.data ?? []);
+      if (teamsResult.success) setTeams(teamsResult.data ?? []);
+    } finally {
+      setIsLoading(false);
+      setIsRefreshing(false);
     }
-
-    setLoading(false);
-    setRefreshing(false);
   }, [ligaId]);
 
   const inviteUser = useCallback(
     async (form: InviteUserFormData) => {
-      setSubmitting(true);
+      setIsSubmitting(true);
       setError(null);
+
       const result = await inviteUserService(ligaId, form, roles);
-      setSubmitting(false);
+      setIsSubmitting(false);
 
       if (!result.success) {
         setError(result.error ?? 'No se pudo invitar al usuario.');
@@ -126,18 +131,27 @@ export function useLeagueUsers(ligaId: number): UseLeagueUsersResult {
 
   const updateUser = useCallback(
     async (userId: string, form: ManageUserFormData) => {
-      const user = users.find(item => item.id === userId || String(item.userId) === userId);
+      const user = users.find(item => item.id === userId || String(item.userId) === String(userId));
       if (!user) {
-        setError('No se encontró el usuario seleccionado.');
+        setError('Este usuario ya no está en la liga. Recarga la pantalla.');
         return false;
       }
 
-      setSubmitting(true);
+      setIsSubmitting(true);
       setError(null);
+
+      // Optimismo suave para estado: evita dobles taps visuales mientras llega el refresh real.
+      setUsers(prev => prev.map(item => (
+        item.id === user.id
+          ? { ...item, active: form.active, status: form.active ? 'active' : 'pending', role: form.role || item.role }
+          : item
+      )));
+
       const result = await updateUserService(ligaId, user, form, roles);
-      setSubmitting(false);
+      setIsSubmitting(false);
 
       if (!result.success) {
+        setUsers(prev => prev.map(item => (item.id === user.id ? user : item)));
         setError(result.error ?? 'No se pudo actualizar el usuario.');
         return false;
       }
@@ -150,34 +164,38 @@ export function useLeagueUsers(ligaId: number): UseLeagueUsersResult {
 
   const removeUser = useCallback(
     async (userId: string) => {
-      const user = users.find(item => item.id === userId || String(item.userId) === userId);
+      const user = users.find(item => item.id === userId || String(item.userId) === String(userId));
       if (!user) {
-        setError('No se encontró el usuario seleccionado.');
+        setError('Este usuario ya no está en la liga. Recarga la pantalla.');
         return false;
       }
 
-      setSubmitting(true);
+      setIsSubmitting(true);
       setError(null);
+
       const result = await removeUserService(ligaId, user.userId);
-      setSubmitting(false);
+      setIsSubmitting(false);
 
       if (!result.success) {
         setError(result.error ?? 'No se pudo eliminar el usuario.');
         return false;
       }
 
+      // Eliminación local inmediata tras 200 OK para evitar un segundo tap sobre una fila ya borrada.
+      setUsers(prev => prev.filter(item => item.id !== user.id));
       await load();
       return true;
     },
     [ligaId, users, load],
   );
 
-  const generateCode = useCallback(
+  const generateUnionCode = useCallback(
     async (form: GenerateUnionCodeFormData) => {
-      setSubmitting(true);
+      setIsSubmitting(true);
       setError(null);
+
       const result = await generateUnionCodeService(ligaId, form, roles);
-      setSubmitting(false);
+      setIsSubmitting(false);
 
       if (!result.success) {
         setError(result.error ?? 'No se pudo generar el código.');
@@ -191,10 +209,11 @@ export function useLeagueUsers(ligaId: number): UseLeagueUsersResult {
 
   const deleteCode = useCallback(
     async (codigo: string) => {
-      setSubmitting(true);
+      setIsSubmitting(true);
       setError(null);
+
       const result = await deleteUnionCodeService(ligaId, codigo);
-      setSubmitting(false);
+      setIsSubmitting(false);
 
       if (!result.success) {
         setError(result.error ?? 'No se pudo eliminar el código.');
@@ -219,19 +238,21 @@ export function useLeagueUsers(ligaId: number): UseLeagueUsersResult {
     teamOptions,
     search,
     setSearch,
-    loading,
-    refreshing,
-    submitting,
-    isLoading: loading,
-    isRefreshing: refreshing,
-    isSubmitting: submitting,
+    isLoading,
+    isRefreshing,
+    isSubmitting,
+    loading: isLoading,
+    refreshing: isRefreshing,
+    submitting: isSubmitting,
     error,
+    adminCount,
     refresh: load,
+    clearError: () => setError(null),
     inviteUser,
     updateUser,
     removeUser,
-    generateCode,
-    generateUnionCode: generateCode,
+    generateUnionCode,
+    generateCode: generateUnionCode,
     deleteCode,
   };
 }

@@ -1,58 +1,25 @@
-/** Tarjeta móvil para usuario de liga. */
+/** Tarjeta React Native de un usuario de liga. */
 
 import React, { memo } from 'react';
-import { Text, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, Text, TouchableOpacity, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { RoleBadge } from '@/src/shared/components/ui/RoleBadge';
 import { Colors } from '@/src/shared/constants/colors';
 import { theme } from '@/src/shared/styles/theme';
-import type { LeagueUser, UserRole } from '../types/users.types';
-
-const ROLE_CONFIG: Record<UserRole, {
-  label: string;
-  bgColor: string;
-  textColor: string;
-  icon: keyof typeof Ionicons.glyphMap;
-}> = {
-  admin: {
-    label: 'Administrador',
-    bgColor: 'rgba(196,241,53,0.15)',
-    textColor: Colors.brand.primary,
-    icon: 'shield-outline',
-  },
-  coach: {
-    label: 'Entrenador',
-    bgColor: 'rgba(0,180,216,0.15)',
-    textColor: Colors.brand.secondary,
-    icon: 'ribbon-outline',
-  },
-  delegate: {
-    label: 'Delegado',
-    bgColor: 'rgba(255,214,10,0.15)',
-    textColor: Colors.semantic.warning,
-    icon: 'clipboard-outline',
-  },
-  player: {
-    label: 'Jugador',
-    bgColor: 'rgba(24,162,251,0.15)',
-    textColor: Colors.brand.accent,
-    icon: 'football-outline',
-  },
-  observer: {
-    label: 'Observador',
-    bgColor: 'rgba(161,161,170,0.12)',
-    textColor: Colors.text.secondary,
-    icon: 'eye-outline',
-  },
-};
+import { getRoleBadgeConfig } from '@/src/shared/utils/roles';
+import type { LeagueUser } from '../types/users.types';
 
 interface UserRowCardProps {
   user: LeagueUser;
   onManage: (user: LeagueUser) => void;
+  onToggleActive?: (user: LeagueUser) => void;
+  isToggling?: boolean;
 }
 
-function UserRowCardComponent({ user, onManage }: UserRowCardProps) {
-  const roleConfig = ROLE_CONFIG[user.role] ?? ROLE_CONFIG.observer;
+function UserRowCardComponent({ user, onManage, onToggleActive, isToggling = false }: UserRowCardProps) {
+  const roleConfig = getRoleBadgeConfig(user.role);
+  const statusColor = user.active ? Colors.semantic.success : Colors.semantic.warning;
+  const statusLabel = user.active ? 'Activo' : 'Inactivo';
   const initials = user.name
     .split(' ')
     .filter(Boolean)
@@ -61,48 +28,36 @@ function UserRowCardComponent({ user, onManage }: UserRowCardProps) {
     .join('')
     .toUpperCase() || '?';
 
-  const statusColor = user.active ? Colors.semantic.success : Colors.semantic.warning;
-  const statusLabel = user.active ? 'Activo' : 'Pendiente';
-
   return (
-    <View
+    <TouchableOpacity
+      activeOpacity={0.9}
+      onPress={() => onManage(user)}
       className="rounded-3xl p-4 mb-3"
-      style={{
-        backgroundColor: Colors.bg.surface1,
-        borderWidth: 1,
-        borderColor: Colors.bg.surface2,
-      }}
+      style={cardStyles.card}
     >
       <View className="flex-row items-center">
-        <View
-          className="items-center justify-center rounded-full mr-4"
-          style={{ width: 50, height: 50, backgroundColor: roleConfig.bgColor }}
-        >
-          <Text style={{ color: roleConfig.textColor, fontSize: theme.fontSize.md, fontWeight: '900' }}>
-            {initials}
-          </Text>
+        <View style={[cardStyles.avatar, { backgroundColor: roleConfig.bgColor }]}>
+          <Text style={[cardStyles.avatarText, { color: roleConfig.textColor }]}>{initials}</Text>
         </View>
 
         <View style={{ flex: 1 }}>
-          <Text style={{ color: Colors.text.primary, fontSize: theme.fontSize.md, fontWeight: '800' }} numberOfLines={1}>
-            {user.name}
+          <Text style={cardStyles.name} numberOfLines={1}>
+            {user.name}{user.isCaptain ? <Text style={{ color: Colors.semantic.warning }}> ©</Text> : null}
           </Text>
-          <Text style={{ color: Colors.text.secondary, fontSize: theme.fontSize.sm, marginTop: 3 }} numberOfLines={1}>
-            {user.email || 'Sin email'}
-          </Text>
+          <Text style={cardStyles.email} numberOfLines={1}>{user.email}</Text>
         </View>
 
         <TouchableOpacity
           onPress={() => onManage(user)}
-          activeOpacity={0.85}
-          className="items-center justify-center rounded-2xl ml-3"
-          style={{ width: 44, height: 44, backgroundColor: Colors.bg.surface2 }}
+          activeOpacity={0.8}
+          style={cardStyles.manageButton}
+          hitSlop={8}
         >
-          <Ionicons name="settings-outline" size={20} color={Colors.text.secondary} />
+          <Ionicons name="settings-outline" size={18} color={Colors.text.secondary} />
         </TouchableOpacity>
       </View>
 
-      <View className="flex-row items-center flex-wrap mt-4" style={{ gap: 10 }}>
+      <View className="flex-row items-center justify-between pt-3" style={{ gap: 10 }}>
         <RoleBadge
           label={roleConfig.label}
           bgColor={roleConfig.bgColor}
@@ -110,22 +65,98 @@ function UserRowCardComponent({ user, onManage }: UserRowCardProps) {
           icon={roleConfig.icon}
         />
 
-        <View className="flex-row items-center self-start px-3 py-2 rounded-xl" style={{ backgroundColor: Colors.bg.surface2 }}>
-          <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: statusColor, marginRight: 7 }} />
-          <Text style={{ color: Colors.text.secondary, fontSize: 13, fontWeight: '700' }}>{statusLabel}</Text>
-        </View>
+        <TouchableOpacity
+          activeOpacity={0.85}
+          disabled={!onToggleActive || isToggling}
+          onPress={() => onToggleActive?.(user)}
+          style={[cardStyles.statusPill, { backgroundColor: user.active ? 'rgba(45,212,104,0.12)' : 'rgba(255,214,10,0.12)' }]}
+        >
+          {isToggling ? (
+            <ActivityIndicator color={statusColor} size="small" />
+          ) : (
+            <View style={[cardStyles.statusDot, { backgroundColor: statusColor }]} />
+          )}
+          <Text style={[cardStyles.statusText, { color: statusColor }]}>{statusLabel}</Text>
+        </TouchableOpacity>
       </View>
 
       {user.teamName ? (
-        <View className="flex-row items-center mt-4 pt-4" style={{ borderTopWidth: 1, borderTopColor: Colors.bg.surface2 }}>
-          <Ionicons name="people-outline" size={16} color={Colors.text.disabled} />
-          <Text style={{ color: Colors.text.secondary, fontSize: theme.fontSize.sm, marginLeft: 8, flex: 1 }} numberOfLines={1}>
-            {user.teamName}{user.jersey ? ` · #${user.jersey}` : ''}{user.position ? ` · ${user.position}` : ''}
+        <View className="flex-row items-center mt-3 pt-3" style={cardStyles.teamRow}>
+          <Ionicons name="people-outline" size={14} color={Colors.text.disabled} style={{ marginRight: 6 }} />
+          <Text style={cardStyles.teamText} numberOfLines={1}>
+            {user.teamName}
+            {user.jersey ? ` · #${user.jersey}` : ''}
+            {user.position ? ` · ${user.position}` : ''}
           </Text>
         </View>
       ) : null}
-    </View>
+    </TouchableOpacity>
   );
 }
 
 export const UserRowCard = memo(UserRowCardComponent);
+
+const cardStyles = {
+  card: {
+    backgroundColor: Colors.bg.surface1,
+    borderWidth: 1,
+    borderColor: Colors.bg.surface2,
+  },
+  avatar: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    alignItems: 'center' as const,
+    justifyContent: 'center' as const,
+    marginRight: theme.spacing.md,
+  },
+  avatarText: {
+    fontSize: theme.fontSize.sm,
+    fontWeight: '900' as const,
+  },
+  name: {
+    color: Colors.text.primary,
+    fontSize: theme.fontSize.md,
+    fontWeight: '800' as const,
+    marginBottom: 2,
+  },
+  email: {
+    color: Colors.text.secondary,
+    fontSize: theme.fontSize.xs,
+  },
+  manageButton: {
+    marginLeft: theme.spacing.sm,
+    width: 38,
+    height: 38,
+    borderRadius: theme.borderRadius.lg,
+    backgroundColor: Colors.bg.surface2,
+    alignItems: 'center' as const,
+    justifyContent: 'center' as const,
+  },
+  statusPill: {
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    gap: 7,
+    paddingHorizontal: 12,
+    height: 34,
+    borderRadius: 999,
+  },
+  statusDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+  },
+  statusText: {
+    fontSize: theme.fontSize.xs,
+    fontWeight: '800' as const,
+  },
+  teamRow: {
+    borderTopWidth: 1,
+    borderTopColor: Colors.bg.surface2,
+  },
+  teamText: {
+    flex: 1,
+    color: Colors.text.disabled,
+    fontSize: theme.fontSize.xs,
+  },
+};

@@ -1,290 +1,41 @@
-/**
- * YellowCardModal.tsx
- *
- * Sub-modal para registrar una tarjeta amarilla en un partido en vivo.
- *
- * Campos:
- * - Equipo del jugador (local / visitante)
- * - Nombre del jugador amonestado
- * - Minuto (pre-rellenado con el minuto actual del partido)
- *
- * PREPARADO PARA API:
- * onConfirm recibe YellowCardEventData listo para enviar a
- * POST /matches/:id/events con { type: 'yellow_card', ...YellowCardEventData }
- */
-
-import React, { useRef, useEffect, useState, memo } from 'react';
-import {
-  View,
-  Text,
-  Modal,
-  Pressable,
-  TouchableOpacity,
-  Animated,
-  Easing,
-  ScrollView,
-} from 'react-native';
-import { Ionicons } from '@expo/vector-icons';
-
+import React, { memo, useMemo, useState, useEffect } from 'react';
+import { Modal, Pressable, Text, TouchableOpacity, View } from 'react-native';
 import { Colors } from '@/src/shared/constants/colors';
 import { theme } from '@/src/shared/styles/theme';
-import type { LiveMatchContext } from './RegisterEventModal';
 import { OptionSelectField } from '@/src/shared/components/ui/OptionSelectField';
 import type { SelectOption } from '@/src/shared/components/ui/OptionSelectField';
+import type { LiveMatchContext, LiveMatchPlayer } from './RegisterEventModal';
 
-// ---------------------------------------------------------------------------
-// Tipos exportados
-// ---------------------------------------------------------------------------
-
-export interface YellowCardEventData {
-  team: 'home' | 'away';
-  playerName: string;
-  // minute NO es input del usuario — se toma de match.minute al confirmar
-  // TODO: payload: { type: 'yellow_card', ...YellowCardEventData, minute: activeEventMatch?.minute }
+function toOptions(players?: LiveMatchPlayer[]): SelectOption[] {
+  return (players ?? []).map(p => ({
+    value: String(p.id_jugador),
+    label: `${p.dorsal ? p.dorsal + ' · ' : ''}${p.nombre}`,
+  }));
 }
 
-interface YellowCardModalProps {
-  visible: boolean;
-  match: LiveMatchContext | null;
-  onConfirm: (data: YellowCardEventData) => void;
-  onCancel: () => void;
-}
-
-// ---------------------------------------------------------------------------
-// Mock fallback de plantilla — reemplazar por GET /matches/:id/squads
-// ---------------------------------------------------------------------------
-
-function getMockPlayers(side: 'home' | 'away'): string[] {
-  const tag = side === 'home' ? 'L' : 'V';
-  return Array.from({ length: 11 }, (_, i) => `Jugador ${tag}${i + 1}`);
-}
-
-function toOptions(players: string[]): SelectOption[] {
-  return players.map((p) => ({ label: p, value: p }));
-}
-
-// ---------------------------------------------------------------------------
-// Componentes internos
-// ---------------------------------------------------------------------------
-
-function TeamPicker({
-  homeTeam,
-  awayTeam,
-  value,
-  onChange,
-  accentColor,
-}: {
-  homeTeam: string;
-  awayTeam: string;
-  value: 'home' | 'away';
-  onChange: (v: 'home' | 'away') => void;
-  accentColor: string;
-}) {
+function TeamPicker({ homeTeam, awayTeam, value, onChange }: { homeTeam: string; awayTeam: string; value: 'home' | 'away'; onChange: (v: 'home' | 'away') => void }) {
   return (
-    <View style={{ flexDirection: 'row', gap: 8 }}>
-      {(['home', 'away'] as const).map((side) => {
-        const isActive = value === side;
+    <View style={{ flexDirection: 'row', gap: 10 }}>
+      {(['home', 'away'] as const).map(side => {
+        const active = value === side;
         return (
-          <Pressable
-            key={side}
-            onPress={() => onChange(side)}
-            style={{
-              flex: 1, paddingVertical: 12,
-              borderRadius: theme.borderRadius.md,
-              backgroundColor: isActive ? accentColor + '18' : Colors.bg.surface2,
-              borderWidth: 1.5,
-              borderColor: isActive ? accentColor : 'transparent',
-              alignItems: 'center', gap: 2,
-            }}
-          >
-            <Text
-              style={{
-                color: isActive ? accentColor : Colors.text.secondary,
-                fontSize: 13, fontWeight: isActive ? '700' : '400',
-              }}
-              numberOfLines={1}
-            >
-              {side === 'home' ? homeTeam : awayTeam}
-            </Text>
-            <Text style={{ color: Colors.text.disabled, fontSize: 11 }}>
-              {side === 'home' ? 'Local' : 'Visitante'}
-            </Text>
-          </Pressable>
+          <TouchableOpacity key={side} onPress={() => onChange(side)} activeOpacity={0.9} style={{ flex: 1, minHeight: 54, borderRadius: theme.borderRadius.lg, alignItems: 'center', justifyContent: 'center', backgroundColor: active ? Colors.brand.primary + '20' : Colors.bg.surface2, borderWidth: 1, borderColor: active ? Colors.brand.primary : 'transparent' }}>
+            <Text numberOfLines={1} style={{ color: active ? Colors.brand.primary : Colors.text.secondary, fontWeight: '700' }}>{side === 'home' ? homeTeam : awayTeam}</Text>
+            <Text style={{ color: Colors.text.disabled, fontSize: 11 }}>{side === 'home' ? 'Local' : 'Visitante'}</Text>
+          </TouchableOpacity>
         );
       })}
     </View>
   );
 }
 
-
-// ---------------------------------------------------------------------------
-// Componente principal
-// ---------------------------------------------------------------------------
-
+export interface YellowCardEventData { team: 'home' | 'away'; playerId: number; }
+interface YellowCardModalProps { visible: boolean; match: LiveMatchContext | null; onConfirm: (data: YellowCardEventData) => void; onCancel: () => void; }
 function YellowCardModalComponent({ visible, match, onConfirm, onCancel }: YellowCardModalProps) {
-  const slideAnim = useRef(new Animated.Value(400)).current;
-  const opacityAnim = useRef(new Animated.Value(0)).current;
-
-  const [team, setTeam] = useState<'home' | 'away'>('home');
-  const [playerName, setPlayerName] = useState('');
-
-  useEffect(() => {
-    if (visible) {
-      setTeam('home');
-      setPlayerName('');
-    }
-  }, [visible]);
-
-  // Al cambiar equipo, limpiar jugador
-  const handleTeamChange = (v: 'home' | 'away') => {
-    setTeam(v);
-    setPlayerName('');
-  };
-
-  useEffect(() => {
-    Animated.parallel([
-      Animated.timing(opacityAnim, {
-        toValue: visible ? 1 : 0,
-        duration: visible ? 200 : 160,
-        easing: Easing.out(Easing.cubic),
-        useNativeDriver: true,
-      }),
-      Animated.timing(slideAnim, {
-        toValue: visible ? 0 : 400,
-        duration: visible ? 290 : 200,
-        easing: visible ? Easing.out(Easing.back(1.0)) : Easing.in(Easing.cubic),
-        useNativeDriver: true,
-      }),
-    ]).start();
-  }, [visible, opacityAnim, slideAnim]);
-
-  const accentColor = Colors.semantic.warning;
-
-  // Jugadores del equipo seleccionado
-  const players = team === 'home'
-    ? (match?.homePlayers ?? getMockPlayers('home'))
-    : (match?.awayPlayers ?? getMockPlayers('away'));
-
-  const isValid = playerName.length > 0;
-
-  const handleConfirm = () => {
-    if (!isValid) return;
-    // TODO: POST /matches/:id/events { type: 'yellow_card', team, playerName, minute: activeEventMatch?.minute }
-    onConfirm({ team, playerName });
-  };
-
-  return (
-    <Modal transparent visible={visible} animationType="none" statusBarTranslucent onRequestClose={onCancel}>
-      <Animated.View
-        style={{ flex: 1, justifyContent: 'flex-end', backgroundColor: 'rgba(0,0,0,0.65)', opacity: opacityAnim }}
-      >
-        <Pressable style={{ flex: 1 }} onPress={onCancel} />
-
-        <Animated.View
-          style={{
-            transform: [{ translateY: slideAnim }],
-            backgroundColor: Colors.bg.surface1,
-            borderTopLeftRadius: 32, borderTopRightRadius: 32,
-            paddingTop: 12, paddingBottom: 40,
-            borderWidth: 1, borderColor: Colors.bg.surface2,
-            maxHeight: '88%',
-          }}
-        >
-          {/* Handle */}
-          <View
-            style={{
-              width: 40, height: 4, borderRadius: 2,
-              backgroundColor: Colors.bg.surface2,
-              alignSelf: 'center', marginBottom: 20,
-            }}
-          />
-
-          <ScrollView
-            showsVerticalScrollIndicator={false}
-            contentContainerStyle={{ paddingHorizontal: 24, gap: 20, paddingBottom: 8 }}
-            keyboardShouldPersistTaps="handled"
-          >
-            {/* Header */}
-            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
-              <View
-                style={{
-                  width: 44, height: 44, borderRadius: 22,
-                  backgroundColor: accentColor + '18',
-                  borderWidth: 1, borderColor: accentColor + '30',
-                  alignItems: 'center', justifyContent: 'center',
-                }}
-              >
-                <Ionicons name="card-outline" size={22} color={accentColor} />
-              </View>
-              <View>
-                <Text style={{ color: Colors.text.primary, fontSize: 20, fontWeight: '700' }}>
-                  Tarjeta amarilla
-                </Text>
-                {match && (
-                  <Text style={{ color: Colors.text.secondary, fontSize: 12, marginTop: 2 }}>
-                    {match.homeTeam} {match.homeScore} – {match.awayScore} {match.awayTeam} · {match.minute}'
-                  </Text>
-                )}
-              </View>
-            </View>
-
-            {/* Equipo */}
-            <View>
-              <Text style={{
-                color: Colors.text.secondary, fontSize: 12, fontWeight: '600',
-                letterSpacing: 0.5, textTransform: 'uppercase', marginBottom: 8,
-              }}>
-                Equipo del jugador
-              </Text>
-              {match && (
-                <TeamPicker
-                  homeTeam={match.homeTeam}
-                  awayTeam={match.awayTeam}
-                  value={team}
-                  onChange={handleTeamChange}
-                  accentColor={accentColor}
-                />
-              )}
-            </View>
-
-            {/* Jugador amonestado — filtrado por equipo */}
-            <View>
-              <OptionSelectField
-                label="Jugador amonestado *"
-                options={toOptions(players)}
-                value={playerName}
-                onChange={setPlayerName}
-                placeholder="Selecciona un jugador..."
-              />
-            </View>
-          </ScrollView>
-
-          {/* Botones */}
-          <View style={{ paddingHorizontal: 24, paddingTop: 16, gap: 10 }}>
-            <TouchableOpacity
-              onPress={handleConfirm}
-              disabled={!isValid}
-              activeOpacity={0.88}
-              style={{
-                height: 56, borderRadius: 18,
-                alignItems: 'center', justifyContent: 'center',
-                backgroundColor: isValid ? accentColor : Colors.bg.surface2,
-                flexDirection: 'row', gap: 8,
-              }}
-            >
-              <Ionicons name="card" size={18} color={isValid ? Colors.bg.base : Colors.text.disabled} />
-              <Text style={{ color: isValid ? Colors.bg.base : Colors.text.disabled, fontSize: 16, fontWeight: '700' }}>
-                Registrar tarjeta
-              </Text>
-            </TouchableOpacity>
-            <TouchableOpacity onPress={onCancel} activeOpacity={0.7} style={{ paddingVertical: 12, alignItems: 'center' }}>
-              <Text style={{ color: Colors.text.secondary, fontSize: 15, fontWeight: '500' }}>Cancelar</Text>
-            </TouchableOpacity>
-          </View>
-        </Animated.View>
-      </Animated.View>
-    </Modal>
-  );
+  const [team, setTeam] = useState<'home' | 'away'>('home'); const [playerId, setPlayerId] = useState('');
+  useEffect(() => { if (visible) { setTeam('home'); setPlayerId(''); } }, [visible]);
+  const options = useMemo(() => toOptions(team === 'home' ? match?.homePlayers : match?.awayPlayers), [team, match]);
+  const canConfirm = Number(playerId) > 0;
+  return <Modal transparent visible={visible} animationType="slide" statusBarTranslucent onRequestClose={onCancel}><View style={{ flex: 1, justifyContent: 'flex-end', backgroundColor: 'rgba(0,0,0,0.65)' }}><Pressable style={{ flex: 1 }} onPress={onCancel} /><View style={{ backgroundColor: Colors.bg.surface1, borderTopLeftRadius: 30, borderTopRightRadius: 30, padding: 22, paddingBottom: 40 }}><Text style={{ color: Colors.text.primary, fontSize: 24, fontWeight: '800' }}>Tarjeta amarilla</Text><Text style={{ color: Colors.text.secondary, marginTop: 6 }}>Minuto automático: {match?.minute ?? 0}'</Text><View style={{ marginTop: 20 }}><TeamPicker homeTeam={match?.homeTeam ?? 'Local'} awayTeam={match?.awayTeam ?? 'Visitante'} value={team} onChange={(v) => { setTeam(v); setPlayerId(''); }} /></View><View style={{ marginTop: 18 }}><OptionSelectField label="Jugador" value={playerId} options={options} placeholder="Selecciona jugador" onChange={setPlayerId} /></View><View style={{ flexDirection: 'row', gap: 12, marginTop: 24 }}><TouchableOpacity onPress={onCancel} style={{ flex: 1, height: 54, borderRadius: 16, alignItems: 'center', justifyContent: 'center', backgroundColor: Colors.bg.surface2 }}><Text style={{ color: Colors.text.primary, fontWeight: '700' }}>Cancelar</Text></TouchableOpacity><TouchableOpacity disabled={!canConfirm} onPress={() => onConfirm({ team, playerId: Number(playerId) })} style={{ flex: 1, height: 54, borderRadius: 16, alignItems: 'center', justifyContent: 'center', backgroundColor: canConfirm ? Colors.semantic.warning : Colors.bg.surface2 }}><Text style={{ color: Colors.bg.base, fontWeight: '800' }}>Guardar</Text></TouchableOpacity></View></View></View></Modal>;
 }
-
 export const YellowCardModal = memo(YellowCardModalComponent);

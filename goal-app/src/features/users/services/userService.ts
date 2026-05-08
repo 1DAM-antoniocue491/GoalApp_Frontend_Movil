@@ -1,11 +1,8 @@
-/**
- * Servicio móvil de Usuarios y Roles.
- *
- * Centraliza normalización de roles, asociación de equipos y construcción de payloads
- * para que la UI no dependa de la forma exacta de cada endpoint.
- */
+/** Servicio móvil de Usuarios y roles. Sin mocks y con mapeo defensivo de backend. */
 
 import { logger } from '@/src/shared/utils/logger';
+import { ApiError } from '@/src/shared/api/errors';
+import { getRoleLabel, toUserRole, normalizeRole } from '@/src/shared/utils/roles';
 import {
   deleteLeagueUser,
   deleteUnionCode,
@@ -35,156 +32,166 @@ import type {
   UnionCodeResponse,
   UserRole,
 } from '../types/users.types';
-import { ROLE_LABELS } from '../types/users.types';
 
-function getErrorMessage(error: unknown): string {
-  if (error instanceof Error) return error.message;
-  if (typeof error === 'string') return error;
+let rolesCache: { data: ApiRole[]; timestamp: number } | null = null;
+const ROLES_CACHE_MS = 60_000;
+
+export function getErrorMessage(error: unknown): string {
+  if (error instanceof ApiError) {
+    const detail = (error as any)?.detail ?? error.message;
+
+    if (typeof detail === 'string') return normalizeApiMessage(detail);
+    if (Array.isArray(detail)) return normalizeApiMessage(detail[0]?.msg ?? error.message);
+    if (detail && typeof detail === 'object') return normalizeApiMessage(detail.detail ?? detail.message ?? JSON.stringify(detail));
+
+    return normalizeApiMessage(error.message);
+  }
+
+  if (error instanceof Error) return normalizeApiMessage(error.message);
+  if (typeof error === 'string') return normalizeApiMessage(error);
+
   try {
-    return JSON.stringify(error);
+    return normalizeApiMessage(JSON.stringify(error));
   } catch {
     return 'Error inesperado';
   }
 }
 
-function normalizeText(value: unknown): string {
-  return String(value ?? '')
-    .trim()
-    .toLowerCase()
-    .normalize('NFD')
-    .replace(/[\u0300-\u036f]/g, '');
+function normalizeApiMessage(message: string): string {
+  const value = String(message ?? '').trim();
+  const lower = value.toLowerCase();
+
+  if (lower.includes('no pertenece') && lower.includes('liga')) {
+    return 'El usuario ya no pertenece a esta liga. Recarga la pantalla para sincronizar los datos.';
+  }
+
+  if (lower.includes('único administrador') || lower.includes('unico administrador')) {
+    return 'No se puede eliminar al único administrador de la liga.';
+  }
+
+  if (lower.includes('internal server error')) {
+    return 'El servidor no pudo completar la operación. Recarga y vuelve a intentarlo.';
+  }
+
+  if (lower.includes('already') || lower.includes('ya pertenece') || lower.includes('ya forma parte')) {
+    return 'El usuario ya forma parte de esta liga.';
+  }
+
+  return value || 'Error inesperado';
 }
 
-export function normalizeRole(value: unknown): UserRole {
-  const role = normalizeText(value);
-
-  if (['admin', 'administrador'].includes(role)) return 'admin';
-  if (['coach', 'entrenador'].includes(role)) return 'coach';
-  if (['player', 'jugador'].includes(role)) return 'player';
-  if (['delegate', 'delegado', 'delegado_campo', 'field_delegate', 'fielddelegate'].includes(role)) return 'delegate';
-  if (['observer', 'observador', 'viewer', 'seguidor'].includes(role)) return 'observer';
-
-  return 'observer';
+function getRawRole(raw: LeagueUserApi): string {
+  return 'rol' in raw ? raw.rol : raw.nombre_rol;
 }
 
-export function getRoleLabel(value: unknown): string {
-  return ROLE_LABELS[normalizeRole(value)] ?? 'Observador';
-}
-
-function getRawRole(raw: LeagueUserApi): string | null | undefined {
-  return 'rol' in raw && raw.rol ? raw.rol : 'nombre_rol' in raw ? raw.nombre_rol : undefined;
-}
-
-function getRawName(raw: LeagueUserApi): string | null | undefined {
-  return 'nombre' in raw && raw.nombre ? raw.nombre : 'nombre_usuario' in raw ? raw.nombre_usuario : undefined;
+function getRawName(raw: LeagueUserApi): string {
+  return 'nombre' in raw ? raw.nombre : raw.nombre_usuario;
 }
 
 function getRawUserRoleId(raw: LeagueUserApi): number | undefined {
   return 'id_usuario_rol' in raw ? raw.id_usuario_rol : undefined;
 }
 
-function getRawTeamId(raw: LeagueUserApi): number | null | undefined {
-  return 'id_equipo' in raw ? raw.id_equipo : undefined;
+function getRawTeamId(raw: LeagueUserApi): number | undefined {
+  return raw.id_equipo == null ? undefined : Number(raw.id_equipo);
 }
 
-function getRawTeamName(raw: LeagueUserApi): string | null | undefined {
-  return 'nombre_equipo' in raw ? raw.nombre_equipo : undefined;
+function getRawTeamName(raw: LeagueUserApi): string | undefined {
+  return raw.nombre_equipo ?? undefined;
 }
 
-function getRawJersey(raw: LeagueUserApi): string | undefined {
-  if (!('dorsal' in raw) || raw.dorsal == null) return undefined;
-  return String(raw.dorsal);
+function getRawJersey(raw: LeagueUserApi): number | undefined {
+  const dorsal = raw.dorsal;
+  if (dorsal == null || dorsal === '') return undefined;
+  const parsed = Number(dorsal);
+  return Number.isFinite(parsed) ? parsed : undefined;
 }
 
-function getRawPosition(raw: LeagueUserApi): string | undefined {
-  return 'posicion' in raw && raw.posicion ? raw.posicion : undefined;
-}
-
-function teamNameById(teams: TeamOptionApi[], id?: number | null): string | undefined {
-  if (!id) return undefined;
-  return teams.find(team => Number(team.id_equipo) === Number(id))?.nombre;
-}
-
-function playerByUserId(players: PlayerApi[], userId: number): PlayerApi | undefined {
-  return players.find(player => Number(player.id_usuario) === Number(userId));
-}
-
-function teamFromAssignment(
-  raw: LeagueUserApi,
+function getTeamForUser(
+  userId: number,
   role: UserRole,
   teams: TeamOptionApi[],
   players: PlayerApi[],
-): { teamId?: string; teamName?: string; jersey?: string; position?: string } {
-  const rawTeamId = getRawTeamId(raw);
-  const rawTeamName = getRawTeamName(raw) ?? teamNameById(teams, rawTeamId);
-
-  if (rawTeamId || rawTeamName) {
-    return {
-      teamId: rawTeamId ? String(rawTeamId) : undefined,
-      teamName: rawTeamName ?? undefined,
-      jersey: getRawJersey(raw),
-      position: getRawPosition(raw),
-    };
+  rawTeamId?: number,
+) {
+  if (rawTeamId) {
+    const team = teams.find(item => Number(item.id_equipo) === Number(rawTeamId));
+    return { team, teamId: rawTeamId };
   }
 
   if (role === 'player') {
-    const player = playerByUserId(players, Number(raw.id_usuario));
-    if (!player) return {};
+    const player = players.find(item => Number(item.id_usuario) === Number(userId));
+    const team = player ? teams.find(item => Number(item.id_equipo) === Number(player.id_equipo)) : undefined;
+
     return {
-      teamId: String(player.id_equipo),
-      teamName: player.equipo?.nombre ?? teamNameById(teams, player.id_equipo),
-      jersey: player.dorsal != null ? String(player.dorsal) : undefined,
-      position: player.posicion ?? undefined,
+      team,
+      teamId: player?.id_equipo,
+      jersey: player?.dorsal == null ? undefined : Number(player.dorsal),
+      position: player?.posicion ?? undefined,
     };
   }
 
   if (role === 'coach') {
-    const team = teams.find(item => Number(item.id_entrenador) === Number(raw.id_usuario));
-    return team ? { teamId: String(team.id_equipo), teamName: team.nombre } : {};
+    const team = teams.find(item => Number(item.id_entrenador) === Number(userId));
+    return { team, teamId: team?.id_equipo };
   }
 
   if (role === 'delegate') {
-    const team = teams.find(item => Number(item.id_delegado) === Number(raw.id_usuario));
-    return team ? { teamId: String(team.id_equipo), teamName: team.nombre } : {};
+    const team = teams.find(item => Number(item.id_delegado) === Number(userId));
+    return { team, teamId: team?.id_equipo };
   }
 
-  return {};
+  return { team: undefined, teamId: undefined };
 }
 
-export function mapLeagueUser(raw: LeagueUserApi, teams: TeamOptionApi[] = [], players: PlayerApi[] = []): LeagueUser {
+export function mapLeagueUser(
+  raw: LeagueUserApi,
+  context?: { teams?: TeamOptionApi[]; players?: PlayerApi[] },
+): LeagueUser {
   const roleRaw = getRawRole(raw);
-  const role = normalizeRole(roleRaw);
+  const role = toUserRole(roleRaw);
   const active = Boolean(raw.activo);
-  const assignment = teamFromAssignment(raw, role, teams, players);
+  const userId = Number(raw.id_usuario);
+  const rawTeamId = getRawTeamId(raw);
+  const teamData = getTeamForUser(userId, role, context?.teams ?? [], context?.players ?? [], rawTeamId);
+  const rawJersey = getRawJersey(raw);
 
   return {
     id: String(getRawUserRoleId(raw) ?? raw.id_usuario),
-    userId: Number(raw.id_usuario),
+    userId,
     userRoleId: getRawUserRoleId(raw),
     name: getRawName(raw) || 'Usuario sin nombre',
     email: raw.email ?? '',
     roleId: Number(raw.id_rol),
     role,
-    roleRaw: roleRaw ?? null,
+    roleRaw,
     roleLabel: getRoleLabel(roleRaw),
     status: active ? 'active' : 'pending',
     active,
-    ...assignment,
+    teamId: teamData.teamId != null ? String(teamData.teamId) : undefined,
+    teamName: getRawTeamName(raw) ?? teamData.team?.nombre,
+    jersey: rawJersey ?? teamData.jersey,
+    position: raw.posicion ?? teamData.position,
+    isCaptain: raw.tipo_jugador === 'capitan',
   };
 }
 
-export function roleOptionsFromApi(roles: ApiRole[]): SelectOption[] {
-  return roles.map(role => ({
-    value: normalizeRole(role.nombre),
-    label: getRoleLabel(role.nombre),
-  }));
+export function roleOptionsFromApi(roles: ApiRole[], allowedRoles?: UserRole[]): SelectOption[] {
+  const seen = new Set<string>();
+  const allowed = allowedRoles ? new Set(allowedRoles) : null;
+
+  return roles
+    .map(role => ({ value: toUserRole(role.nombre), label: getRoleLabel(role.nombre) }))
+    .filter(option => {
+      if (seen.has(option.value)) return false;
+      if (allowed && !allowed.has(option.value)) return false;
+      seen.add(option.value);
+      return true;
+    });
 }
 
 export function teamOptionsFromApi(teams: TeamOptionApi[]): SelectOption[] {
-  return teams.map(team => ({
-    value: String(team.id_equipo),
-    label: team.nombre,
-  }));
+  return teams.map(team => ({ value: String(team.id_equipo), label: team.nombre }));
 }
 
 export function findRoleId(roles: ApiRole[], role: UserRole | ''): number | null {
@@ -194,25 +201,26 @@ export function findRoleId(roles: ApiRole[], role: UserRole | ''): number | null
   return found?.id_rol ?? null;
 }
 
-export async function fetchUsersBootstrapService(ligaId: number): Promise<
-  ServiceResult<{
-    users: LeagueUser[];
-    roles: ApiRole[];
-    teams: TeamOptionApi[];
-  }>
-> {
+async function getUsersByLeagueFast(ligaId: number): Promise<LeagueUserApi[]> {
   try {
-    const usersPromise = getUsersByLeague(ligaId).catch(async error => {
-      logger.warn('[users/service]', 'Endpoint principal de usuarios falló. Probando fallback.', {
-        ligaId,
-        error: getErrorMessage(error),
-      });
-      return getLeagueUsersFallback(ligaId);
+    return await getUsersByLeague(ligaId);
+  } catch (primaryError) {
+    const status = primaryError instanceof ApiError ? primaryError.status : 0;
+
+    logger.warn('[users/service]', 'Endpoint principal de usuarios falló. Probando fallback.', {
+      ligaId,
+      status,
+      error: getErrorMessage(primaryError),
     });
 
-    const [usersResult, rolesResult, teamsResult, playersResult] = await Promise.allSettled([
-      usersPromise,
-      getRoles(),
+    return getLeagueUsersFallback(ligaId);
+  }
+}
+
+export async function fetchLeagueUsersService(ligaId: number): Promise<ServiceResult<LeagueUser[]>> {
+  try {
+    const [usersResult, teamsResult, playersResult] = await Promise.allSettled([
+      getUsersByLeagueFast(ligaId),
       getTeamsByLeague(ligaId),
       getPlayersByLeague(ligaId),
     ]);
@@ -221,12 +229,51 @@ export async function fetchUsersBootstrapService(ligaId: number): Promise<
       return { success: false, error: getErrorMessage(usersResult.reason) };
     }
 
-    const roles = rolesResult.status === 'fulfilled' ? rolesResult.value : [];
     const teams = teamsResult.status === 'fulfilled' ? teamsResult.value : [];
     const players = playersResult.status === 'fulfilled' ? playersResult.value : [];
-    const users = usersResult.value.map(user => mapLeagueUser(user, teams, players));
 
-    return { success: true, data: { users, roles, teams } };
+    if (teamsResult.status === 'rejected') {
+      logger.warn('[users/service]', 'No se pudieron cargar equipos para asociar usuarios', {
+        ligaId,
+        error: getErrorMessage(teamsResult.reason),
+      });
+    }
+
+    if (playersResult.status === 'rejected') {
+      logger.warn('[users/service]', 'No se pudieron cargar jugadores para asociar usuarios', {
+        ligaId,
+        error: getErrorMessage(playersResult.reason),
+      });
+    }
+
+    return {
+      success: true,
+      data: usersResult.value.map(user => mapLeagueUser(user, { teams, players })),
+    };
+  } catch (error) {
+    return { success: false, error: getErrorMessage(error) };
+  }
+}
+
+export async function fetchRolesService(): Promise<ServiceResult<ApiRole[]>> {
+  try {
+    const now = Date.now();
+    if (rolesCache && now - rolesCache.timestamp < ROLES_CACHE_MS) {
+      return { success: true, data: rolesCache.data };
+    }
+
+    const roles = await getRoles();
+    rolesCache = { data: roles, timestamp: now };
+    return { success: true, data: roles };
+  } catch (error) {
+    return { success: false, error: getErrorMessage(error) };
+  }
+}
+
+export async function fetchTeamsForUsersService(ligaId: number): Promise<ServiceResult<TeamOptionApi[]>> {
+  try {
+    const teams = await getTeamsByLeague(ligaId);
+    return { success: true, data: teams };
   } catch (error) {
     return { success: false, error: getErrorMessage(error) };
   }
@@ -236,7 +283,7 @@ export function buildInvitePayload(form: InviteUserFormData, roles: ApiRole[]): 
   const idRol = findRoleId(roles, form.role);
 
   if (!form.name.trim()) return { success: false, error: 'El nombre es obligatorio.' };
-  if (!form.email.trim()) return { success: false, error: 'El correo electrónico es obligatorio.' };
+  if (!form.email.trim()) return { success: false, error: 'El email es obligatorio.' };
   if (!idRol) return { success: false, error: 'Selecciona un rol válido.' };
 
   const needsTeam = form.role === 'coach' || form.role === 'delegate' || form.role === 'player';
@@ -283,6 +330,9 @@ export async function updateUserService(
   roles: ApiRole[],
 ): Promise<ServiceResult<void>> {
   try {
+    if (!Number.isFinite(ligaId) || ligaId <= 0) return { success: false, error: 'Liga no válida.' };
+    if (!Number.isFinite(user.userId) || user.userId <= 0) return { success: false, error: 'Usuario no válido.' };
+
     const idRol = findRoleId(roles, form.role);
     if (!idRol) return { success: false, error: 'Selecciona un rol válido.' };
 
@@ -302,6 +352,9 @@ export async function updateUserService(
 
 export async function removeUserService(ligaId: number, userId: number): Promise<ServiceResult<void>> {
   try {
+    if (!Number.isFinite(ligaId) || ligaId <= 0) return { success: false, error: 'Liga no válida.' };
+    if (!Number.isFinite(userId) || userId <= 0) return { success: false, error: 'Usuario no válido.' };
+
     await deleteLeagueUser(ligaId, userId);
     return { success: true };
   } catch (error) {
@@ -327,10 +380,10 @@ export function buildGenerateCodePayload(
     success: true,
     data: {
       id_rol: idRol,
-      id_equipo: needsTeam ? Number(form.teamId) : undefined,
-      dorsal: isPlayer ? form.jersey.trim() : undefined,
-      posicion: isPlayer ? form.position : undefined,
-      tipo_jugador: isPlayer ? form.playerType || undefined : undefined,
+      id_equipo: needsTeam ? Number(form.teamId) : null,
+      dorsal: isPlayer ? form.jersey.trim() : null,
+      posicion: isPlayer ? form.position : null,
+      tipo_jugador: isPlayer ? form.playerType || null : null,
     },
   };
 }

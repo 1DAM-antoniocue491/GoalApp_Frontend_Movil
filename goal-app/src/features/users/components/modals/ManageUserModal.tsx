@@ -30,6 +30,12 @@ interface ManageUserModalProps {
   errorMessage?: string | null;
   currentUserId?: number | null;
   adminCount?: number;
+
+  /**
+   * Total de usuarios de la liga.
+   * Si se pasa este valor, se usa para impedir borrar o desactivar al único usuario.
+   */
+  userCount?: number;
 }
 
 function getSafeRole(role?: UserRole | ''): UserRole | '' {
@@ -48,6 +54,7 @@ export function ManageUserModal({
   errorMessage,
   currentUserId,
   adminCount = 0,
+  userCount,
 }: ManageUserModalProps) {
   const [form, setForm] = useState<ManageUserFormData>({ role: '', active: true });
   const [statusSubmitting, setStatusSubmitting] = useState(false);
@@ -56,6 +63,7 @@ export function ManageUserModal({
 
   useEffect(() => {
     if (!user) return;
+
     setForm({ role: getSafeRole(user.role), active: Boolean(user.active) });
     setStatusSubmitting(false);
     setRemoveSubmitting(false);
@@ -65,14 +73,43 @@ export function ManageUserModal({
   const isSelf = Boolean(user && currentUserId && Number(user.userId) === Number(currentUserId));
   const isAdmin = user?.role === 'admin';
   const isLastAdmin = Boolean(isAdmin && adminCount <= 1);
-  const deleteBlocked = Boolean((isSelf && isAdmin) || isLastAdmin);
+  const isOnlyLeagueUser = typeof userCount === 'number' && userCount <= 1;
+
+  /**
+   * Bloqueo de estado:
+   * - Un administrador no debe pasar a inactivo desde este modal.
+   * - El único usuario de la liga tampoco debe poder quedar inactivo.
+   *
+   * Esto evita dejar la liga sin usuario operativo o sin administración válida.
+   */
+  const statusBlocked = Boolean(isAdmin || isOnlyLeagueUser);
+
+  /**
+   * Bloqueo de eliminación:
+   * - No se elimina directamente a un administrador.
+   * - No se elimina al último administrador.
+   * - No se elimina al único usuario de la liga.
+   *
+   * Si se quiere quitar a un administrador, primero debe cambiarse su rol,
+   * siempre que no sea el último administrador disponible.
+   */
+  const deleteBlocked = Boolean(isAdmin || isLastAdmin || isOnlyLeagueUser);
+
   const busy = isSubmitting || statusSubmitting || removeSubmitting;
 
+  const statusBlockMessage = useMemo(() => {
+    if (isAdmin) return 'Un administrador no puede pasar a estado inactivo.';
+    if (isOnlyLeagueUser) return 'No se puede desactivar al único usuario de la liga.';
+    return null;
+  }, [isAdmin, isOnlyLeagueUser]);
+
   const deleteBlockMessage = useMemo(() => {
+    if (isOnlyLeagueUser) return 'No se puede eliminar al único usuario de la liga.';
     if (isSelf && isAdmin) return 'No puedes eliminarte a ti mismo como administrador.';
     if (isLastAdmin) return 'No se puede eliminar al único administrador de la liga.';
+    if (isAdmin) return 'No se puede eliminar directamente a un administrador.';
     return null;
-  }, [isSelf, isAdmin, isLastAdmin]);
+  }, [isOnlyLeagueUser, isSelf, isAdmin, isLastAdmin]);
 
   if (!user) return null;
 
@@ -87,9 +124,30 @@ export function ManageUserModal({
   async function handleRoleUpdate() {
     if (!user) return;
 
+    const nextRole = getSafeRole(form.role || user.role);
+
+    /**
+     * Seguridad de rol:
+     * el último administrador no puede dejar de ser administrador,
+     * porque la liga quedaría sin usuario con permisos de gestión.
+     */
+    if (isLastAdmin && nextRole !== 'admin') {
+      setLocalError('No puedes cambiar el rol del único administrador de la liga.');
+      return;
+    }
+
+    /**
+     * Seguridad del usuario actual:
+     * evitamos que el administrador conectado se quite permisos críticos a sí mismo.
+     */
+    if (isSelf && isAdmin && nextRole !== 'admin') {
+      setLocalError('No puedes quitarte el rol de administrador a ti mismo.');
+      return;
+    }
+
     const payload: ManageUserFormData = {
       ...form,
-      role: getSafeRole(form.role || user.role),
+      role: nextRole,
     };
 
     const result = await onUpdate(user.id, payload);
@@ -98,6 +156,16 @@ export function ManageUserModal({
 
   async function handleStatusToggle(nextActive: boolean) {
     if (!user) return;
+
+    /**
+     * Bloqueo defensivo:
+     * aunque el switch no sea visible cuando está bloqueado,
+     * esta validación impide ejecutar la acción desde otro flujo interno.
+     */
+    if (statusBlocked) {
+      setLocalError(statusBlockMessage ?? 'No puedes modificar el estado de este usuario.');
+      return;
+    }
 
     const previous = form.active;
     const safeRole = getSafeRole(form.role || user.role);
@@ -119,13 +187,17 @@ export function ManageUserModal({
       return;
     }
 
-    // Confirmación visual móvil: cerrar al completar con éxito.
     onClose();
   }
 
   function handleRemove() {
     if (!user) return;
 
+    /**
+     * La acción de borrar está bloqueada también por código.
+     * Aunque el botón no se renderiza si deleteBlocked es true,
+     * esta comprobación evita borrados accidentales si se reutiliza la función.
+     */
     if (deleteBlocked) {
       Alert.alert('Acción bloqueada', deleteBlockMessage ?? 'No puedes eliminar este usuario.');
       return;
@@ -147,7 +219,7 @@ export function ManageUserModal({
   }
 
   return (
-    <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
+    <Modal visible={visible} transparent animationType="slide" presentationStyle="pageSheet" onRequestClose={onClose}>
       <Pressable style={modalStyles.backdrop} onPress={busy ? undefined : onClose}>
         <Pressable>
           <View style={modalStyles.sheet}>
@@ -156,6 +228,7 @@ export function ManageUserModal({
                 <Text style={modalStyles.title}>Gestionar usuario</Text>
                 <Text style={modalStyles.subtitle}>Cambia su rol o toca el interruptor para activar/desactivar.</Text>
               </View>
+
               <TouchableOpacity onPress={onClose} disabled={busy} style={modalStyles.closeButton}>
                 <Ionicons name="close" size={24} color={Colors.text.secondary} />
               </TouchableOpacity>
@@ -166,9 +239,11 @@ export function ManageUserModal({
                 <View style={modalStyles.avatar}>
                   <Text style={modalStyles.avatarText}>{initials}</Text>
                 </View>
+
                 <View style={{ flex: 1 }}>
                   <Text style={modalStyles.userName} numberOfLines={1}>{user.name}</Text>
                   <Text style={modalStyles.userMeta} numberOfLines={1}>{user.email}</Text>
+
                   {user.teamName ? (
                     <Text style={modalStyles.userTeam} numberOfLines={1}>
                       {user.teamName}{user.jersey ? ` · #${user.jersey}` : ''}{user.position ? ` · ${user.position}` : ''}
@@ -185,6 +260,7 @@ export function ManageUserModal({
               ) : null}
 
               <Text style={modalStyles.sectionLabel}>Rol en la liga</Text>
+
               <View className="flex-row flex-wrap mb-5" style={{ gap: 10 }}>
                 {roleOptions.map(option => {
                   const value = option.value as UserRole;
@@ -209,24 +285,40 @@ export function ManageUserModal({
               <View style={modalStyles.stateBox}>
                 <View style={{ flex: 1, paddingVertical: 12 }}>
                   <Text style={modalStyles.stateTitle}>Usuario {form.active ? 'activo' : 'inactivo'}</Text>
-                  <Text style={modalStyles.stateSubtitle}>Toca una vez para actualizarlo en la API.</Text>
+                  <Text style={modalStyles.stateSubtitle}>
+                    {statusBlocked
+                      ? 'El estado está bloqueado para este usuario.'
+                      : 'Toca una vez para actualizarlo en la API.'}
+                  </Text>
                 </View>
-                {statusSubmitting ? (
-                  <ActivityIndicator color={Colors.brand.primary} />
+
+                {!statusBlocked ? (
+                  statusSubmitting ? (
+                    <ActivityIndicator color={Colors.brand.primary} />
+                  ) : (
+                    <Switch
+                      value={form.active}
+                      onValueChange={handleStatusToggle}
+                      disabled={isSubmitting}
+                      trackColor={{ false: Colors.bg.base, true: Colors.brand.primary }}
+                      thumbColor={form.active ? Colors.bg.surface2 : Colors.text.secondary}
+                    />
+                  )
                 ) : (
-                  <Switch
-                    value={form.active}
-                    onValueChange={handleStatusToggle}
-                    disabled={isSubmitting}
-                    trackColor={{ false: Colors.bg.base, true: Colors.brand.primary }}
-                    thumbColor={form.active ? '#000000' : Colors.text.secondary}
-                  />
+                  <Ionicons name="lock-closed-outline" size={22} color={Colors.text.secondary} />
                 )}
               </View>
 
-              {deleteBlockMessage ? (
+              {statusBlockMessage ? (
                 <View style={modalStyles.warningBox}>
                   <Ionicons name="lock-closed-outline" size={18} color={Colors.semantic.warning} />
+                  <Text style={modalStyles.warningText}>{statusBlockMessage}</Text>
+                </View>
+              ) : null}
+
+              {deleteBlockMessage ? (
+                <View style={modalStyles.warningBox}>
+                  <Ionicons name="trash-outline" size={18} color={Colors.semantic.warning} />
                   <Text style={modalStyles.warningText}>{deleteBlockMessage}</Text>
                 </View>
               ) : null}
@@ -242,15 +334,22 @@ export function ManageUserModal({
                 </TouchableOpacity>
               </View>
 
-              <TouchableOpacity
-                onPress={handleRemove}
-                disabled={busy || deleteBlocked}
-                activeOpacity={0.8}
-                style={[modalStyles.deleteButton, deleteBlocked ? { opacity: 0.45 } : null]}
-              >
-                {removeSubmitting ? <ActivityIndicator color={Colors.semantic.error} style={{ marginRight: 8 }} /> : <Ionicons name="trash-outline" size={18} color={Colors.semantic.error} style={{ marginRight: 8 }} />}
-                <Text style={modalStyles.deleteText}>{removeSubmitting ? 'Eliminando...' : 'Eliminar de la liga'}</Text>
-              </TouchableOpacity>
+              {!deleteBlocked ? (
+                <TouchableOpacity
+                  onPress={handleRemove}
+                  disabled={busy}
+                  activeOpacity={0.8}
+                  style={modalStyles.deleteButton}
+                >
+                  {removeSubmitting ? (
+                    <ActivityIndicator color={Colors.semantic.error} style={{ marginRight: 8 }} />
+                  ) : (
+                    <Ionicons name="trash-outline" size={18} color={Colors.semantic.error} style={{ marginRight: 8 }} />
+                  )}
+
+                  <Text style={modalStyles.deleteText}>{removeSubmitting ? 'Eliminando...' : 'Eliminar de la liga'}</Text>
+                </TouchableOpacity>
+              ) : null}
             </ScrollView>
           </View>
         </Pressable>
@@ -263,7 +362,7 @@ export default ManageUserModal;
 
 const modalStyles = {
   backdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.72)', justifyContent: 'flex-end' as const },
-  sheet: { backgroundColor: Colors.bg.surface1, borderTopLeftRadius: 28, borderTopRightRadius: 28, maxHeight: '88%' as const },
+  sheet: { backgroundColor: Colors.bg.surface1, borderTopLeftRadius: 28, borderTopRightRadius: 28, maxHeight: '100%' as const },
   title: { color: Colors.text.primary, fontSize: theme.fontSize.xxl, fontWeight: '900' as const },
   subtitle: { color: Colors.text.secondary, fontSize: theme.fontSize.sm, marginTop: 6, lineHeight: 20 },
   closeButton: { width: 48, height: 48, borderRadius: 18, backgroundColor: Colors.bg.surface2, alignItems: 'center' as const, justifyContent: 'center' as const, marginLeft: 16 },

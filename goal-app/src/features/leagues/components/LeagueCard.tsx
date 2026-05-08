@@ -1,5 +1,5 @@
-import React, { memo } from 'react';
-import { View, Text, TouchableOpacity } from 'react-native';
+import React, { memo, useCallback, useEffect, useRef, useState } from 'react';
+import { View, Text, TouchableOpacity, Image } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 
 import { Colors } from '@/src/shared/constants/colors';
@@ -11,73 +11,20 @@ import { PrimaryPillButton } from '@/src/shared/components/ui/PrimaryPillButton'
  * Tipos importados desde shared/types/league — fuente de verdad única.
  * No se duplican aquí para evitar divergencias entre la card y el resto de la app.
  */
-import type { LeagueRole, LeagueItem } from '@/src/shared/types/league';
+import { getRoleBadgeConfig } from '@/src/shared/utils/roles';
+import type { LeagueItem } from '@/src/shared/types/league';
 
 interface LeagueCardProps {
   league: LeagueItem;
-  onPress?: (league: LeagueItem) => void;
-  onToggleFavorite?: (leagueId: string) => void;
+  onPress?: (league: LeagueItem) => void | Promise<void>;
+  onToggleFavorite?: (leagueId: string) => void | Promise<void>;
   onPressSettings?: (league: LeagueItem) => void;
 }
 
 /**
- * Configuración visual de cada rol.
- *
- * Alineada con UserRowCard.ROLE_CONFIG para mantener consistencia visual
- * en toda la app. RoleBadge es la única fuente de verdad visual del rol:
- * no se definen colores, iconos ni labels fuera de este mapa.
- *
- * Claves bgColor/textColor coinciden con las props de RoleBadge
- * para evitar renombrados intermedios.
- *
- * Colores: rgba() con transparencia baja, igual que UserRowCard,
- * para mantener el estilo premium dark sin fondos opacos.
- *
- * field_delegate conserva el label "Delegado de campo" porque en el
- * contexto de liga ese rol es más específico que el "Delegado" de usuarios.
- * Icono y colores sí son idénticos al delegate de UserRowCard.
+ * La configuración visual del rol se obtiene desde shared/utils/roles.
+ * Así la tarjeta de liga y Usuarios/Roles muestran exactamente el mismo badge.
  */
-const ROLE_CONFIG: Record<
-  LeagueRole,
-  {
-    label: string;
-    bgColor: string;
-    textColor: string;
-    icon: keyof typeof Ionicons.glyphMap;
-  }
-> = {
-  admin: {
-    label: 'Administrador',
-    bgColor: 'rgba(200,245,88,0.15)',
-    textColor: Colors.brand.primary,
-    icon: 'shield-outline',
-  },
-  coach: {
-    label: 'Entrenador',
-    bgColor: 'rgba(0,180,216,0.15)',
-    textColor: Colors.brand.secondary,
-    icon: 'ribbon-outline',
-  },
-  field_delegate: {
-    label: 'Delegado de campo',
-    bgColor: 'rgba(255,214,10,0.15)',
-    textColor: Colors.semantic.warning,
-    icon: 'clipboard-outline',
-  },
-  player: {
-    label: 'Jugador',
-    bgColor: 'rgba(24,162,251,0.15)',
-    textColor: Colors.brand.accent,
-    icon: 'football-outline',
-  },
-  observer: {
-    label: 'Observador',
-    bgColor: 'rgba(148,163,184,0.15)',
-    textColor: '#94A3B8',
-    icon: 'eye-outline',
-  },
-};
-
 /**
  * Botón de favorito.
  *
@@ -88,16 +35,20 @@ const ROLE_CONFIG: Record<
  */
 function FavoriteButton({
   isFavorite,
+  disabled,
   onPress,
 }: {
   isFavorite: boolean;
+  disabled?: boolean;
   onPress?: () => void;
 }) {
   return (
     <TouchableOpacity
       activeOpacity={0.85}
+      disabled={disabled}
       onPress={onPress}
       className="w-10 h-10 items-center justify-center"
+      style={{ opacity: disabled ? 0.45 : 1 }}
     >
       <Ionicons
         name={isFavorite ? 'star' : 'star-outline'}
@@ -119,23 +70,43 @@ function FavoriteButton({
  * si no hay imagen, mostramos un escudo por defecto
  * con bordes blancos y nunca dejamos el hueco vacío.
  */
-function LeagueCrest({ name }: { name: string }) {
-  const palette = [Colors.brand.primary, Colors.brand.secondary, Colors.brand.accent, Colors.semantic.warning];
-  const color = palette[name.length % palette.length];
-
+function LeagueCrest({ crestUrl }: { crestUrl?: string | null }) {
   return (
     <View
       /**
-       * La app móvil ya no carga logos de liga.
-       * Este escudo generado evita imágenes rotas y mantiene una identidad visual premium.
+       * className aquí se usa para la forma:
+       * - tamaño
+       * - círculo
+       * - centrado
+       * - overflow hidden para la imagen
+       *
+       * style se usa para colores de fondo/borde,
+       * porque dependen del design system y es más legible
+       * dejarlos aquí con Colors.
        */
-      className="w-16 h-16 rounded-2xl items-center justify-center border"
+      className="w-16 h-16 rounded-full items-center justify-center border overflow-hidden"
       style={{
-        backgroundColor: Colors.bg.base, // fondo oscuro para contraste con el icono de escudo
-        borderColor: Colors.bg.surface2, // borde ligeramente más claro que el fondo para definir el contorno
+        backgroundColor: Colors.bg.base,
+        borderColor: Colors.bg.surface2,
       }}
     >
-      <Ionicons name="shield-outline" size={24} color={color} />
+      {crestUrl ? (
+        <Image
+          source={{ uri: crestUrl }}
+          /**
+           * style se usa aquí porque React Native maneja mejor
+           * medidas exactas de imagen por style inline.
+           */
+          style={{ width: 33, height: 33 }}
+          resizeMode="contain"
+        />
+      ) : (
+        <Ionicons
+          name="shield-outline"
+          size={30}
+          color={Colors.text.primary}
+        />
+      )}
     </View>
   );
 }
@@ -233,17 +204,88 @@ function LeagueCardComponent({
   onPressSettings,
 }: LeagueCardProps) {
   /**
-   * Flags derivados del estado de la <liga className="7"></liga>
+   * Bloqueo local de interacción.
+   *
+   * Al pulsar "Entrar" o "Reactivar liga", la app puede tardar en navegar
+   * porque debe guardar la liga activa, hidratar datos del dashboard y resolver red.
+   * Durante ese intervalo bloqueamos favorito/configuración/acción principal para
+   * evitar dobles taps o acciones cruzadas sobre la misma tarjeta.
+   *
+   * El mismo bloqueo se aplica cuando se pulsa la estrella de favorito.
+   * Favorito persiste contra API, así que no dejamos que el usuario entre,
+   * reactive o abra configuración mientras esa petición sigue viva.
+   */
+  const [isSelecting, setIsSelecting] = useState(false);
+  const [isTogglingFavorite, setIsTogglingFavorite] = useState(false);
+  const unlockTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    return () => {
+      if (unlockTimeoutRef.current) {
+        clearTimeout(unlockTimeoutRef.current);
+      }
+    };
+  }, []);
+
+  /**
+   * Ejecuta la acción principal de forma segura.
+   *
+   * Si el padre devuelve una promesa, esperamos a que termine. Si solo dispara
+   * navegación síncrona, mantenemos un bloqueo breve para absorber taps repetidos
+   * mientras Expo Router completa el cambio de pantalla.
+   */
+  const handlePrimaryPress = useCallback(async () => {
+    if (isSelecting) return;
+
+    setIsSelecting(true);
+
+    try {
+      await onPress?.(league);
+    } finally {
+      unlockTimeoutRef.current = setTimeout(() => {
+        setIsSelecting(false);
+      }, 1200);
+    }
+  }, [isSelecting, league, onPress]);
+
+  /**
+   * Alterna favorito de forma segura.
+   *
+   * Bloquea el resto de acciones mientras el padre llama a la API
+   * para evitar inconsistencias como entrar en una liga mientras la
+   * estrella todavía se está guardando en backend.
+   */
+  const handleFavoritePress = useCallback(async () => {
+    if (isSelecting || isTogglingFavorite) return;
+
+    setIsTogglingFavorite(true);
+
+    try {
+      await onToggleFavorite?.(league.id);
+    } finally {
+      setIsTogglingFavorite(false);
+    }
+  }, [isSelecting, isTogglingFavorite, league.id, onToggleFavorite]);
+
+  /**
+   * Flags derivados del estado de la liga.
    */
   const isFinished = league.status === 'finished';
   const canReactivate = !!league.canReactivate;
   const isDisabled = isFinished && !canReactivate;
-  const primaryLabel = isFinished ? 'Reactivar liga' : 'Entrar';
+  const actionsLocked = isSelecting || isTogglingFavorite;
+  const primaryLabel = isSelecting
+    ? isFinished
+      ? 'Reactivando...'
+      : 'Entrando...'
+    : isFinished
+      ? 'Reactivar liga'
+      : 'Entrar';
 
   /**
    * Configuración visual del rol actual.
    */
-  const roleConfig = ROLE_CONFIG[league.role];
+  const roleConfig = getRoleBadgeConfig(league.role);
 
   /**
    * Bloques de información secundaria condicionados al rol.
@@ -278,6 +320,7 @@ function LeagueCardComponent({
         shadowRadius: 18,
         shadowOffset: { width: 0, height: 8 },
         elevation: 5,
+        opacity: actionsLocked ? 0.78 : 1,
       }}
     >
       {/* Parte superior:
@@ -286,7 +329,7 @@ function LeagueCardComponent({
       <View className="flex-row items-start justify-between mb-3">
         <View className="flex-row items-center">
           {/*
-           * RoleBadge recibe directamente bgColor/textColor de ROLE_CONFIG,
+           * RoleBadge recibe directamente bgColor/textColor de getRoleBadgeConfig,
            * que ya usa las mismas claves que las props del componente.
            * No hay transformación intermedia ni estilos externos.
            */}
@@ -301,9 +344,17 @@ function LeagueCardComponent({
           {league.role === 'admin' && (
             <TouchableOpacity
               activeOpacity={0.85}
-              onPress={() => onPressSettings?.(league)}
+              disabled={actionsLocked}
+              onPress={() => {
+                if (!actionsLocked) {
+                  onPressSettings?.(league);
+                }
+              }}
               className="ml-2 w-9 h-9 rounded-xl items-center justify-center"
-              style={{ backgroundColor: Colors.bg.surface2 }}
+              style={{
+                backgroundColor: Colors.bg.surface2,
+                opacity: actionsLocked ? 0.45 : 1,
+              }}
             >
               <Ionicons
                 name="settings-outline"
@@ -316,7 +367,8 @@ function LeagueCardComponent({
 
         <FavoriteButton
           isFavorite={league.isFavorite}
-          onPress={() => onToggleFavorite?.(league.id)}
+          disabled={actionsLocked}
+          onPress={handleFavoritePress}
         />
       </View>
 
@@ -324,7 +376,7 @@ function LeagueCardComponent({
           escudo a la izquierda
           nombre, temporada y estado a la derecha */}
       <View className="flex-row items-center mb-3">
-        <LeagueCrest name={league.name} />
+        <LeagueCrest crestUrl={league.crestUrl} />
 
         <View className="flex-1 ml-4">
           <Text
@@ -393,6 +445,8 @@ function LeagueCardComponent({
             ))}
           </View>
         </View>
+
+
       </View>
 
 
@@ -403,10 +457,10 @@ function LeagueCardComponent({
           - deshabilitado si finalizada sin permisos */}
       <PrimaryPillButton
         label={primaryLabel}
-        disabled={isDisabled}
+        disabled={isDisabled || actionsLocked}
         onPress={() => {
-          if (!isDisabled) {
-            onPress?.(league);
+          if (!isDisabled && !actionsLocked) {
+            handlePrimaryPress();
           }
         }}
         minWidth={0}

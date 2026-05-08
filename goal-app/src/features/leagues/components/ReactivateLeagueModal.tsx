@@ -1,12 +1,12 @@
-import React, { useRef, useCallback, useEffect, memo } from 'react';
+import React, { memo, useCallback, useEffect, useRef, useState } from 'react';
 import {
-  View,
-  Text,
-  TouchableOpacity,
-  Modal,
   Animated,
   Easing,
+  Modal,
   Pressable,
+  Text,
+  TouchableOpacity,
+  View,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { Colors } from '@/src/shared/constants/colors';
@@ -15,8 +15,16 @@ import { theme } from '@/src/shared/styles/theme';
 interface ReactivateLeagueModalProps {
   visible: boolean;
   leagueName: string;
-  onConfirm: () => void;
+  /**
+   * La reactivación real debe vivir fuera del modal.
+   * El modal solo confirma la acción y evita dobles pulsaciones mientras se resuelve.
+   */
+  onConfirm: () => void | Promise<void> | Promise<boolean> | boolean;
   onCancel: () => void;
+  /** Estado de carga externo opcional por si el padre ya controla la petición a la API. */
+  isSubmitting?: boolean;
+  /** Mensaje opcional para mostrar errores sin cerrar el modal. */
+  errorMessage?: string | null;
 }
 
 function ReactivateLeagueModalComponent({
@@ -24,41 +32,59 @@ function ReactivateLeagueModalComponent({
   leagueName,
   onConfirm,
   onCancel,
+  isSubmitting = false,
+  errorMessage = null,
 }: ReactivateLeagueModalProps) {
   const slideAnim = useRef(new Animated.Value(80)).current;
   const opacityAnim = useRef(new Animated.Value(0)).current;
+  const [localSubmitting, setLocalSubmitting] = useState(false);
+
+  const submitting = isSubmitting || localSubmitting;
+  const safeLeagueName = leagueName?.trim() || 'esta liga';
 
   useEffect(() => {
-    if (visible) {
-      Animated.parallel([
-        Animated.timing(opacityAnim, {
-          toValue: 1,
-          duration: 220,
-          easing: Easing.out(Easing.cubic),
-          useNativeDriver: true,
-        }),
-        Animated.timing(slideAnim, {
-          toValue: 0,
-          duration: 280,
-          easing: Easing.out(Easing.back(1.1)),
-          useNativeDriver: true,
-        }),
-      ]).start();
-    } else {
-      Animated.parallel([
-        Animated.timing(opacityAnim, {
-          toValue: 0,
-          duration: 180,
-          useNativeDriver: true,
-        }),
-        Animated.timing(slideAnim, {
-          toValue: 80,
-          duration: 200,
-          useNativeDriver: true,
-        }),
-      ]).start();
-    }
+    Animated.parallel([
+      Animated.timing(opacityAnim, {
+        toValue: visible ? 1 : 0,
+        duration: visible ? 220 : 180,
+        easing: visible ? Easing.out(Easing.cubic) : Easing.in(Easing.cubic),
+        useNativeDriver: true,
+      }),
+      Animated.timing(slideAnim, {
+        toValue: visible ? 0 : 80,
+        duration: visible ? 280 : 200,
+        easing: visible ? Easing.out(Easing.back(1.1)) : Easing.in(Easing.cubic),
+        useNativeDriver: true,
+      }),
+    ]).start();
   }, [visible, opacityAnim, slideAnim]);
+
+  useEffect(() => {
+    if (!visible) {
+      setLocalSubmitting(false);
+    }
+  }, [visible]);
+
+  const handleConfirm = useCallback(async () => {
+    if (submitting) return;
+
+    try {
+      setLocalSubmitting(true);
+      await onConfirm();
+      /**
+       * No cerramos aquí de forma forzada.
+       * El padre debe cerrar el modal solo cuando la API confirme la reactivación
+       * y después de refrescar la lista de ligas desde backend.
+       */
+    } finally {
+      setLocalSubmitting(false);
+    }
+  }, [onConfirm, submitting]);
+
+  const handleCancel = useCallback(() => {
+    if (submitting) return;
+    onCancel();
+  }, [onCancel, submitting]);
 
   return (
     <Modal transparent visible={visible} animationType="none" statusBarTranslucent>
@@ -70,7 +96,7 @@ function ReactivateLeagueModalComponent({
           opacity: opacityAnim,
         }}
       >
-        <Pressable style={{ flex: 1 }} onPress={onCancel} />
+        <Pressable style={{ flex: 1 }} onPress={handleCancel} />
 
         <Animated.View
           style={{
@@ -78,17 +104,17 @@ function ReactivateLeagueModalComponent({
             backgroundColor: Colors.bg.surface1,
             borderTopLeftRadius: 32,
             borderTopRightRadius: 32,
-            paddingHorizontal: 24,
-            paddingTop: 12,
+            paddingHorizontal: theme.spacing.xl,
+            paddingTop: theme.spacing.md,
             paddingBottom: 40,
             borderWidth: 1,
             borderColor: Colors.bg.surface2,
           }}
         >
-          {/* Handle */}
+          {/* Handle visual del bottom sheet. */}
           <View
             style={{
-              width: 40,
+              width: 42,
               height: 4,
               borderRadius: 2,
               backgroundColor: Colors.bg.surface2,
@@ -97,7 +123,7 @@ function ReactivateLeagueModalComponent({
             }}
           />
 
-          {/* Icon */}
+          {/* Icono principal: comunica que la liga volverá a estar disponible. */}
           <View
             style={{
               height: 72,
@@ -106,7 +132,7 @@ function ReactivateLeagueModalComponent({
               alignItems: 'center',
               justifyContent: 'center',
               alignSelf: 'center',
-              marginBottom: 20,
+              marginBottom: theme.spacing.xl,
               backgroundColor: `${Colors.brand.primary}18`,
               borderWidth: 1,
               borderColor: `${Colors.brand.primary}30`,
@@ -118,65 +144,93 @@ function ReactivateLeagueModalComponent({
           <Text
             style={{
               color: Colors.text.primary,
-              fontSize: 22,
-              fontWeight: '700',
-              lineHeight: 28,
+              fontSize: theme.fontSize.xxl,
+              fontWeight: '800',
+              lineHeight: 30,
               textAlign: 'center',
-              marginBottom: 12,
+              marginBottom: theme.spacing.md,
             }}
           >
-            Reactivar Liga
+            Reactivar liga
           </Text>
 
           <Text
             style={{
               color: Colors.text.secondary,
-              fontSize: 15,
+              fontSize: theme.fontSize.sm,
               lineHeight: 22,
               textAlign: 'center',
-              marginBottom: 32,
-              paddingHorizontal: 8,
+              marginBottom: theme.spacing.lg,
+              paddingHorizontal: theme.spacing.sm,
             }}
           >
-            ¿Estás seguro que deseas reactivar{' '}
-            <Text style={{ color: Colors.text.primary, fontWeight: '600' }}>
-              {leagueName}
+            Vas a reactivar{' '}
+            <Text style={{ color: Colors.text.primary, fontWeight: '700' }}>
+              {safeLeagueName}
             </Text>
-            ? Todos los miembros anteriores volverán a tener acceso inmediato.
+            . Cuando la API confirme el cambio, la liga volverá a aparecer como activa y el botón pasará a ser Entrar.
           </Text>
 
-          {/* Buttons */}
+          {errorMessage ? (
+            <View
+              style={{
+                flexDirection: 'row',
+                alignItems: 'center',
+                gap: theme.spacing.sm,
+                backgroundColor: `${Colors.semantic.error}14`,
+                borderColor: `${Colors.semantic.error}35`,
+                borderWidth: 1,
+                borderRadius: theme.borderRadius.xl,
+                padding: theme.spacing.md,
+                marginBottom: theme.spacing.lg,
+              }}
+            >
+              <Ionicons name="alert-circle-outline" size={18} color={Colors.semantic.error} />
+              <Text style={{ color: Colors.semantic.error, flex: 1, fontSize: theme.fontSize.sm }}>
+                {errorMessage}
+              </Text>
+            </View>
+          ) : null}
+
+          {/* Acción confirmada: se bloquea durante la petición para evitar dobles taps. */}
           <TouchableOpacity
             activeOpacity={0.88}
-            onPress={onConfirm}
+            disabled={submitting}
+            onPress={handleConfirm}
             style={{
               height: 58,
-              borderRadius: 18,
+              borderRadius: theme.borderRadius.xl,
               alignItems: 'center',
               justifyContent: 'center',
-              backgroundColor: Colors.brand.primary,
-              marginBottom: 12,
+              backgroundColor: submitting ? Colors.text.disabled : Colors.brand.primary,
+              marginBottom: theme.spacing.md,
               flexDirection: 'row',
-              gap: 8,
+              gap: theme.spacing.sm,
             }}
           >
-            <Ionicons name="refresh-outline" size={20} color="#0A0A0C" />
-            <Text style={{ color: '#0A0A0C', fontSize: 16, fontWeight: '700' }}>
-              Sí, reactivar liga
+            <Ionicons
+              name={submitting ? 'hourglass-outline' : 'refresh-outline'}
+              size={20}
+              color={Colors.bg.base}
+            />
+            <Text style={{ color: Colors.bg.base, fontSize: theme.fontSize.md, fontWeight: '800' }}>
+              {submitting ? 'Reactivando...' : 'Sí, reactivar liga'}
             </Text>
           </TouchableOpacity>
 
           <TouchableOpacity
             activeOpacity={0.7}
-            onPress={onCancel}
+            disabled={submitting}
+            onPress={handleCancel}
             style={{
               height: 52,
-              borderRadius: 18,
+              borderRadius: theme.borderRadius.xl,
               alignItems: 'center',
               justifyContent: 'center',
+              opacity: submitting ? 0.45 : 1,
             }}
           >
-            <Text style={{ color: Colors.text.secondary, fontSize: 16, fontWeight: '500' }}>
+            <Text style={{ color: Colors.text.secondary, fontSize: theme.fontSize.md, fontWeight: '600' }}>
               Cancelar
             </Text>
           </TouchableOpacity>

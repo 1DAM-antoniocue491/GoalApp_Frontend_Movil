@@ -1,10 +1,11 @@
 /**
- * League Service - Capa de acceso a datos de ligas.
+ * League Service - Capa de dominio para ligas.
  *
  * Responsabilidades:
- * - Llamar a la API de ligas.
- * - Mapear respuestas del backend al modelo de UI (LeagueItem).
- * - Mantener fallbacks defensivos sin romper onboarding.
+ * - Convertir respuestas backend a LeagueItem.
+ * - Unificar favoritos persistentes con /usuarios/me/ligas-seguidas.
+ * - Reactivar ligas contra API, no con estado local temporal.
+ * - Mantener el onboarding rápido: equipo asignado se enriquece en segundo plano.
  */
 
 import type { LeagueItem, LeagueRole } from '@/src/shared/types/league';
@@ -12,15 +13,20 @@ import type { Team } from '@/src/shared/types/team';
 import type { User } from '@/src/shared/types/user';
 import { logger } from '@/src/shared/utils/logger';
 import { ApiError } from '@/src/shared/api/errors';
+import { toLeagueRole } from '@/src/shared/utils/roles';
 import {
   acceptJoinCode,
   createLeague as createLeagueApi,
   deleteLeague as deleteLeagueApi,
+  followLeague,
+  getFollowedLeagues,
   getLeagueById as getLeagueByIdApi,
   getLeagueConfig as getLeagueConfigApi,
   getMyLeagues,
   getMyTeamInLeague,
+  reactivateLeague as reactivateLeagueApi,
   setLeagueConfig,
+  unfollowLeague,
   updateLeague as updateLeagueApi,
   updateLeagueConfig,
   validateJoinCode,
@@ -36,10 +42,6 @@ import type {
   MyTeamInLeagueResponse,
   UpdateLeagueConfigRequest,
 } from '../types/league.api.types';
-
-// ============================================================
-// TIPOS Y HELPERS
-// ============================================================
 
 export interface ServiceResult<T = undefined> {
   success: boolean;
@@ -61,29 +63,8 @@ function getErrorMessage(error: unknown): string {
   }
 }
 
-/** Mapea cualquier rol del backend al tipo usado por las tarjetas de liga. */
 function mapRol(rol?: string | null): LeagueRole {
-  const value = String(rol ?? '').trim().toLowerCase();
-  switch (value) {
-    case 'admin':
-    case 'administrador':
-      return 'admin';
-    case 'coach':
-    case 'entrenador':
-      return 'coach';
-    case 'delegado':
-    case 'delegado_campo':
-    case 'field_delegate':
-    case 'delegate':
-      return 'field_delegate';
-    case 'jugador':
-    case 'player':
-      return 'player';
-    case 'observador':
-    case 'observer':
-    default:
-      return 'observer';
-  }
+  return toLeagueRole(rol);
 }
 
 function shouldLoadMyTeamForRole(role: LeagueRole): boolean {
@@ -94,19 +75,20 @@ function mapMyTeamResponseToPatch(team: MyTeamInLeagueResponse): Partial<LeagueI
   const teamId = team.id_equipo ?? team.id ?? null;
   const teamName = safeString(team.nombre);
 
-  // teamId/teamName no existen en todos los tipos antiguos de LeagueItem.
-  // Se devuelven como Partial para no romper si el tipo compartido aún no los declara.
   return {
     ...(teamId != null ? { teamId: String(teamId) } : {}),
     ...(teamName ? { teamName } : {}),
   } as Partial<LeagueItem>;
 }
 
-// ============================================================
-// MAPEO BACKEND → FRONTEND
-// ============================================================
+function buildFollowedIdSet(ids: number[]): Set<number> {
+  return new Set(ids.filter((id) => Number.isFinite(id)));
+}
 
-function mapLeagueWithRoleToLeagueItem(league: LigaConRolResponse): LeagueItem {
+function mapLeagueWithRoleToLeagueItem(
+  league: LigaConRolResponse,
+  followedLeagueIds: Set<number>,
+): LeagueItem {
   if (!league || typeof league.id_liga !== 'number') {
     throw new ApiError(500, 'Liga inválida recibida desde la API');
   }
@@ -123,9 +105,13 @@ function mapLeagueWithRoleToLeagueItem(league: LigaConRolResponse): LeagueItem {
     season: safeString(league.temporada, '-'),
     status: league.activa ? 'active' : 'finished',
     role,
-    isFavorite: false,
+    /**
+     * Favorito persistente: se cruza con GET /usuarios/me/ligas-seguidas.
+     * No se calcula localmente porque debe sobrevivir a recargas de app.
+     */
+    isFavorite: followedLeagueIds.has(league.id_liga),
     teamsCount: league.equipos_total ?? 0,
-    // La UI móvil ya no usa logo remoto. Mantener null fuerza el escudo visual generado.
+    // La UI móvil no usa logo remoto; LeagueCard genera un escudo visual premium.
     crestUrl: null,
     categoria: league.categoria ?? undefined,
     canReactivate: !league.activa && role === 'admin',
@@ -134,7 +120,7 @@ function mapLeagueWithRoleToLeagueItem(league: LigaConRolResponse): LeagueItem {
   } as LeagueItem;
 }
 
-function mapLigaToItem(liga: LigaResponse, rol: string): LeagueItem {
+function mapLigaToItem(liga: LigaResponse, rol: string, isFavorite = false): LeagueItem {
   const role = mapRol(rol);
   return {
     id: String(liga.id_liga),
@@ -142,18 +128,33 @@ function mapLigaToItem(liga: LigaResponse, rol: string): LeagueItem {
     season: safeString(liga.temporada, '-'),
     status: liga.activa ? 'active' : 'finished',
     role,
-    isFavorite: false,
+    isFavorite,
     teamsCount: liga.equipos_total ?? 0,
-    // Sin logo en móvil: se muestra escudo generado con colores premium.
     crestUrl: null,
     categoria: liga.categoria ?? undefined,
     canReactivate: !liga.activa && role === 'admin',
   };
 }
 
-// ============================================================
-// LIGAS DEL USUARIO + EQUIPO ASIGNADO
-// ============================================================
+/**
+ * Consulta favoritos sin bloquear el onboarding si falla.
+ * Si el endpoint cae, la app sigue funcionando; simplemente no marca estrellas.
+ */
+async function fetchFollowedLeagueIds(): Promise<number[]> {
+  try {
+    const followed = (await getFollowedLeagues()) as unknown[];
+    // Algunos despliegues devuelven objetos { id_liga }, otros solo IDs.
+    // Este mapper tolerante evita perder favoritos si cambia la forma de respuesta.
+    return followed
+      .map((item) => (typeof item === 'number' ? item : Number((item as { id_liga?: number })?.id_liga)))
+      .filter((id) => Number.isFinite(id));
+  } catch (error) {
+    logger.warn('leagueService/fetchFollowedLeagueIds', 'No se pudieron cargar ligas seguidas', {
+      error: getErrorMessage(error),
+    });
+    return [];
+  }
+}
 
 /**
  * Enriquecimiento no crítico para mostrar equipo asignado.
@@ -186,12 +187,14 @@ export async function enrichLeagueTeamAssignments(leagues: LeagueItem[]): Promis
 
 export async function fetchMyLeagues(options?: { enrichTeams?: boolean }): Promise<LeagueItem[]> {
   try {
-    const ligasConRol = await getMyLeagues();
+    const [ligasConRol, followedIds] = await Promise.all([getMyLeagues(), fetchFollowedLeagueIds()]);
+
     if (!Array.isArray(ligasConRol)) {
       throw new ApiError(500, 'Respuesta inesperada al cargar ligas');
     }
 
-    const mapped = ligasConRol.map(mapLeagueWithRoleToLeagueItem);
+    const followedSet = buildFollowedIdSet(followedIds);
+    const mapped = ligasConRol.map((league) => mapLeagueWithRoleToLeagueItem(league, followedSet));
     return options?.enrichTeams === false ? mapped : enrichLeagueTeamAssignments(mapped);
   } catch (error) {
     logger.warn('leagueService/fetchMyLeagues', 'Error al obtener ligas del usuario', {
@@ -201,8 +204,58 @@ export async function fetchMyLeagues(options?: { enrichTeams?: boolean }): Promi
   }
 }
 
+/** Alterna favorito en API y devuelve la lista refrescada desde backend. */
+export async function toggleFavoriteLeagueService(
+  leagueId: string,
+  currentIsFavorite: boolean,
+): Promise<ServiceResult<LeagueItem[]>> {
+  const ligaId = Number(leagueId);
+  if (!Number.isFinite(ligaId)) {
+    return { success: false, error: 'Liga no válida.' };
+  }
+
+  try {
+    if (currentIsFavorite) {
+      await unfollowLeague(ligaId);
+    } else {
+      await followLeague(ligaId);
+    }
+
+    // La fuente de verdad vuelve a ser la API para que el favorito sobreviva a recargas.
+    const leagues = await fetchMyLeagues({ enrichTeams: true });
+    return { success: true, data: leagues };
+  } catch (error) {
+    logger.warn('leagueService/toggleFavoriteLeagueService', 'Error alternando favorito', {
+      ligaId,
+      currentIsFavorite,
+      error: getErrorMessage(error),
+    });
+    return { success: false, error: 'No se pudo actualizar el favorito.' };
+  }
+}
+
+/** Reactiva una liga finalizada y devuelve ligas refrescadas desde API. */
+export async function reactivateLeagueService(leagueId: string): Promise<ServiceResult<LeagueItem[]>> {
+  const ligaId = Number(leagueId);
+  if (!Number.isFinite(ligaId)) {
+    return { success: false, error: 'Liga no válida.' };
+  }
+
+  try {
+    await reactivateLeagueApi(ligaId);
+    const leagues = await fetchMyLeagues({ enrichTeams: true });
+    return { success: true, data: leagues };
+  } catch (error) {
+    logger.warn('leagueService/reactivateLeagueService', 'Error reactivando liga', {
+      ligaId,
+      error: getErrorMessage(error),
+    });
+    return { success: false, error: 'No se pudo reactivar la liga.' };
+  }
+}
+
 /**
- * Une al usuario autenticado a una liga usando el mismo flujo que web:
+ * Une al usuario autenticado a una liga usando el flujo real de web:
  * validar código → aceptar código con body {} → refrescar ligas.
  */
 export async function joinLeagueByCodeService(
@@ -238,10 +291,6 @@ export async function joinLeagueByCodeService(
   }
 }
 
-// ============================================================
-// CREACIÓN / DETALLE
-// ============================================================
-
 async function saveLeagueConfig(ligaId: number, config: LigaConfiguracionRequest): Promise<void> {
   try {
     await setLeagueConfig(ligaId, config);
@@ -260,21 +309,13 @@ export async function createLeagueWithConfig(input: {
   config?: LigaConfiguracionRequest;
 }): Promise<LeagueItem> {
   try {
-    // El modal móvil no permite logo ni máximo de partidos; si algún caller antiguo
-    // los manda, se eliminan aquí para respetar la decisión de producto.
-    const sanitizedLeague: LigaCreateRequest = {
-      nombre: input.league.nombre,
-      temporada: input.league.temporada,
-      categoria: input.league.categoria ?? undefined,
-      activa: input.league.activa ?? true,
-      duracion_partido: input.league.duracion_partido ?? undefined,
-    };
+    const liga = await createLeagueApi(input.league);
 
-    const liga = await createLeagueApi(sanitizedLeague);
     if (input.config) {
       await saveLeagueConfig(liga.id_liga, input.config);
     }
-    return mapLigaToItem(liga, 'admin');
+
+    return mapLigaToItem(liga, 'admin', false);
   } catch (error) {
     logger.error('leagueService/createLeagueWithConfig', 'Error al crear liga', {
       error: getErrorMessage(error),
@@ -286,7 +327,7 @@ export async function createLeagueWithConfig(input: {
 export async function fetchLeagueById(ligaId: string): Promise<LeagueItem | null> {
   try {
     const liga = await getLeagueByIdApi(Number(ligaId));
-    return mapLigaToItem(liga, 'observer');
+    return mapLigaToItem(liga, 'observer', false);
   } catch (error) {
     logger.error('leagueService/fetchLeagueById', `Error al obtener liga ${ligaId}`, {
       error: getErrorMessage(error),
@@ -296,14 +337,11 @@ export async function fetchLeagueById(ligaId: string): Promise<LeagueItem | null
 }
 
 // ============================================================
-// UTILIDADES LOCALES
+// Compatibilidad con código antiguo
 // ============================================================
 
-/**
- * Compatibilidad temporal: se mantiene la función para llamadas existentes.
- * Ya no debe depender de mocks para el flujo principal.
- */
 export function getTeamById(_id: string): Team | undefined {
+  // Ya no usamos mocks para asociar equipos en cards. La asociación real se obtiene por API.
   return undefined;
 }
 
@@ -321,6 +359,10 @@ export function isLeagueFavorite(user: User, leagueId: string): boolean {
   return user.favoriteLeagues.includes(leagueId);
 }
 
+/**
+ * Fallback local antiguo. Mantenerlo exportado evita roturas en imports viejos,
+ * pero el onboarding debe usar reactivateLeagueService para persistir en backend.
+ */
 export function reactivateLeague(leagueId: string, leagues: LeagueItem[]): LeagueItem[] {
   return leagues.map((league) =>
     league.id === leagueId ? { ...league, status: 'active', canReactivate: false } : league,
@@ -328,10 +370,13 @@ export function reactivateLeague(leagueId: string, leagues: LeagueItem[]): Leagu
 }
 
 // ============================================================
-// CONFIGURACIÓN DE LIGA
+// Configuración de liga
 // ============================================================
 
-export const DEFAULT_LEAGUE_CONFIG: Omit<LeagueConfigResponse, 'id_configuracion' | 'id_liga' | 'created_at' | 'updated_at'> = {
+export const DEFAULT_LEAGUE_CONFIG: Omit<
+  LeagueConfigResponse,
+  'id_configuracion' | 'id_liga' | 'created_at' | 'updated_at'
+> = {
   hora_partidos: '17:00',
   min_equipos: 2,
   max_equipos: 20,
@@ -342,7 +387,7 @@ export const DEFAULT_LEAGUE_CONFIG: Omit<LeagueConfigResponse, 'id_configuracion
   min_jugadores_equipo: 7,
   min_partidos_entre_equipos: 1,
   minutos_partido: 90,
-  // No se muestra en UI móvil, pero backend puede necesitarlo en el contrato.
+  // Campo backend conservado para compatibilidad, aunque ya no se edita en el modal móvil.
   max_partidos: 30,
 };
 
@@ -352,13 +397,17 @@ export async function getLeagueConfigService(ligaId: number): Promise<ServiceRes
     return { success: true, data };
   } catch (error) {
     const status = error instanceof ApiError ? error.status : 0;
+
     if (status === 404) {
-      const defaultConfig: LeagueConfigResponse = {
-        id_configuracion: 0,
-        id_liga: ligaId,
-        ...DEFAULT_LEAGUE_CONFIG,
+      logger.warn('leagueService/getLeagueConfigService', 'Config no encontrada, usando defaults', { ligaId });
+      return {
+        success: true,
+        data: {
+          id_configuracion: 0,
+          id_liga: ligaId,
+          ...DEFAULT_LEAGUE_CONFIG,
+        },
       };
-      return { success: true, data: defaultConfig };
     }
 
     logger.error('leagueService/getLeagueConfigService', 'Error obteniendo configuración', {
@@ -385,7 +434,10 @@ export async function updateLeagueConfigService(
   }
 }
 
-export async function updateLeagueService(ligaId: number, data: LigaUpdateRequest): Promise<ServiceResult<LigaResponse>> {
+export async function updateLeagueService(
+  ligaId: number,
+  data: LigaUpdateRequest,
+): Promise<ServiceResult<LigaResponse>> {
   try {
     const result = await updateLeagueApi(ligaId, data);
     return { success: true, data: result };
@@ -396,83 +448,6 @@ export async function updateLeagueService(ligaId: number, data: LigaUpdateReques
     });
     return { success: false, error: 'No se pudieron guardar los datos de la liga.' };
   }
-}
-
-async function saveOrUpdateLeagueConfigService(
-  ligaId: number,
-  config: UpdateLeagueConfigRequest,
-  configExists?: boolean,
-): Promise<ServiceResult<LeagueConfigResponse | undefined>> {
-  try {
-    if (configExists === false) {
-      await setLeagueConfig(ligaId, config as LigaConfiguracionRequest);
-      const created = await getLeagueConfigApi(ligaId);
-      return { success: true, data: created };
-    }
-
-    const updated = await updateLeagueConfig(ligaId, config);
-    return { success: true, data: updated };
-  } catch (error) {
-    const status = error instanceof ApiError ? error.status : 0;
-    const msg = getErrorMessage(error);
-
-    try {
-      if (status === 404) {
-        await setLeagueConfig(ligaId, config as LigaConfiguracionRequest);
-        const created = await getLeagueConfigApi(ligaId);
-        return { success: true, data: created };
-      }
-      if (msg.includes('ya tiene configuración')) {
-        const updated = await updateLeagueConfig(ligaId, config);
-        return { success: true, data: updated };
-      }
-    } catch (fallbackError) {
-      logger.error('leagueService/saveOrUpdateLeagueConfigService', 'Fallback de config falló', {
-        ligaId,
-        error: getErrorMessage(fallbackError),
-      });
-      return { success: false, error: 'No se pudo guardar la configuración.' };
-    }
-
-    logger.error('leagueService/saveOrUpdateLeagueConfigService', 'Error guardando configuración', {
-      ligaId,
-      error: msg,
-    });
-    return { success: false, error: 'No se pudo guardar la configuración.' };
-  }
-}
-
-export async function updateLeagueWithConfigService(input: {
-  ligaId: number;
-  league: LigaUpdateRequest;
-  config: UpdateLeagueConfigRequest;
-  configExists?: boolean;
-}): Promise<ServiceResult> {
-  const { ligaId, league, config, configExists } = input;
-
-  // No se envía logo ni máximo de partidos desde UI móvil; la liga conserva
-  // esos campos fuera del formulario para evitar falsas expectativas al usuario.
-  const sanitizedLeague: LigaUpdateRequest = {
-    nombre: league.nombre,
-    temporada: league.temporada,
-    categoria: league.categoria,
-    activa: league.activa,
-  };
-
-  const leagueResult = await updateLeagueService(ligaId, sanitizedLeague);
-  if (!leagueResult.success) {
-    return { success: false, error: leagueResult.error };
-  }
-
-  const configResult = await saveOrUpdateLeagueConfigService(ligaId, config, configExists);
-  if (!configResult.success) {
-    return {
-      success: false,
-      error: configResult.error ?? 'Los datos de liga se guardaron pero falló la configuración.',
-    };
-  }
-
-  return { success: true };
 }
 
 export async function deleteLeagueService(ligaId: number): Promise<ServiceResult> {
@@ -486,4 +461,27 @@ export async function deleteLeagueService(ligaId: number): Promise<ServiceResult
     });
     return { success: false, error: 'No se pudo eliminar la liga.' };
   }
+}
+
+export async function updateLeagueWithConfigService(input: {
+  ligaId: number;
+  league: LigaUpdateRequest;
+  config: UpdateLeagueConfigRequest;
+  configExists?: boolean;
+}): Promise<ServiceResult> {
+  const { ligaId, league, config } = input;
+
+  const leagueResult = await updateLeagueService(ligaId, league);
+  if (!leagueResult.success) return { success: false, error: leagueResult.error };
+
+  const configResult = await updateLeagueConfigService(ligaId, config);
+  if (!configResult.success) {
+    return {
+      success: false,
+      error: configResult.error ?? 'Los datos de liga se guardaron pero falló la configuración.',
+    };
+  }
+
+  logger.info('leagueService/updateLeagueWithConfigService', 'Liga y config actualizadas', { ligaId });
+  return { success: true };
 }

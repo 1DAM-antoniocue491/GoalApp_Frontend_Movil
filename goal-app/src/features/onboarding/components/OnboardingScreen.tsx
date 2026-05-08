@@ -3,6 +3,7 @@ import {
   View,
   Text,
   ScrollView,
+  Alert,
   Animated,
   Easing,
   TouchableOpacity,
@@ -26,7 +27,6 @@ import { LeagueSettingsModal } from '@/src/features/leagues/components/LeagueSet
 import type { LigaCreateRequest } from '@/src/features/leagues/types/league.api.types';
 
 import { LeagueItem, LeagueFilter } from '@/src/shared/types/league';
-import { reactivateLeague } from '@/src/features/leagues/services/leagueService';
 import { useLeagues } from '@/src/features/leagues/hooks/useLeagues';
 import { useAuth } from '@/src/providers/AuthProvider';
 import { activeLeagueStore } from '@/src/state/activeLeague/activeLeagueStore';
@@ -78,8 +78,11 @@ function OnboardingScreenContent() {
     submitting: isCreating,
     createError,
     createNewLeague,
+    joiningByCode,
     joinError,
     joinLeagueByCode,
+    toggleFavoriteLeague,
+    reactivateLeagueById,
   } = useLeagues();
   const [leagues, setLeagues] = useState<LeagueItem[]>([]);
   const [selectedFilter, setSelectedFilter] = useState<LeagueFilter>('all');
@@ -180,16 +183,17 @@ function OnboardingScreenContent() {
     return result;
   }, [leagues, searchTerm, selectedFilter]);
 
-  // Toggle favorite – updates immediately in state
-  const handleToggleFavorite = useCallback((leagueId: string) => {
-    setLeagues((prev) =>
-      prev.map((league) =>
-        league.id === leagueId
-          ? { ...league, isFavorite: !league.isFavorite }
-          : league
-      )
-    );
-  }, []);
+  /**
+   * Favorito persistente.
+   * La estrella no se guarda en estado local: llama a la API y después el hook
+   * refresca /usuarios/me/ligas-seguidas para que sobreviva a recargas.
+   */
+  const handleToggleFavorite = useCallback(
+    async (leagueId: string) => {
+      await toggleFavoriteLeague(leagueId);
+    },
+    [toggleFavoriteLeague],
+  );
 
   const handleEnterLeague = useCallback(
     (league: LeagueItem) => {
@@ -211,26 +215,33 @@ function OnboardingScreenContent() {
     setReactivateTarget(league);
   }, []);
 
-  const handleConfirmReactivate = useCallback(() => {
+  const handleConfirmReactivate = useCallback(async () => {
     if (!reactivateTarget) return;
-    // reactivateLeague preserva todos los datos de la liga —
-    // solo cambia status a 'active' y desactiva canReactivate.
-    // Sustituir aquí por llamada al backend cuando esté disponible.
-    setLeagues((prev) => reactivateLeague(reactivateTarget.id, prev));
-    setReactivateTarget(null);
-  }, [reactivateTarget]);
+
+    /**
+     * Reactivar debe persistir en backend.
+     * Si solo cambiamos estado local, al recargar vuelve a aparecer finalizada.
+     */
+    const success = await reactivateLeagueById(reactivateTarget.id);
+    if (success) {
+      setReactivateTarget(null);
+    }
+  }, [reactivateLeagueById, reactivateTarget]);
 
   const handleCancelReactivate = useCallback(() => {
     setReactivateTarget(null);
   }, []);
 
-  // Join league flow — usa API real y refresca Mis ligas desde backend.
-  const handleJoinConfirm = useCallback(async (code: string) => {
-    const success = await joinLeagueByCode(code);
-    if (success) {
-      setShowJoinModal(false);
-    }
-  }, [joinLeagueByCode]);
+  // Join league flow — usa API real y refresca la lista de ligas al aceptar el código.
+  const handleJoinConfirm = useCallback(
+    async (code: string) => {
+      const success = await joinLeagueByCode(code);
+      if (success) {
+        setShowJoinModal(false);
+      }
+    },
+    [joinLeagueByCode],
+  );
 
   // Create league flow — el modal entrega LigaCreateRequest listo para el backend
   const handleCreateConfirm = useCallback(async (data: LigaCreateRequest) => {
@@ -520,7 +531,8 @@ function OnboardingScreenContent() {
       <JoinLeagueModal
         visible={showJoinModal}
         onConfirm={handleJoinConfirm}
-        onCancel={() => setShowJoinModal(false)}
+        onCancel={() => { if (!joiningByCode) setShowJoinModal(false); }}
+        submitting={joiningByCode}
         errorMessage={joinError}
       />
 

@@ -10,6 +10,7 @@ import {
   Pressable,
   KeyboardAvoidingView,
   Platform,
+  ActivityIndicator,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { Colors } from '@/src/shared/constants/colors';
@@ -19,19 +20,26 @@ interface JoinLeagueModalProps {
   visible: boolean;
   onConfirm: (code: string) => void | Promise<void>;
   onCancel: () => void;
+  /** Se muestra mientras se valida/acepta el código en la API. */
+  submitting?: boolean;
+  /** Error devuelto por useLeagues.joinLeagueByCode. */
   errorMessage?: string | null;
 }
 
-function JoinLeagueModalComponent({ visible, onConfirm, onCancel, errorMessage }: JoinLeagueModalProps) {
+function JoinLeagueModalComponent({
+  visible,
+  onConfirm,
+  onCancel,
+  submitting = false,
+  errorMessage,
+}: JoinLeagueModalProps) {
   const [code, setCode] = useState('');
-  const [submitting, setSubmitting] = useState(false);
   const slideAnim = useRef(new Animated.Value(100)).current;
   const opacityAnim = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
     if (visible) {
       setCode('');
-      setSubmitting(false);
       Animated.parallel([
         Animated.timing(opacityAnim, {
           toValue: 1,
@@ -48,29 +56,43 @@ function JoinLeagueModalComponent({ visible, onConfirm, onCancel, errorMessage }
       ]).start();
     } else {
       Animated.parallel([
-        Animated.timing(opacityAnim, { toValue: 0, duration: 160, useNativeDriver: true }),
-        Animated.timing(slideAnim, { toValue: 100, duration: 200, useNativeDriver: true }),
+        Animated.timing(opacityAnim, {
+          toValue: 0,
+          duration: 160,
+          useNativeDriver: true,
+        }),
+        Animated.timing(slideAnim, {
+          toValue: 100,
+          duration: 200,
+          useNativeDriver: true,
+        }),
       ]).start();
     }
   }, [visible, opacityAnim, slideAnim]);
 
-  const normalizedPreview = code.trim().replace(/[^a-zA-Z0-9]/g, '').toUpperCase();
-  const isValid = /^[A-Z0-9]{6,12}$/.test(normalizedPreview);
+  const handleConfirm = useCallback(() => {
+    if (code.trim().length === 0 || submitting) return;
+    onConfirm(code.trim());
+  }, [code, onConfirm, submitting]);
 
-  const handleConfirm = useCallback(async () => {
-    if (!isValid || submitting) return;
-    setSubmitting(true);
-    await onConfirm(normalizedPreview);
-    setSubmitting(false);
-  }, [isValid, submitting, normalizedPreview, onConfirm]);
+  const isValid = code.trim().length >= 3;
+  const canSubmit = isValid && !submitting;
 
   return (
     <Modal transparent visible={visible} animationType="none" statusBarTranslucent>
-      <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
+      <KeyboardAvoidingView
+        style={{ flex: 1 }}
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+      >
         <Animated.View
-          style={{ flex: 1, justifyContent: 'flex-end', backgroundColor: 'rgba(0,0,0,0.65)', opacity: opacityAnim }}
+          style={{
+            flex: 1,
+            justifyContent: 'flex-end',
+            backgroundColor: 'rgba(0,0,0,0.65)',
+            opacity: opacityAnim,
+          }}
         >
-          <Pressable style={{ flex: 1 }} onPress={submitting ? undefined : onCancel} />
+          <Pressable style={{ flex: 1 }} onPress={() => { if (!submitting) onCancel(); }} />
 
           <Animated.View
             style={{
@@ -85,28 +107,48 @@ function JoinLeagueModalComponent({ visible, onConfirm, onCancel, errorMessage }
               borderColor: Colors.bg.surface2,
             }}
           >
-            <View style={{ width: 40, height: 4, borderRadius: 2, backgroundColor: Colors.bg.surface2, alignSelf: 'center', marginBottom: 24 }} />
+            <View
+              style={{
+                width: 40,
+                height: 4,
+                borderRadius: 2,
+                backgroundColor: Colors.bg.surface2,
+                alignSelf: 'center',
+                marginBottom: 24,
+              }}
+            />
 
             <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
-              <Text style={{ color: Colors.text.primary, fontSize: 24, fontWeight: '800' }}>Unirme a una liga</Text>
+              <Text style={{ color: Colors.text.primary, fontSize: 22, fontWeight: '700' }}>
+                Unirme a una liga
+              </Text>
               <TouchableOpacity
-                onPress={submitting ? undefined : onCancel}
-                style={{ height: 42, width: 42, borderRadius: 14, alignItems: 'center', justifyContent: 'center', backgroundColor: Colors.bg.surface2 }}
+                onPress={onCancel}
+                disabled={submitting}
+                style={{
+                  height: 36,
+                  width: 36,
+                  borderRadius: 12,
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  backgroundColor: Colors.bg.surface2,
+                  opacity: submitting ? 0.5 : 1,
+                }}
               >
-                <Ionicons name="close" size={20} color={Colors.text.secondary} />
+                <Ionicons name="close" size={18} color={Colors.text.secondary} />
               </TouchableOpacity>
             </View>
 
-            <Text style={{ color: Colors.text.secondary, fontSize: 15, lineHeight: 22, marginBottom: 18 }}>
-              Introduce el código de unión que te ha compartido el administrador de la liga.
+            <Text
+              style={{
+                color: Colors.text.secondary,
+                fontSize: 14,
+                lineHeight: 20,
+                marginBottom: 24,
+              }}
+            >
+              Introduce tu código de invitación para acceder.
             </Text>
-
-            {errorMessage ? (
-              <View style={{ borderRadius: 14, borderWidth: 1, borderColor: Colors.semantic.error, backgroundColor: 'rgba(255,69,52,0.10)', padding: 12, marginBottom: 16, flexDirection: 'row', alignItems: 'center' }}>
-                <Ionicons name="alert-circle-outline" size={18} color={Colors.semantic.error} style={{ marginRight: 8 }} />
-                <Text style={{ color: Colors.semantic.error, flex: 1 }}>{errorMessage}</Text>
-              </View>
-            ) : null}
 
             <View
               style={{
@@ -116,60 +158,113 @@ function JoinLeagueModalComponent({ visible, onConfirm, onCancel, errorMessage }
                 borderWidth: 1.5,
                 paddingHorizontal: 16,
                 height: 58,
-                marginBottom: 10,
+                marginBottom: errorMessage ? 12 : 28,
                 backgroundColor: Colors.bg.base,
                 borderColor: code.length > 0 ? Colors.brand.primary : Colors.bg.surface2,
               }}
             >
-              <Ionicons name="key-outline" size={20} color={code.length > 0 ? Colors.brand.primary : Colors.text.disabled} style={{ marginRight: 12 }} />
+              <Ionicons
+                name="key-outline"
+                size={20}
+                color={code.length > 0 ? Colors.brand.primary : Colors.text.disabled}
+                style={{ marginRight: 12 }}
+              />
               <TextInput
-                style={{ flex: 1, color: Colors.text.primary, fontSize: 16, fontWeight: '700', letterSpacing: 2 }}
+                style={{
+                  flex: 1,
+                  color: Colors.text.primary,
+                  fontSize: 16,
+                  fontWeight: '600',
+                  letterSpacing: 1,
+                }}
                 placeholder="ABC123"
                 placeholderTextColor={Colors.text.disabled}
                 value={code}
                 onChangeText={setCode}
                 autoCapitalize="characters"
                 autoCorrect={false}
+                editable={!submitting}
               />
-              {code.length > 0 ? (
+              {code.length > 0 && !submitting && (
                 <TouchableOpacity onPress={() => setCode('')}>
                   <Ionicons name="close-circle" size={20} color={Colors.text.disabled} />
                 </TouchableOpacity>
-              ) : null}
+              )}
             </View>
 
-            <Text style={{ color: Colors.text.disabled, fontSize: theme.fontSize.xs, lineHeight: 18, marginBottom: 26 }}>
-              El código debe tener entre 6 y 12 caracteres alfanuméricos.
-            </Text>
+            {errorMessage ? (
+              <View
+                style={{
+                  borderRadius: 14,
+                  borderWidth: 1,
+                  borderColor: `${Colors.semantic.error}50`,
+                  backgroundColor: `${Colors.semantic.error}14`,
+                  padding: theme.spacing.md,
+                  marginBottom: 20,
+                }}
+              >
+                <Text style={{ color: Colors.semantic.error, fontSize: theme.fontSize.sm }}>
+                  {errorMessage}
+                </Text>
+              </View>
+            ) : null}
 
             <View style={{ flexDirection: 'row', gap: 12 }}>
               <TouchableOpacity
                 activeOpacity={0.75}
-                onPress={submitting ? undefined : onCancel}
-                style={{ flex: 1, height: 56, borderRadius: 16, alignItems: 'center', justifyContent: 'center', backgroundColor: Colors.bg.surface2 }}
+                onPress={onCancel}
+                disabled={submitting}
+                style={{
+                  flex: 1,
+                  height: 56,
+                  borderRadius: 16,
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  backgroundColor: Colors.bg.surface2,
+                  opacity: submitting ? 0.5 : 1,
+                }}
               >
-                <Text style={{ color: Colors.text.secondary, fontSize: 15, fontWeight: '700' }}>Cancelar</Text>
+                <Text style={{ color: Colors.text.secondary, fontSize: 15, fontWeight: '600' }}>
+                  Cancelar
+                </Text>
               </TouchableOpacity>
 
               <TouchableOpacity
-                activeOpacity={isValid ? 0.88 : 1}
+                activeOpacity={canSubmit ? 0.88 : 1}
                 onPress={handleConfirm}
-                disabled={!isValid || submitting}
+                disabled={!canSubmit}
                 style={{
                   flex: 2,
                   height: 56,
                   borderRadius: 16,
                   alignItems: 'center',
                   justifyContent: 'center',
-                  backgroundColor: isValid ? Colors.brand.primary : `${Colors.brand.primary}40`,
+                  backgroundColor: canSubmit ? Colors.brand.primary : `${Colors.brand.primary}40`,
                   flexDirection: 'row',
                   gap: 8,
                 }}
               >
-                <Text style={{ color: '#0A0A0C', fontSize: 15, fontWeight: '800', opacity: isValid ? 1 : 0.5 }}>
+                {submitting ? (
+                  <ActivityIndicator size="small" color="#0A0A0C" />
+                ) : null}
+                <Text
+                  style={{
+                    color: '#0A0A0C',
+                    fontSize: 15,
+                    fontWeight: '700',
+                    opacity: canSubmit ? 1 : 0.5,
+                  }}
+                >
                   {submitting ? 'Uniendo...' : 'Unirme a la liga'}
                 </Text>
-                <Ionicons name="arrow-forward" size={18} color="#0A0A0C" style={{ opacity: isValid ? 1 : 0.5 }} />
+                {!submitting ? (
+                  <Ionicons
+                    name="arrow-forward"
+                    size={18}
+                    color="#0A0A0C"
+                    style={{ opacity: canSubmit ? 1 : 0.5 }}
+                  />
+                ) : null}
               </TouchableOpacity>
             </View>
           </Animated.View>

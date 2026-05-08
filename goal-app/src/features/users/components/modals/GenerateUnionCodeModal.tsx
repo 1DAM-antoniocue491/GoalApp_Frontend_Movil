@@ -80,6 +80,22 @@ export function GenerateUnionCodeModal({
     setLocalError(null);
   }
 
+  const formatExpiration = (value?: string | number | Date) => {
+    if (!value) return null;
+
+    const date = new Date(value);
+
+    if (isNaN(date.getTime())) return String(value);
+
+    return date.toLocaleString("es-ES", {
+      day: "2-digit",
+      month: "2-digit",
+      year: "numeric",
+      hour: "2-digit",
+      minute: "2-digit",
+    });
+  };
+
   async function handleGenerate() {
     setLocalError(null);
     setGeneratedCode(null);
@@ -107,7 +123,8 @@ export function GenerateUnionCodeModal({
   }
 
   return (
-    <Modal visible={visible} animationType="slide" transparent onRequestClose={onClose}>
+    <Modal visible={visible} animationType="slide" transparent onRequestClose={onClose} presentationStyle="pageSheet">
+
       <Pressable style={modalStyles.backdrop} onPress={onClose}>
         <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
           <Pressable>
@@ -164,7 +181,7 @@ export function GenerateUnionCodeModal({
                     <Text style={modalStyles.codeHint}>Mantén pulsado el código para copiarlo o compártelo desde el botón.</Text>
 
                     {(generatedCode.expira_en || generatedCode.expiracion) ? (
-                      <Text style={modalStyles.expiration}>Expira: {generatedCode.expira_en ?? generatedCode.expiracion}</Text>
+                      <Text style={modalStyles.expiration}>Expira: {formatExpiration(generatedCode.expira_en ?? generatedCode.expiracion)}</Text>
                     ) : null}
 
                     <View className="flex-row gap-3 mt-4">
@@ -214,7 +231,7 @@ export default GenerateUnionCodeModal;
 
 const modalStyles = {
   backdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.72)', justifyContent: 'flex-end' as const },
-  sheet: { maxHeight: '90%' as const, backgroundColor: Colors.bg.surface1, borderTopLeftRadius: 28, borderTopRightRadius: 28, paddingHorizontal: theme.spacing.xl, paddingTop: theme.spacing.lg, paddingBottom: theme.spacing.xxl },
+  sheet: { maxHeight: '100%' as const, backgroundColor: Colors.bg.surface1, borderTopLeftRadius: 28, borderTopRightRadius: 28, paddingHorizontal: theme.spacing.xl, paddingTop: theme.spacing.lg, paddingBottom: theme.spacing.xxl },
   title: { color: Colors.text.primary, fontSize: theme.fontSize.xxl, fontWeight: '900' as const },
   subtitle: { color: Colors.text.secondary, fontSize: theme.fontSize.sm, marginTop: 6, lineHeight: 20 },
   closeButton: { width: 48, height: 48, borderRadius: 18, backgroundColor: Colors.bg.surface2, alignItems: 'center' as const, justifyContent: 'center' as const },
@@ -226,9 +243,9 @@ const modalStyles = {
   codeText: { color: Colors.brand.primary, fontSize: theme.fontSize.xxxl, fontWeight: '900' as const, letterSpacing: 2, textAlign: 'center' as const, marginVertical: theme.spacing.sm },
   codeHint: { color: Colors.text.secondary, fontSize: theme.fontSize.sm, lineHeight: 20, textAlign: 'center' as const },
   expiration: { color: Colors.text.disabled, fontSize: theme.fontSize.xs, textAlign: 'center' as const, marginTop: theme.spacing.sm },
-  secondaryAction: { flex: 1, height: 44, borderRadius: 14, backgroundColor: Colors.bg.base, flexDirection: 'row' as const, alignItems: 'center' as const, justifyContent: 'center' as const, gap: 6 },
+  secondaryAction: { flex: 1, height: 56, borderRadius: 14, backgroundColor: Colors.bg.base, flexDirection: 'row' as const, alignItems: 'center' as const, justifyContent: 'center' as const, gap: 6 },
   secondaryActionText: { color: Colors.text.primary, fontSize: theme.fontSize.sm, fontWeight: '800' as const },
-  dangerAction: { flex: 1, height: 44, borderRadius: 14, backgroundColor: 'rgba(255,69,52,0.10)', flexDirection: 'row' as const, alignItems: 'center' as const, justifyContent: 'center' as const, gap: 6 },
+  dangerAction: { flex: 1, height: 50, borderRadius: 14, backgroundColor: 'rgba(255,69,52,0.10)', flexDirection: 'row' as const, alignItems: 'center' as const, justifyContent: 'center' as const, gap: 6 },
   dangerActionText: { color: Colors.semantic.error, fontSize: theme.fontSize.sm, fontWeight: '800' as const },
   errorBox: { flexDirection: 'row' as const, gap: 8, borderWidth: 1, borderColor: 'rgba(255,69,52,0.35)', backgroundColor: 'rgba(255,69,52,0.10)', borderRadius: 16, padding: theme.spacing.md, marginBottom: theme.spacing.md },
   errorText: { flex: 1, color: Colors.semantic.error, fontSize: theme.fontSize.sm },

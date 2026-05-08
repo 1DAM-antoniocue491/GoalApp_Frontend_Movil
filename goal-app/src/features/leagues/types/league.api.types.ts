@@ -1,23 +1,25 @@
 /**
  * Tipos que reflejan la respuesta real del backend de GoalApp
- * para el módulo de ligas. Mantener estos contratos alineados con OpenAPI.
+ * para el módulo de ligas. No modificar sin verificar contra la API.
  */
 
+/** Respuesta de una liga individual desde el backend. */
 export interface LigaResponse {
   id_liga: number;
   nombre: string;
   temporada: string;
   activa: boolean;
   logo_url?: string | null;
-  categoria?: string | null;
+  categoria?: string;
   equipos_total?: number;
 }
 
 /**
  * Respuesta de GET /usuarios/me/ligas.
  *
- * El endpoint puede devolver solo datos de liga + rol, pero se dejan campos
- * opcionales de equipo por compatibilidad si backend los añade más adelante.
+ * El backend devuelve ligas con el rol del usuario autenticado. Algunos
+ * despliegues pueden incluir datos del equipo asignado; por eso se dejan
+ * campos opcionales defensivos para evitar romper el mapeo si aparecen.
  */
 export interface LigaConRolResponse {
   id_liga: number;
@@ -26,7 +28,7 @@ export interface LigaConRolResponse {
   activa: boolean;
   rol: string;
   logo_url?: string | null;
-  categoria?: string | null;
+  categoria?: string;
   equipos_total?: number;
 
   id_equipo?: number | null;
@@ -43,7 +45,36 @@ export interface LigaConRolResponse {
   } | null;
 }
 
-/** Respuesta de /equipos/usuario/mi-equipo?liga_id=... */
+/** Respuesta de GET /usuarios/me/ligas-seguidas. */
+export interface LigaSeguidaResponse {
+  id_liga: number;
+  nombre?: string;
+  temporada?: string;
+  activa?: boolean;
+}
+
+/** Respuesta de POST /usuarios/me/ligas/{liga_id}/seguir. */
+export interface SeguimientoResponse {
+  id_seguimiento: number;
+  id_usuario: number;
+  id_liga: number;
+  created_at?: string;
+}
+
+/** Respuesta de DELETE /usuarios/me/ligas/{liga_id}/seguir. */
+export interface DejarSeguirResponse {
+  mensaje?: string;
+  message?: string;
+}
+
+/** Respuesta de PUT /ligas/{liga_id}/reactivar. */
+export interface ReactivateLeagueResponse {
+  mensaje?: string;
+  message?: string;
+  liga?: LigaResponse;
+}
+
+/** Equipo asignado al usuario dentro de una liga. */
 export interface MyTeamInLeagueResponse {
   id_equipo?: number | null;
   id?: number | null;
@@ -53,7 +84,7 @@ export interface MyTeamInLeagueResponse {
   id_liga?: number | null;
 }
 
-/** Respuesta del flujo de aceptar código de invitación. */
+/** Respuesta de aceptar código de unión. */
 export interface JoinLeagueByCodeResponse {
   mensaje?: string;
   message?: string;
@@ -62,24 +93,18 @@ export interface JoinLeagueByCodeResponse {
   codigo?: string;
 }
 
+/** Body para POST /ligas/. */
 export interface LigaCreateRequest {
   nombre: string;
   temporada: string;
   categoria?: string | null;
   activa?: boolean;
-  /**
-   * Se conserva por compatibilidad con backend, pero los modales móviles ya no
-   * muestran ni envían “máximo de partidos”.
-   */
   cantidad_partidos?: number | null;
   duracion_partido?: number | null;
-  /**
-   * Se conserva por compatibilidad de lectura, pero la UI móvil no permite
-   * subir ni editar logo de liga.
-   */
   logo_url?: string | null;
 }
 
+/** Body para PUT /ligas/{liga_id}. */
 export interface LigaUpdateRequest {
   nombre?: string;
   temporada?: string;
@@ -90,6 +115,7 @@ export interface LigaUpdateRequest {
   logo_url?: string | null;
 }
 
+/** Body para POST /ligas/{liga_id}/configuracion. */
 export interface LigaConfiguracionRequest {
   hora_partidos?: string;
   min_equipos: number;
@@ -101,13 +127,10 @@ export interface LigaConfiguracionRequest {
   min_jugadores_equipo: number;
   min_partidos_entre_equipos: number;
   minutos_partido: number;
-  /**
-   * Campo backend. No se muestra en UI móvil; se envía con valor interno/default
-   * para mantener el contrato sin exponerlo al usuario.
-   */
   max_partidos: number;
 }
 
+/** Body para PUT /ligas/{liga_id}/configuracion. */
 export interface UpdateLeagueConfigRequest {
   hora_partidos?: string;
   min_equipos?: number;
@@ -119,10 +142,10 @@ export interface UpdateLeagueConfigRequest {
   min_jugadores_equipo?: number;
   min_partidos_entre_equipos?: number;
   minutos_partido?: number;
-  /** No editable en UI móvil; se conserva internamente por compatibilidad API. */
   max_partidos?: number;
 }
 
+/** Respuesta de GET /ligas/{liga_id}/configuracion. */
 export interface LeagueConfigResponse {
   id_configuracion: number;
   id_liga: number;
@@ -136,7 +159,6 @@ export interface LeagueConfigResponse {
   min_jugadores_equipo: number;
   min_partidos_entre_equipos: number;
   minutos_partido: number;
-  /** No editable en UI móvil; backend puede seguir devolviéndolo. */
   max_partidos: number;
   created_at?: string;
   updated_at?: string;

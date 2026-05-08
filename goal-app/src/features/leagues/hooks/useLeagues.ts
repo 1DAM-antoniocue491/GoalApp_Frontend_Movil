@@ -1,31 +1,24 @@
 /**
- * useLeagues
+ * useLeagues - Hook para cargar y gestionar las ligas del usuario autenticado.
  *
- * Hook centralizado para el onboarding de ligas.
- *
- * Responsabilidades:
- * - Cargar las ligas reales del usuario autenticado.
- * - Crear nuevas ligas.
- * - Unirse a una liga mediante código de invitación.
- * - Mantener el estado local sincronizado con la API después de cada mutación.
- *
- * Nota importante:
- * La carga de ligas se hace en dos fases para mejorar la velocidad percibida:
- * 1. Se pintan rápido las ligas base.
- * 2. Se enriquecen en segundo plano con equipo asignado cuando aplica.
+ * Reglas importantes:
+ * - Favoritos se guardan en API con /seguir. No son estado local temporal.
+ * - Reactivar liga se hace con PUT /ligas/{id}/reactivar. No se simula en UI.
+ * - La carga de equipo asignado es secundaria para que el onboarding pinte rápido.
  */
 
 import { useState, useEffect, useCallback } from 'react';
-
 import {
   createLeagueWithConfig,
   enrichLeagueTeamAssignments,
   fetchMyLeagues,
   joinLeagueByCodeService,
+  reactivateLeagueService,
+  toggleFavoriteLeagueService,
 } from '../services/leagueService';
+import { logger } from '@/src/shared/utils/logger';
 import type { LeagueItem } from '@/src/shared/types/league';
 import type { LigaConfiguracionRequest, LigaCreateRequest } from '../types/league.api.types';
-import { logger } from '@/src/shared/utils/logger';
 
 interface UseLeaguesResult {
   leagues: LeagueItem[];
@@ -35,31 +28,27 @@ interface UseLeaguesResult {
 
   submitting: boolean;
   createError: string | null;
-  createNewLeague: (input: {
-    league: LigaCreateRequest;
-    config?: LigaConfiguracionRequest;
-  }) => Promise<LeagueItem | null>;
+  createNewLeague: (input: { league: LigaCreateRequest; config?: LigaConfiguracionRequest }) => Promise<LeagueItem | null>;
 
-  /** Estado específico del flujo “Unirme a una liga”. */
+  favoriteUpdatingId: string | null;
+  toggleFavoriteLeague: (leagueId: string) => Promise<boolean>;
+
+  reactivatingLeagueId: string | null;
+  reactivateLeagueById: (leagueId: string) => Promise<boolean>;
+
   joiningByCode: boolean;
   joinError: string | null;
   joinLeagueByCode: (code: string) => Promise<boolean>;
-}
-
-function getErrorMessage(error: unknown, fallback: string): string {
-  if (error instanceof Error) return error.message;
-  if (typeof error === 'string') return error;
-  return fallback;
 }
 
 export function useLeagues(): UseLeaguesResult {
   const [leagues, setLeagues] = useState<LeagueItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-
   const [submitting, setSubmitting] = useState(false);
   const [createError, setCreateError] = useState<string | null>(null);
-
+  const [favoriteUpdatingId, setFavoriteUpdatingId] = useState<string | null>(null);
+  const [reactivatingLeagueId, setReactivatingLeagueId] = useState<string | null>(null);
   const [joiningByCode, setJoiningByCode] = useState(false);
   const [joinError, setJoinError] = useState<string | null>(null);
 
@@ -68,28 +57,18 @@ export function useLeagues(): UseLeaguesResult {
       setLoading(true);
       setError(null);
 
-      /**
-       * Primera fase: cargar ligas sin bloquear por equipo asignado.
-       * Esto evita que el onboarding parezca congelado si el endpoint de equipo tarda.
-       */
+      // 1) Carga rápida: ligas + favoritos persistentes.
       const baseLeagues = await fetchMyLeagues({ enrichTeams: false });
       setLeagues(baseLeagues);
+      setLoading(false);
 
-      /**
-       * Segunda fase: completar equipos asociados sin tumbar el flujo principal.
-       * Si esta parte falla, se mantiene la lista base visible.
-       */
-      enrichLeagueTeamAssignments(baseLeagues)
-        .then(setLeagues)
-        .catch((err) => {
-          logger.warn('useLeagues/enrichTeams', 'No se pudieron enriquecer las ligas con equipo asignado', {
-            error: getErrorMessage(err, 'Error desconocido'),
-          });
-        });
+      // 2) Enriquecimiento secundario: “Mi equipo” en tarjetas.
+      const enriched = await enrichLeagueTeamAssignments(baseLeagues);
+      setLeagues(enriched);
     } catch (err) {
       setError('No se pudieron cargar las ligas');
-      logger.warn('useLeagues/load', 'Error cargando ligas', {
-        error: getErrorMessage(err, 'Error desconocido'),
+      logger.warn('useLeagues', 'Error cargando ligas', {
+        error: err instanceof Error ? err.message : String(err),
       });
     } finally {
       setLoading(false);
@@ -101,17 +80,11 @@ export function useLeagues(): UseLeaguesResult {
       try {
         setSubmitting(true);
         setCreateError(null);
-
         const league = await createLeagueWithConfig(input);
-
-        /**
-         * Tras crear, la fuente de verdad vuelve a ser la API.
-         * No hacemos una actualización optimista para evitar estados desalineados.
-         */
         await load();
         return league;
       } catch (err) {
-        const message = getErrorMessage(err, 'Error al crear la liga');
+        const message = err instanceof Error ? err.message : 'Error al crear la liga';
         setCreateError(message);
         logger.error('useLeagues/createNewLeague', 'Error creando liga', { error: message });
         return null;
@@ -122,41 +95,68 @@ export function useLeagues(): UseLeaguesResult {
     [load],
   );
 
-  const joinLeagueByCode = useCallback(
-    async (code: string): Promise<boolean> => {
+  const toggleFavoriteLeague = useCallback(
+    async (leagueId: string): Promise<boolean> => {
+      const target = leagues.find((league) => league.id === leagueId);
+      if (!target) return false;
+
       try {
-        setJoiningByCode(true);
-        setJoinError(null);
+        setFavoriteUpdatingId(leagueId);
+        const result = await toggleFavoriteLeagueService(leagueId, target.isFavorite);
 
-        const result = await joinLeagueByCodeService(code);
-
-        if (!result.success) {
-          setJoinError(result.error ?? 'No se pudo unir a la liga con ese código.');
+        if (!result.success || !result.data) {
+          setError(result.error ?? 'No se pudo actualizar el favorito');
           return false;
         }
 
-        /**
-         * El service devuelve las ligas ya recargadas tras aceptar el código.
-         * Aun así, usamos el resultado de API como fuente de verdad inmediata.
-         */
-        if (result.data?.leagues) {
-          setLeagues(result.data.leagues);
-        } else {
-          await load();
-        }
-
+        setLeagues(result.data);
         return true;
-      } catch (err) {
-        const message = getErrorMessage(err, 'No se pudo unir a la liga con ese código.');
-        setJoinError(message);
-        logger.warn('useLeagues/joinLeagueByCode', 'Error al unirse por código', { error: message });
-        return false;
       } finally {
-        setJoiningByCode(false);
+        setFavoriteUpdatingId(null);
       }
     },
-    [load],
+    [leagues],
   );
+
+  const reactivateLeagueById = useCallback(async (leagueId: string): Promise<boolean> => {
+    try {
+      setReactivatingLeagueId(leagueId);
+      const result = await reactivateLeagueService(leagueId);
+
+      if (!result.success || !result.data) {
+        setError(result.error ?? 'No se pudo reactivar la liga');
+        return false;
+      }
+
+      // La lista refrescada desde API decide si el botón vuelve a ser “Entrar”.
+      setLeagues(result.data);
+      return true;
+    } finally {
+      setReactivatingLeagueId(null);
+    }
+  }, []);
+
+  const joinLeagueByCode = useCallback(async (code: string): Promise<boolean> => {
+    try {
+      setJoiningByCode(true);
+      setJoinError(null);
+
+      const result = await joinLeagueByCodeService(code);
+      if (!result.success || !result.data) {
+        setJoinError(result.error ?? 'No se pudo unir a la liga.');
+        return false;
+      }
+
+      setLeagues(result.data.leagues);
+      return true;
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'No se pudo unir a la liga.';
+      setJoinError(message);
+      return false;
+    } finally {
+      setJoiningByCode(false);
+    }
+  }, []);
 
   useEffect(() => {
     load();
@@ -167,11 +167,13 @@ export function useLeagues(): UseLeaguesResult {
     loading,
     error,
     refresh: load,
-
     submitting,
     createError,
     createNewLeague,
-
+    favoriteUpdatingId,
+    toggleFavoriteLeague,
+    reactivatingLeagueId,
+    reactivateLeagueById,
     joiningByCode,
     joinError,
     joinLeagueByCode,

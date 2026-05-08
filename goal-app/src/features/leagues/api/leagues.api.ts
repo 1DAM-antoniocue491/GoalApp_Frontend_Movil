@@ -1,6 +1,6 @@
 /**
- * Leagues API - Endpoints del módulo de ligas.
- * Usa apiClient para token, base URL y retry.
+ * Leagues API - endpoints del módulo de ligas.
+ * Todas las llamadas pasan por apiClient para reutilizar base URL, token y retry.
  */
 
 import { apiClient } from '@/src/shared/api/client';
@@ -59,16 +59,15 @@ export async function updateLeagueConfig(
 }
 
 /**
- * GET /equipos/usuario/mi-equipo?liga_id={ligaId}
- * Endpoint específico para obtener el equipo asignado del usuario autenticado.
- * Se usa para que las cards de liga muestren "Mi equipo" correctamente.
+ * Equipo asignado al usuario autenticado dentro de una liga.
+ * No es crítico: si falla, la card simplemente no mostrará equipo asignado.
  */
 export async function getMyTeamInLeague(ligaId: number): Promise<MyTeamInLeagueResponse> {
   const response = await apiClient.get<MyTeamInLeagueResponse>(`/equipos/usuario/mi-equipo?liga_id=${ligaId}`);
   return response.data;
 }
 
-/** Valida un código de unión igual que web. */
+/** Valida un código de unión usando el mismo flujo que web. */
 export async function validateJoinCode(codigo: string): Promise<unknown> {
   const response = await apiClient.get(`/invitaciones/validar-codigo/${encodeURIComponent(codigo)}`);
   return response.data;

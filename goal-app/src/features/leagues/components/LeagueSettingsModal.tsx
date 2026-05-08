@@ -1,29 +1,27 @@
 /**
  * LeagueSettingsModal
  *
- * Modal de configuración de liga para admins.
- * Campos visibles: idénticos al modal web EditLeagueModal.tsx.
+ * Modal móvil para editar datos y reglas de una liga.
  *
- * Campos NO visibles pero preservados internamente al guardar:
- *   hora_partidos, min_jugadores_equipo, min_partidos_entre_equipos
- *
- * Flujo guardar: updateLeagueWithConfigService (POST/PUT routing inteligente).
- * Flujo eliminar: deleteLeagueService → confirmación → DELETE /ligas/{id}.
- * Solo se cierra tras éxito real.
+ * Reglas de producto aplicadas:
+ * - No se permite editar/subir logo desde móvil.
+ * - No se muestra “máximo de partidos”: el backend puede conservarlo internamente,
+ *   pero el usuario no lo configura en este modal.
+ * - Solo se cierra tras éxito real de API.
  */
 
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import {
-  View,
-  Text,
+  ActivityIndicator,
+  Alert,
+  KeyboardAvoidingView,
   Modal,
+  Platform,
   ScrollView,
+  Text,
   TextInput,
   TouchableOpacity,
-  ActivityIndicator,
-  KeyboardAvoidingView,
-  Platform,
-  Image,
+  View,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -31,17 +29,16 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Colors } from '@/src/shared/constants/colors';
 import { theme } from '@/src/shared/styles/theme';
 import { OptionSelectField } from '@/src/shared/components/ui/OptionSelectField';
-import {
-  getLeagueConfigService,
-  updateLeagueWithConfigService,
-  deleteLeagueService,
-} from '../services/leagueService';
 import { activeLeagueStore } from '@/src/state/activeLeague/activeLeagueStore';
 import { logger } from '@/src/shared/utils/logger';
 import type { LeagueItem } from '@/src/shared/types/league';
-import type { LigaUpdateRequest, UpdateLeagueConfigRequest, LeagueConfigResponse } from '../types/league.api.types';
-
-// ─── Opciones de selects (igual que web) ─────────────────────────────────────
+import type { LigaUpdateRequest, LeagueConfigResponse, UpdateLeagueConfigRequest } from '../types/league.api.types';
+import {
+  DEFAULT_LEAGUE_CONFIG,
+  deleteLeagueService,
+  getLeagueConfigService,
+  updateLeagueWithConfigService,
+} from '../services/leagueService';
 
 const TEMPORADAS = [
   { value: '2024/25', label: '2024/25' },
@@ -62,19 +59,12 @@ const CATEGORIAS = [
 ];
 
 const MINUTOS_OPTIONS = [
-  { value: '60', label: '60 minutos' },
-  { value: '70', label: '70 minutos' },
-  { value: '80', label: '80 minutos' },
-  { value: '90', label: '90 minutos' },
+  { value: '60', label: '60 min' },
+  { value: '70', label: '70 min' },
+  { value: '80', label: '80 min' },
+  { value: '90', label: '90 min' },
 ];
 
-// ─── Formulario visible ───────────────────────────────────────────────────────
-
-/**
- * Solo los campos editables visibles.
- * Los campos hora_partidos, min_jugadores_equipo y min_partidos_entre_equipos
- * se preservan de existingConfig pero no aparecen en el formulario.
- */
 interface SettingsForm {
   nombre: string;
   temporada: string;
@@ -84,97 +74,54 @@ interface SettingsForm {
   max_equipos: string;
   min_convocados: string;
   max_convocados: string;
-  min_plantilla: string;
-  max_plantilla: string;
+  min_jugadores_equipo: string;
   minutos_partido: string;
-  max_partidos: string;
 }
-
-/**
- * Defaults visibles: los que el usuario verá si la API no devuelve configuración.
- * Se usan tanto para el formulario inicial como como fallback campo a campo.
- */
-const DEFAULT_VISIBLE_CONFIG = {
-  min_equipos: 2,
-  max_equipos: 20,
-  min_convocados: 14,
-  max_convocados: 22,
-  min_plantilla: 11,
-  max_plantilla: 25,
-  minutos_partido: 90,
-  max_partidos: 30,
-};
 
 const DEFAULT_FORM: SettingsForm = {
   nombre: '',
-  temporada: '2025/26',
-  categoria: 'Senior',
+  temporada: '',
+  categoria: '',
   activa: true,
-  min_equipos: String(DEFAULT_VISIBLE_CONFIG.min_equipos),
-  max_equipos: String(DEFAULT_VISIBLE_CONFIG.max_equipos),
-  min_convocados: String(DEFAULT_VISIBLE_CONFIG.min_convocados),
-  max_convocados: String(DEFAULT_VISIBLE_CONFIG.max_convocados),
-  min_plantilla: String(DEFAULT_VISIBLE_CONFIG.min_plantilla),
-  max_plantilla: String(DEFAULT_VISIBLE_CONFIG.max_plantilla),
-  minutos_partido: String(DEFAULT_VISIBLE_CONFIG.minutos_partido),
-  max_partidos: String(DEFAULT_VISIBLE_CONFIG.max_partidos),
+  min_equipos: '2',
+  max_equipos: '20',
+  min_convocados: '7',
+  max_convocados: '18',
+  min_jugadores_equipo: '7',
+  minutos_partido: '90',
 };
-
-const TEMPORADA_VALUES = TEMPORADAS.map(t => t.value);
-const CATEGORIA_VALUES = CATEGORIAS.map(c => c.value);
-const MINUTOS_VALUES = MINUTOS_OPTIONS.map(m => m.value);
-
-/** Normaliza un valor a una de las opciones válidas del select, o devuelve el fallback */
-function normalizeOption(value: string | undefined | null, validValues: string[], fallback: string): string {
-  if (value && validValues.includes(value)) return value;
-  return fallback;
-}
-
-// ─── Validación ───────────────────────────────────────────────────────────────
-
-function validateForm(form: SettingsForm): Record<string, string> {
-  const errs: Record<string, string> = {};
-  const n = (s: string) => Number(s) || 0;
-
-  if (!form.nombre.trim())
-    errs.nombre = 'El nombre es obligatorio';
-  else if (form.nombre.trim().length < 3)
-    errs.nombre = 'Mínimo 3 caracteres';
-
-  if (!form.temporada)
-    errs.temporada = 'Selecciona una temporada';
-
-  if (form.min_equipos && form.max_equipos && n(form.min_equipos) > n(form.max_equipos))
-    errs.min_equipos = 'No puede ser mayor que el máximo';
-
-  if (form.min_convocados && form.max_convocados && n(form.min_convocados) > n(form.max_convocados))
-    errs.min_convocados = 'No puede ser mayor que el máximo';
-
-  if (form.min_plantilla && form.max_plantilla && n(form.min_plantilla) > n(form.max_plantilla))
-    errs.min_plantilla = 'No puede ser mayor que el máximo';
-
-  if (!form.minutos_partido)
-    errs.minutos_partido = 'Selecciona los minutos de partido';
-
-  if (form.max_partidos && n(form.max_partidos) < 1)
-    errs.max_partidos = 'Mínimo 1';
-
-  return errs;
-}
-
-// ─── Props ────────────────────────────────────────────────────────────────────
 
 interface LeagueSettingsModalProps {
   visible: boolean;
   league: LeagueItem | null;
   onClose: () => void;
-  /** Se llama tras guardar con éxito */
   onSuccess: () => void;
-  /** Se llama tras eliminar con éxito (si no se pasa, usa onSuccess) */
+  /** Callback opcional usado por Onboarding para limpiar selección tras eliminar. */
   onLeagueDeleted?: () => void;
 }
 
-// ─── Sub-componentes locales ──────────────────────────────────────────────────
+function toNumber(value: string): number | undefined {
+  if (value.trim() === '') return undefined;
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : undefined;
+}
+
+function validateForm(form: SettingsForm): Record<string, string> {
+  const errors: Record<string, string> = {};
+  const n = (value: string) => Number(value) || 0;
+
+  if (!form.nombre.trim()) errors.nombre = 'El nombre es obligatorio';
+  else if (form.nombre.trim().length < 3) errors.nombre = 'Mínimo 3 caracteres';
+
+  if (!form.temporada) errors.temporada = 'Selecciona una temporada';
+  if (n(form.min_equipos) > n(form.max_equipos)) errors.min_equipos = 'No puede ser mayor que el máximo';
+  if (n(form.min_convocados) > n(form.max_convocados)) errors.min_convocados = 'No puede ser mayor que el máximo';
+
+  const minutos = n(form.minutos_partido);
+  if (minutos < 30 || minutos > 120) errors.minutos_partido = 'Entre 30 y 120 min';
+
+  return errors;
+}
 
 function SectionTitle({ title }: { title: string }) {
   return (
@@ -182,7 +129,7 @@ function SectionTitle({ title }: { title: string }) {
       style={{
         color: Colors.text.secondary,
         fontSize: theme.fontSize.xs,
-        fontWeight: '700',
+        fontWeight: '800',
         letterSpacing: 0.9,
         textTransform: 'uppercase',
         marginBottom: theme.spacing.md,
@@ -197,39 +144,34 @@ function FieldLabel({ label, required }: { label: string; required?: boolean }) 
   return (
     <Text style={{ color: Colors.text.secondary, fontSize: 13, marginBottom: 6, lineHeight: 18 }}>
       {label}
-      {required && <Text style={{ color: Colors.semantic.error }}> *</Text>}
+      {required ? <Text style={{ color: Colors.semantic.error }}> *</Text> : null}
     </Text>
   );
 }
 
-function FieldError({ msg }: { msg?: string }) {
-  if (!msg) return null;
-  return (
-    <Text style={{ color: Colors.semantic.error, fontSize: 12, marginTop: 4, lineHeight: 16 }}>
-      {msg}
-    </Text>
-  );
-}
-
-function Divider() {
-  return <View style={{ height: 1, backgroundColor: Colors.bg.surface2, marginBottom: theme.spacing.xl }} />;
+function FieldError({ message }: { message?: string }) {
+  if (!message) return null;
+  return <Text style={{ color: Colors.semantic.error, fontSize: 12, marginTop: 5 }}>{message}</Text>;
 }
 
 function NumberInput({
   value,
   onChange,
   disabled,
+  placeholder,
 }: {
   value: string;
-  onChange: (v: string) => void;
+  onChange: (value: string) => void;
   disabled?: boolean;
+  placeholder?: string;
 }) {
   return (
     <TextInput
       value={value}
-      onChangeText={(t) => onChange(t.replace(/[^0-9]/g, ''))}
+      onChangeText={(text) => onChange(text.replace(/[^0-9]/g, ''))}
       keyboardType="numeric"
       editable={!disabled}
+      placeholder={placeholder ?? '0'}
       placeholderTextColor={Colors.text.disabled}
       style={{
         height: 48,
@@ -238,13 +180,70 @@ function NumberInput({
         paddingHorizontal: theme.spacing.lg,
         color: Colors.text.primary,
         fontSize: theme.fontSize.md,
-        opacity: disabled ? 0.5 : 1,
+        opacity: disabled ? 0.55 : 1,
       }}
     />
   );
 }
 
-// ─── Componente principal ─────────────────────────────────────────────────────
+function TextField({
+  value,
+  onChange,
+  disabled,
+  placeholder,
+}: {
+  value: string;
+  onChange: (value: string) => void;
+  disabled?: boolean;
+  placeholder?: string;
+}) {
+  return (
+    <TextInput
+      value={value}
+      onChangeText={onChange}
+      editable={!disabled}
+      placeholder={placeholder}
+      placeholderTextColor={Colors.text.disabled}
+      style={{
+        height: 48,
+        backgroundColor: Colors.bg.surface2,
+        borderRadius: theme.borderRadius.lg,
+        paddingHorizontal: theme.spacing.lg,
+        color: Colors.text.primary,
+        fontSize: theme.fontSize.md,
+        opacity: disabled ? 0.55 : 1,
+      }}
+    />
+  );
+}
+
+function Divider() {
+  return <View style={{ height: 1, backgroundColor: Colors.bg.surface2, marginBottom: theme.spacing.xl }} />;
+}
+
+function ShieldPreview({ name }: { name: string }) {
+  const initial = name.trim().charAt(0).toUpperCase() || 'G';
+  const colors = [Colors.brand.primary, Colors.brand.secondary, Colors.brand.accent, Colors.semantic.warning];
+  const color = colors[name.length % colors.length];
+
+  return (
+    <View
+      style={{
+        width: 64,
+        height: 64,
+        borderRadius: 20,
+        backgroundColor: `${color}20`,
+        borderWidth: 1,
+        borderColor: `${color}88`,
+        alignItems: 'center',
+        justifyContent: 'center',
+      }}
+    >
+      <Ionicons name="shield" size={20} color={color} />
+      <Text style={{ color, fontSize: 18, fontWeight: '800', marginTop: 2 }}>{initial}</Text>
+    </View>
+  );
+}
 
 export function LeagueSettingsModal({
   visible,
@@ -254,23 +253,14 @@ export function LeagueSettingsModal({
   onLeagueDeleted,
 }: LeagueSettingsModalProps) {
   const insets = useSafeAreaInsets();
-
   const [form, setForm] = useState<SettingsForm>(DEFAULT_FORM);
+  const [existingConfig, setExistingConfig] = useState<LeagueConfigResponse | null>(null);
+  const [configExists, setConfigExists] = useState(false);
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [isLoadingConfig, setIsLoadingConfig] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [submitError, setSubmitError] = useState<string | null>(null);
-  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
-
-  /**
-   * Configuración completa cargada desde el backend.
-   * Se preserva para rellenar los campos no visibles al guardar
-   * (hora_partidos, min_jugadores_equipo, min_partidos_entre_equipos).
-   */
-  const [existingConfig, setExistingConfig] = useState<LeagueConfigResponse | null>(null);
-  /** true si el backend ya tiene config (id_configuracion !== 0) */
-  const [configExists, setConfigExists] = useState(false);
+  const [submitError, setSubmitError] = useState<string | null>(null);
 
   const updateField = useCallback(<K extends keyof SettingsForm>(key: K, value: SettingsForm[K]) => {
     setForm(prev => ({ ...prev, [key]: value }));
@@ -282,68 +272,49 @@ export function LeagueSettingsModal({
     });
   }, []);
 
-  // Carga datos de liga + configuración al abrir.
-  // Depende de league.id (no del objeto completo) para evitar re-ejecuciones
-  // si el padre re-renderiza y crea una nueva referencia con los mismos datos.
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => {
     if (!visible || !league) return;
 
-    // Prefill de datos básicos de la liga.
-    // Normaliza temporada y categoría para que coincidan con las opciones del select.
     setForm({
       ...DEFAULT_FORM,
-      nombre: league.name || '',
-      temporada: normalizeOption(league.season, TEMPORADA_VALUES, '2025/26'),
-      categoria: normalizeOption(league.categoria, CATEGORIA_VALUES, ''),
+      nombre: league.name,
+      temporada: league.season,
+      categoria: league.categoria ?? '',
       activa: league.status === 'active',
     });
+    setExistingConfig(null);
+    setConfigExists(false);
     setErrors({});
     setSubmitError(null);
-    setShowDeleteConfirm(false);
-    setExistingConfig(null);
     setIsLoadingConfig(true);
 
     getLeagueConfigService(Number(league.id))
       .then(result => {
         if (!result.success || !result.data) {
-          // Error de red: mantener defaults visibles del formulario, no borrar nada
-          if (!result.success) {
-            setSubmitError('No se pudo cargar la configuración. Se muestran valores por defecto.');
-          }
-          setConfigExists(false);
+          setSubmitError('No se pudo cargar la configuración. Puedes continuar con valores por defecto.');
           return;
         }
-        const d = result.data;
-        setConfigExists(d.id_configuracion !== 0);
-        setExistingConfig(d);
-        // Aplicar valores de API campo a campo; si un campo viene 0/null usar el default visible
+
+        const config = result.data;
+        setExistingConfig(config);
+        setConfigExists(config.id_configuracion !== 0);
         setForm(prev => ({
           ...prev,
-          min_equipos: String(d.min_equipos || DEFAULT_VISIBLE_CONFIG.min_equipos),
-          max_equipos: String(d.max_equipos || DEFAULT_VISIBLE_CONFIG.max_equipos),
-          min_convocados: String(d.min_convocados || DEFAULT_VISIBLE_CONFIG.min_convocados),
-          max_convocados: String(d.max_convocados || DEFAULT_VISIBLE_CONFIG.max_convocados),
-          min_plantilla: String(d.min_plantilla || DEFAULT_VISIBLE_CONFIG.min_plantilla),
-          max_plantilla: String(d.max_plantilla || DEFAULT_VISIBLE_CONFIG.max_plantilla),
-          // Normalizar minutos a una opción válida del select; fallback '90'
-          minutos_partido: normalizeOption(
-            String(d.minutos_partido || DEFAULT_VISIBLE_CONFIG.minutos_partido),
-            MINUTOS_VALUES,
-            '90',
-          ),
-          max_partidos: String(d.max_partidos || DEFAULT_VISIBLE_CONFIG.max_partidos),
+          min_equipos: String(config.min_equipos ?? DEFAULT_LEAGUE_CONFIG.min_equipos),
+          max_equipos: String(config.max_equipos ?? DEFAULT_LEAGUE_CONFIG.max_equipos),
+          min_convocados: String(config.min_convocados ?? DEFAULT_LEAGUE_CONFIG.min_convocados),
+          max_convocados: String(config.max_convocados ?? DEFAULT_LEAGUE_CONFIG.max_convocados),
+          min_jugadores_equipo: String(config.min_jugadores_equipo ?? DEFAULT_LEAGUE_CONFIG.min_jugadores_equipo),
+          minutos_partido: String(config.minutos_partido ?? DEFAULT_LEAGUE_CONFIG.minutos_partido),
         }));
       })
       .finally(() => setIsLoadingConfig(false));
-  // league.id es suficiente: si la liga es la misma, no hay que recargar config.
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [visible, league?.id]);
+  }, [visible, league]);
 
   const handleClose = useCallback(() => {
     if (isSubmitting || isDeleting) return;
     onClose();
-  }, [isSubmitting, isDeleting, onClose]);
+  }, [isDeleting, isSubmitting, onClose]);
 
   const handleSubmit = useCallback(async () => {
     if (!league) return;
@@ -354,33 +325,24 @@ export function LeagueSettingsModal({
       return;
     }
 
-    const n = (s: string): number | undefined => (s !== '' ? Number(s) : undefined);
-
-    // Payload de liga: solo los campos editables visibles
     const leaguePayload: LigaUpdateRequest = {
       nombre: form.nombre.trim(),
       temporada: form.temporada,
       categoria: form.categoria || undefined,
       activa: form.activa,
+      // No se envía logo_url ni cantidad_partidos: no son campos editables en móvil.
     };
 
-    // Payload de config: campos visibles + campos ocultos preservados de existingConfig
     const configPayload: UpdateLeagueConfigRequest = {
-      hora_partidos: existingConfig?.hora_partidos ?? '17:00',
-      min_equipos: n(form.min_equipos),
-      max_equipos: n(form.max_equipos),
-      min_convocados: n(form.min_convocados),
-      max_convocados: n(form.max_convocados),
-      min_plantilla: n(form.min_plantilla),
-      max_plantilla: n(form.max_plantilla),
-      // Preservar valores existentes de campos no visibles
-      min_jugadores_equipo: existingConfig?.min_jugadores_equipo ?? n(form.min_plantilla),
-      min_partidos_entre_equipos: existingConfig?.min_partidos_entre_equipos ?? 1,
-      minutos_partido: n(form.minutos_partido),
-      max_partidos: n(form.max_partidos),
+      min_equipos: toNumber(form.min_equipos),
+      max_equipos: toNumber(form.max_equipos),
+      min_convocados: toNumber(form.min_convocados),
+      max_convocados: toNumber(form.max_convocados),
+      min_jugadores_equipo: toNumber(form.min_jugadores_equipo),
+      minutos_partido: toNumber(form.minutos_partido),
     };
 
-    logger.debug('league/settings', 'Guardando configuración', {
+    logger.debug('league/settings', 'Guardando configuración de liga', {
       ligaId: league.id,
       leagueKeys: Object.keys(leaguePayload),
       configKeys: Object.keys(configPayload),
@@ -403,7 +365,6 @@ export function LeagueSettingsModal({
       return;
     }
 
-    // Actualizar nombre en store si la liga editada es la activa
     const activeSession = activeLeagueStore.getSession();
     if (activeSession?.leagueId === league.id) {
       activeLeagueStore.setSession({ ...activeSession, leagueName: form.nombre.trim() });
@@ -411,53 +372,46 @@ export function LeagueSettingsModal({
 
     onSuccess();
     onClose();
-  }, [form, league, existingConfig, configExists, onClose, onSuccess]);
+  }, [configExists, existingConfig, form, league, onClose, onSuccess]);
 
-  const handleDelete = useCallback(async () => {
+  const handleDelete = useCallback(() => {
     if (!league) return;
 
-    setIsDeleting(true);
-    setSubmitError(null);
+    Alert.alert(
+      'Eliminar liga',
+      'Esta acción eliminará la liga. Confirma solo si estás seguro.',
+      [
+        { text: 'Cancelar', style: 'cancel' },
+        {
+          text: 'Eliminar',
+          style: 'destructive',
+          onPress: async () => {
+            setIsDeleting(true);
+            setSubmitError(null);
+            const result = await deleteLeagueService(Number(league.id));
+            setIsDeleting(false);
 
-    const result = await deleteLeagueService(Number(league.id));
+            if (!result.success) {
+              setSubmitError(result.error ?? 'No se pudo eliminar la liga');
+              return;
+            }
 
-    setIsDeleting(false);
-
-    if (!result.success) {
-      setSubmitError(result.error ?? 'Error al eliminar la liga');
-      setShowDeleteConfirm(false);
-      return;
-    }
-
-    // Si la liga eliminada era la activa, limpiar el store
-    if (activeLeagueStore.getLeagueId() === league.id) {
-      activeLeagueStore.clearSession();
-    }
-
-    onClose();
-    if (onLeagueDeleted) {
-      onLeagueDeleted();
-    } else {
-      onSuccess();
-    }
-  }, [league, onClose, onSuccess, onLeagueDeleted]);
+            onLeagueDeleted?.();
+            onClose();
+          },
+        },
+      ],
+    );
+  }, [league, onClose, onLeagueDeleted]);
 
   if (!visible || !league) return null;
 
-  const disableInteraction = isSubmitting || isDeleting;
-
   return (
-    <Modal
-      visible={visible}
-      animationType="slide"
-      presentationStyle="pageSheet"
-      onRequestClose={handleClose}
-    >
+    <Modal visible={visible} animationType="slide" presentationStyle="pageSheet" onRequestClose={handleClose}>
       <KeyboardAvoidingView
         style={{ flex: 1, backgroundColor: Colors.bg.base }}
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
       >
-        {/* ── Header ── */}
         <View
           style={{
             paddingTop: insets.top + theme.spacing.md,
@@ -471,53 +425,46 @@ export function LeagueSettingsModal({
           }}
         >
           <View>
-            <Text style={{ color: Colors.text.primary, fontSize: theme.fontSize.lg, fontWeight: '700' }}>
-              Configuración de Liga
+            <Text style={{ color: Colors.text.primary, fontSize: theme.fontSize.lg, fontWeight: '800' }}>
+              Configuración de liga
             </Text>
-            <Text
-              style={{ color: Colors.text.secondary, fontSize: theme.fontSize.xs, marginTop: 2 }}
-              numberOfLines={1}
-            >
+            <Text style={{ color: Colors.text.secondary, fontSize: theme.fontSize.xs, marginTop: 2 }} numberOfLines={1}>
               {league.name}
             </Text>
           </View>
 
           <TouchableOpacity
             onPress={handleClose}
-            disabled={disableInteraction}
+            disabled={isSubmitting || isDeleting}
+            activeOpacity={0.75}
             style={{
-              width: 36,
-              height: 36,
-              borderRadius: 18,
+              width: 38,
+              height: 38,
+              borderRadius: 19,
               backgroundColor: Colors.bg.surface2,
               alignItems: 'center',
               justifyContent: 'center',
-              opacity: disableInteraction ? 0.4 : 1,
+              opacity: isSubmitting || isDeleting ? 0.45 : 1,
             }}
-            activeOpacity={0.7}
           >
             <Ionicons name="close" size={20} color={Colors.text.secondary} />
           </TouchableOpacity>
         </View>
 
-        {/* ── Cargando config ── */}
         {isLoadingConfig ? (
           <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', gap: 12 }}>
             <ActivityIndicator size="large" color={Colors.brand.primary} />
-            <Text style={{ color: Colors.text.secondary, fontSize: theme.fontSize.sm }}>
-              Cargando configuración...
-            </Text>
+            <Text style={{ color: Colors.text.secondary, fontSize: theme.fontSize.sm }}>Cargando configuración...</Text>
           </View>
         ) : (
           <>
             <ScrollView
               style={{ flex: 1 }}
               contentContainerStyle={{ padding: theme.spacing.xl, paddingBottom: theme.spacing.xxl }}
-              showsVerticalScrollIndicator={false}
               keyboardShouldPersistTaps="handled"
+              showsVerticalScrollIndicator={false}
             >
-              {/* Error banner */}
-              {submitError && (
+              {submitError ? (
                 <View
                   style={{
                     flexDirection: 'row',
@@ -531,111 +478,53 @@ export function LeagueSettingsModal({
                     marginBottom: theme.spacing.xl,
                   }}
                 >
-                  <Ionicons name="alert-circle-outline" size={18} color={Colors.semantic.error} style={{ marginTop: 1 }} />
+                  <Ionicons name="alert-circle-outline" size={18} color={Colors.semantic.error} />
                   <Text style={{ flex: 1, color: Colors.semantic.error, fontSize: theme.fontSize.sm, lineHeight: 20 }}>
                     {submitError}
                   </Text>
                 </View>
-              )}
+              ) : null}
 
-              {/* ── Datos de la liga ── */}
-              <SectionTitle title="Datos de la liga" />
 
-              {/* Logo — placeholder hasta que exista endpoint real de subida */}
-              <View style={{ marginBottom: theme.spacing.md }}>
-                <FieldLabel label="Logo de la liga" />
-                {/* TODO API: conectar subida real de logo cuando exista endpoint */}
-                <TouchableOpacity
-                  disabled
-                  style={{
-                    height: 96,
-                    borderWidth: 2,
-                    borderStyle: 'dashed',
-                    borderColor: Colors.bg.surface2,
-                    borderRadius: theme.borderRadius.lg,
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    gap: 6,
-                    overflow: 'hidden',
-                  }}
-                  activeOpacity={0.8}
-                >
-                  {league.crestUrl ? (
-                    <Image
-                      source={{ uri: league.crestUrl }}
-                      style={{ width: '100%', height: '100%' }}
-                      resizeMode="cover"
-                    />
-                  ) : (
-                    <>
-                      <Ionicons name="image-outline" size={28} color={Colors.text.disabled} />
-                      <Text style={{ color: Colors.text.disabled, fontSize: theme.fontSize.xs }}>
-                        Sin logo
-                      </Text>
-                    </>
-                  )}
-                </TouchableOpacity>
-                <Text style={{ color: Colors.text.disabled, fontSize: 11, marginTop: 4 }}>
-                  Opcional
-                </Text>
-              </View>
+              <SectionTitle title="Datos generales" />
 
-              {/* Nombre */}
               <View style={{ marginBottom: theme.spacing.md }}>
                 <FieldLabel label="Nombre" required />
-                <TextInput
+                <TextField
                   value={form.nombre}
-                  onChangeText={(v) => updateField('nombre', v)}
-                  editable={!disableInteraction}
-                  placeholder="Ej: Liga Amateur Madrid"
-                  placeholderTextColor={Colors.text.disabled}
-                  style={{
-                    height: 48,
-                    backgroundColor: Colors.bg.surface2,
-                    borderRadius: theme.borderRadius.lg,
-                    paddingHorizontal: theme.spacing.lg,
-                    color: Colors.text.primary,
-                    fontSize: theme.fontSize.md,
-                    opacity: disableInteraction ? 0.5 : 1,
-                  }}
+                  onChange={(value) => updateField('nombre', value)}
+                  disabled={isSubmitting || isDeleting}
+                  placeholder="Nombre de la liga"
                 />
-                <FieldError msg={errors.nombre} />
+                <FieldError message={errors.nombre} />
               </View>
 
-              {/* Temporada + Categoría */}
-              <View style={{ flexDirection: 'row', gap: theme.spacing.md, marginBottom: theme.spacing.md }}>
-                <View style={{ flex: 1 }}>
-                  <View pointerEvents={disableInteraction ? 'none' : 'auto'} style={{ opacity: disableInteraction ? 0.5 : 1 }}>
-                    <OptionSelectField
-                      label="Temporada *"
-                      value={form.temporada}
-                      options={TEMPORADAS}
-                      placeholder="Seleccionar"
-                      onChange={(v) => updateField('temporada', v)}
-                    />
-                  </View>
-                  <FieldError msg={errors.temporada} />
-                </View>
-
-                <View style={{ flex: 1 }}>
-                  <View pointerEvents={disableInteraction ? 'none' : 'auto'} style={{ opacity: disableInteraction ? 0.5 : 1 }}>
-                    <OptionSelectField
-                      label="Categoría"
-                      value={form.categoria}
-                      options={CATEGORIAS}
-                      placeholder="Seleccionar"
-                      onChange={(v) => updateField('categoria', v)}
-                    />
-                  </View>
-                </View>
+              <View pointerEvents={isSubmitting || isDeleting ? 'none' : 'auto'} style={{ opacity: isSubmitting || isDeleting ? 0.55 : 1, marginBottom: theme.spacing.md }}>
+                <OptionSelectField
+                  label="Temporada"
+                  value={form.temporada}
+                  options={TEMPORADAS}
+                  placeholder="Selecciona temporada"
+                  onChange={(value) => updateField('temporada', value)}
+                />
+                <FieldError message={errors.temporada} />
               </View>
 
-              {/* Estado: Activa / Finalizada */}
+              <View pointerEvents={isSubmitting || isDeleting ? 'none' : 'auto'} style={{ opacity: isSubmitting || isDeleting ? 0.55 : 1, marginBottom: theme.spacing.md }}>
+                <OptionSelectField
+                  label="Categoría"
+                  value={form.categoria}
+                  options={CATEGORIAS}
+                  placeholder="Sin categoría"
+                  onChange={(value) => updateField('categoria', value)}
+                />
+              </View>
+
               <View style={{ marginBottom: theme.spacing.xl }}>
                 <FieldLabel label="Estado" />
                 <View style={{ flexDirection: 'row', gap: theme.spacing.sm }}>
                   <TouchableOpacity
-                    onPress={() => !disableInteraction && updateField('activa', true)}
+                    onPress={() => !isSubmitting && !isDeleting && updateField('activa', true)}
                     style={{
                       flex: 1,
                       height: 44,
@@ -646,19 +535,15 @@ export function LeagueSettingsModal({
                       borderWidth: 1,
                       borderColor: form.activa ? Colors.brand.primary : Colors.bg.surface2,
                     }}
-                    activeOpacity={0.7}
+                    activeOpacity={0.75}
                   >
-                    <Text style={{
-                      color: form.activa ? Colors.brand.primary : Colors.text.secondary,
-                      fontSize: theme.fontSize.sm,
-                      fontWeight: '600',
-                    }}>
+                    <Text style={{ color: form.activa ? Colors.brand.primary : Colors.text.secondary, fontWeight: '700' }}>
                       Activa
                     </Text>
                   </TouchableOpacity>
 
                   <TouchableOpacity
-                    onPress={() => !disableInteraction && updateField('activa', false)}
+                    onPress={() => !isSubmitting && !isDeleting && updateField('activa', false)}
                     style={{
                       flex: 1,
                       height: 44,
@@ -669,13 +554,9 @@ export function LeagueSettingsModal({
                       borderWidth: 1,
                       borderColor: !form.activa ? Colors.semantic.warning : Colors.bg.surface2,
                     }}
-                    activeOpacity={0.7}
+                    activeOpacity={0.75}
                   >
-                    <Text style={{
-                      color: !form.activa ? Colors.semantic.warning : Colors.text.secondary,
-                      fontSize: theme.fontSize.sm,
-                      fontWeight: '600',
-                    }}>
+                    <Text style={{ color: !form.activa ? Colors.semantic.warning : Colors.text.secondary, fontWeight: '700' }}>
                       Finalizada
                     </Text>
                   </TouchableOpacity>
@@ -684,258 +565,131 @@ export function LeagueSettingsModal({
 
               <Divider />
 
-              {/* ── Configuración ── */}
-              <SectionTitle title="Configuración" />
+              <SectionTitle title="Reglas de equipos" />
 
-              {/* Mín. / Máx. equipos */}
               <View style={{ flexDirection: 'row', gap: theme.spacing.md, marginBottom: theme.spacing.md }}>
                 <View style={{ flex: 1 }}>
                   <FieldLabel label="Mín. equipos" />
-                  <NumberInput
-                    value={form.min_equipos}
-                    onChange={(v) => updateField('min_equipos', v)}
-                    disabled={disableInteraction}
-                  />
-                  <FieldError msg={errors.min_equipos} />
+                  <NumberInput value={form.min_equipos} onChange={(v) => updateField('min_equipos', v)} disabled={isSubmitting || isDeleting} />
+                  <FieldError message={errors.min_equipos} />
                 </View>
                 <View style={{ flex: 1 }}>
                   <FieldLabel label="Máx. equipos" />
-                  <NumberInput
-                    value={form.max_equipos}
-                    onChange={(v) => updateField('max_equipos', v)}
-                    disabled={disableInteraction}
-                  />
+                  <NumberInput value={form.max_equipos} onChange={(v) => updateField('max_equipos', v)} disabled={isSubmitting || isDeleting} />
                 </View>
               </View>
 
-              {/* Mín. / Máx. convocados */}
+              <View style={{ marginBottom: theme.spacing.xl }}>
+                <FieldLabel label="Mín. jugadores/equipo" />
+                <NumberInput value={form.min_jugadores_equipo} onChange={(v) => updateField('min_jugadores_equipo', v)} disabled={isSubmitting || isDeleting} />
+                <FieldError message={errors.min_jugadores_equipo} />
+              </View>
+
+              <Divider />
+
+              <SectionTitle title="Convocatoria y plantilla" />
+
               <View style={{ flexDirection: 'row', gap: theme.spacing.md, marginBottom: theme.spacing.md }}>
                 <View style={{ flex: 1 }}>
                   <FieldLabel label="Mín. convocados" />
-                  <NumberInput
-                    value={form.min_convocados}
-                    onChange={(v) => updateField('min_convocados', v)}
-                    disabled={disableInteraction}
-                  />
-                  <FieldError msg={errors.min_convocados} />
+                  <NumberInput value={form.min_convocados} onChange={(v) => updateField('min_convocados', v)} disabled={isSubmitting || isDeleting} />
+                  <FieldError message={errors.min_convocados} />
                 </View>
                 <View style={{ flex: 1 }}>
                   <FieldLabel label="Máx. convocados" />
-                  <NumberInput
-                    value={form.max_convocados}
-                    onChange={(v) => updateField('max_convocados', v)}
-                    disabled={disableInteraction}
-                  />
-                </View>
-              </View>
-
-              {/* Mín. / Máx. plantilla */}
-              <View style={{ flexDirection: 'row', gap: theme.spacing.md, marginBottom: theme.spacing.md }}>
-                <View style={{ flex: 1 }}>
-                  <FieldLabel label="Mín. plantilla" />
-                  <Text style={{ color: Colors.text.disabled, fontSize: 11, marginBottom: 4 }}>
-                    Titulares y suplentes
-                  </Text>
-                  <NumberInput
-                    value={form.min_plantilla}
-                    onChange={(v) => updateField('min_plantilla', v)}
-                    disabled={disableInteraction}
-                  />
-                  <FieldError msg={errors.min_plantilla} />
-                </View>
-                <View style={{ flex: 1 }}>
-                  <FieldLabel label="Máx. plantilla" />
-                  <Text style={{ color: Colors.text.disabled, fontSize: 11, marginBottom: 4 }}>
-                    Titulares y suplentes
-                  </Text>
-                  <NumberInput
-                    value={form.max_plantilla}
-                    onChange={(v) => updateField('max_plantilla', v)}
-                    disabled={disableInteraction}
-                  />
-                </View>
-              </View>
-
-              {/* Minutos partido + Máx. partidos */}
-              <View style={{ flexDirection: 'row', gap: theme.spacing.md, marginBottom: theme.spacing.xl }}>
-                <View style={{ flex: 1 }}>
-                  <View pointerEvents={disableInteraction ? 'none' : 'auto'} style={{ opacity: disableInteraction ? 0.5 : 1 }}>
-                    <OptionSelectField
-                      label="Minutos partido"
-                      value={form.minutos_partido}
-                      options={MINUTOS_OPTIONS}
-                      onChange={(v) => updateField('minutos_partido', v)}
-                    />
-                  </View>
-                  <FieldError msg={errors.minutos_partido} />
-                </View>
-                <View style={{ flex: 1 }}>
-                  <FieldLabel label="Máx. partidos" />
-                  <NumberInput
-                    value={form.max_partidos}
-                    onChange={(v) => updateField('max_partidos', v)}
-                    disabled={disableInteraction}
-                  />
-                  <FieldError msg={errors.max_partidos} />
+                  <NumberInput value={form.max_convocados} onChange={(v) => updateField('max_convocados', v)} disabled={isSubmitting || isDeleting} />
                 </View>
               </View>
 
               <Divider />
 
-              {/* ── Eliminar liga ── */}
-              {showDeleteConfirm ? (
-                <View
-                  style={{
-                    backgroundColor: 'rgba(255,69,52,0.08)',
-                    borderWidth: 1,
-                    borderColor: 'rgba(255,69,52,0.4)',
-                    borderRadius: theme.borderRadius.lg,
-                    padding: theme.spacing.lg,
-                  }}
-                >
-                  <Text style={{ color: '#FCA5A5', fontSize: theme.fontSize.sm, lineHeight: 20, marginBottom: theme.spacing.lg }}>
-                    ¿Estás seguro? Esta acción eliminará la liga y todos sus datos asociados y no se puede deshacer.
-                  </Text>
-                  <View style={{ flexDirection: 'row', gap: theme.spacing.md }}>
-                    <TouchableOpacity
-                      onPress={() => setShowDeleteConfirm(false)}
-                      disabled={isDeleting}
-                      style={{
-                        flex: 1,
-                        height: 44,
-                        borderRadius: theme.borderRadius.lg,
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        borderWidth: 1,
-                        borderColor: Colors.bg.surface2,
-                        opacity: isDeleting ? 0.4 : 1,
-                      }}
-                      activeOpacity={0.7}
-                    >
-                      <Text style={{ color: Colors.text.secondary, fontSize: theme.fontSize.sm, fontWeight: '600' }}>
-                        Cancelar
-                      </Text>
-                    </TouchableOpacity>
+              <SectionTitle title="Partidos y duración" />
+              <View pointerEvents={isSubmitting || isDeleting ? 'none' : 'auto'} style={{ opacity: isSubmitting || isDeleting ? 0.55 : 1, marginBottom: theme.spacing.xl }}>
+                <OptionSelectField
+                  label="Minutos por partido"
+                  value={form.minutos_partido}
+                  options={MINUTOS_OPTIONS}
+                  onChange={(value) => updateField('minutos_partido', value)}
+                />
+                <FieldError message={errors.minutos_partido} />
+              </View>
 
-                    <TouchableOpacity
-                      onPress={handleDelete}
-                      disabled={isDeleting}
-                      style={{
-                        flex: 1,
-                        height: 44,
-                        borderRadius: theme.borderRadius.lg,
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        flexDirection: 'row',
-                        gap: 6,
-                        backgroundColor: Colors.semantic.error,
-                        opacity: isDeleting ? 0.7 : 1,
-                      }}
-                      activeOpacity={0.85}
-                    >
-                      {isDeleting ? (
-                        <>
-                          <ActivityIndicator size="small" color="#fff" />
-                          <Text style={{ color: '#fff', fontSize: theme.fontSize.sm, fontWeight: '700' }}>
-                            Eliminando...
-                          </Text>
-                        </>
-                      ) : (
-                        <>
-                          <Ionicons name="trash-outline" size={16} color="#fff" />
-                          <Text style={{ color: '#fff', fontSize: theme.fontSize.sm, fontWeight: '700' }}>
-                            Eliminar Liga
-                          </Text>
-                        </>
-                      )}
-                    </TouchableOpacity>
-                  </View>
-                </View>
-              ) : (
-                <TouchableOpacity
-                  onPress={() => setShowDeleteConfirm(true)}
-                  disabled={disableInteraction}
-                  style={{
-                    flexDirection: 'row',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    gap: 8,
-                    height: 48,
-                    borderRadius: theme.borderRadius.lg,
-                    opacity: disableInteraction ? 0.4 : 1,
-                  }}
-                  activeOpacity={0.7}
-                >
-                  <Ionicons name="trash-outline" size={18} color={Colors.semantic.error} />
-                  <Text style={{ color: Colors.semantic.error, fontSize: theme.fontSize.sm, fontWeight: '600' }}>
-                    Eliminar Liga
-                  </Text>
-                </TouchableOpacity>
-              )}
+              <Divider />
+
+              <SectionTitle title="Zona peligrosa" />
+              <TouchableOpacity
+                onPress={handleDelete}
+                disabled={isSubmitting || isDeleting}
+                activeOpacity={0.85}
+                style={{
+                  minHeight: 50,
+                  borderRadius: theme.borderRadius.lg,
+                  borderWidth: 1,
+                  borderColor: Colors.semantic.error,
+                  backgroundColor: 'rgba(255,69,52,0.08)',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  flexDirection: 'row',
+                  gap: theme.spacing.sm,
+                  opacity: isSubmitting || isDeleting ? 0.55 : 1,
+                }}
+              >
+                {isDeleting ? <ActivityIndicator size="small" color={Colors.semantic.error} /> : <Ionicons name="trash-outline" size={18} color={Colors.semantic.error} />}
+                <Text style={{ color: Colors.semantic.error, fontWeight: '800' }}>
+                  {isDeleting ? 'Eliminando...' : 'Eliminar liga'}
+                </Text>
+              </TouchableOpacity>
             </ScrollView>
 
-            {/* ── Botones fijos ── */}
             <View
               style={{
                 paddingHorizontal: theme.spacing.xl,
                 paddingTop: theme.spacing.md,
-                paddingBottom: Math.max(insets.bottom + theme.spacing.md, theme.spacing.xl),
+                paddingBottom: insets.bottom + theme.spacing.md,
                 borderTopWidth: 1,
                 borderTopColor: Colors.bg.surface2,
-                backgroundColor: Colors.bg.base,
                 flexDirection: 'row',
                 gap: theme.spacing.md,
               }}
             >
               <TouchableOpacity
                 onPress={handleClose}
-                disabled={disableInteraction}
+                disabled={isSubmitting || isDeleting}
+                activeOpacity={0.85}
                 style={{
                   flex: 1,
-                  height: 52,
-                  borderRadius: theme.borderRadius.xl,
-                  alignItems: 'center',
-                  justifyContent: 'center',
+                  height: 50,
+                  borderRadius: theme.borderRadius.lg,
                   borderWidth: 1,
                   borderColor: Colors.bg.surface2,
-                  opacity: disableInteraction ? 0.4 : 1,
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  opacity: isSubmitting || isDeleting ? 0.55 : 1,
                 }}
-                activeOpacity={0.7}
               >
-                <Text style={{ color: Colors.text.primary, fontSize: theme.fontSize.md, fontWeight: '600' }}>
-                  Cancelar
-                </Text>
+                <Text style={{ color: Colors.text.primary, fontWeight: '700' }}>Cancelar</Text>
               </TouchableOpacity>
 
               <TouchableOpacity
                 onPress={handleSubmit}
-                disabled={disableInteraction}
+                disabled={isSubmitting || isDeleting}
+                activeOpacity={0.9}
                 style={{
-                  flex: 2,
-                  height: 52,
-                  borderRadius: theme.borderRadius.xl,
+                  flex: 1,
+                  height: 50,
+                  borderRadius: theme.borderRadius.lg,
+                  backgroundColor: Colors.brand.primary,
                   alignItems: 'center',
                   justifyContent: 'center',
                   flexDirection: 'row',
                   gap: theme.spacing.sm,
-                  backgroundColor: Colors.brand.primary,
-                  opacity: disableInteraction ? 0.7 : 1,
+                  opacity: isSubmitting || isDeleting ? 0.65 : 1,
                 }}
-                activeOpacity={0.85}
               >
-                {isSubmitting ? (
-                  <>
-                    <ActivityIndicator size="small" color={Colors.bg.base} />
-                    <Text style={{ color: Colors.bg.base, fontSize: theme.fontSize.md, fontWeight: '700' }}>
-                      Guardando...
-                    </Text>
-                  </>
-                ) : (
-                  <Text style={{ color: Colors.bg.base, fontSize: theme.fontSize.md, fontWeight: '700' }}>
-                    Guardar Cambios
-
-                  </Text>
-                )}
+                {isSubmitting ? <ActivityIndicator size="small" color={Colors.bg.base} /> : null}
+                <Text style={{ color: Colors.bg.base, fontWeight: '800' }}>
+                  {isSubmitting ? 'Guardando...' : 'Guardar cambios'}
+                </Text>
               </TouchableOpacity>
             </View>
           </>

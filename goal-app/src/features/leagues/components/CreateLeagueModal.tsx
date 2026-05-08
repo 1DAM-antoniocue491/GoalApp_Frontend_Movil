@@ -1,652 +1,341 @@
 /**
  * CreateLeagueModal
  *
- * Bottom-sheet modal para crear una liga nueva.
- * Solo recoge los campos de POST /ligas/.
- * La configuración avanzada irá en un paso posterior (LigaConfigModal).
+ * Modal móvil para crear una liga.
+ *
+ * Reglas de producto aplicadas:
+ * - No se permite subir logo desde móvil. La liga usa un escudo visual generado.
+ * - No se muestra “máximo/cantidad de partidos”; el calendario real se gestiona desde calendario.
+ * - Solo se envían a API los campos que el usuario puede editar aquí.
  */
 
-import React, { useRef, useCallback, useEffect, useState, memo } from 'react';
+import React, { useCallback, useMemo, useState } from 'react';
 import {
+  Modal,
   View,
   Text,
   TextInput,
   TouchableOpacity,
-  Modal,
-  Animated,
-  Easing,
-  Pressable,
-  ScrollView,
+  ActivityIndicator,
   KeyboardAvoidingView,
   Platform,
-  ActivityIndicator,
-  Alert,
+  ScrollView,
 } from 'react-native';
-import { Image } from 'expo-image';
-import * as ImagePicker from 'expo-image-picker';
-import * as ImageManipulator from 'expo-image-manipulator';
 import { Ionicons } from '@expo/vector-icons';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { Colors } from '@/src/shared/constants/colors';
 import { theme } from '@/src/shared/styles/theme';
-import { OptionSelectField, type SelectOption } from '@/src/shared/components/ui/OptionSelectField';
-import { type LeagueCategory, CATEGORY_LABELS } from '@/src/shared/types/league';
-import type { LigaCreateRequest } from '@/src/features/leagues/types/league.api.types';
-
-// ---------------------------------------------------------------------------
-// Tipos
-// ---------------------------------------------------------------------------
-
-/**
- * Estado interno del formulario (UI).
- * Exportado para que el caller pueda tipar initialValues en modo edición.
- * No se envía directamente al backend — se mapea en handleConfirm.
- */
-export interface CreateLeagueForm {
-  name: string;
-  /** Año de inicio de la temporada. Se muestra como "2025/26" en UI. */
-  seasonStartYear: number;
-  category: LeagueCategory;
-  /** Cantidad máxima de partidos → cantidad_partidos */
-  maxMatches: number;
-  /** Minutos posibles de los partidos → duracion_partido */
-  matchMinutes: number;
-  /** URI local del asset seleccionado */
-  logoUri?: string | null;
-  /** URL remota del logo (en edición o tras subida) */
-  logoUrl?: string | null;
-  logoHash?: string | null;
-  logoWidth?: number | null;
-  logoHeight?: number | null;
-}
+import { OptionSelectField } from '@/src/shared/components/ui/OptionSelectField';
+import type { LigaCreateRequest } from '../types/league.api.types';
 
 interface CreateLeagueModalProps {
   visible: boolean;
-  /** Emite el payload listo para POST /ligas/ */
-  onConfirm: (data: LigaCreateRequest) => void;
+  onConfirm: (data: LigaCreateRequest) => void | Promise<void>;
   onCancel: () => void;
-  /** 'create' por defecto. 'edit' pre-rellena con initialValues. */
-  mode?: 'create' | 'edit';
-  initialValues?: Partial<CreateLeagueForm>;
-  /** true mientras se envía la petición al backend */
   submitting?: boolean;
-  /** Mensaje de error si la petición falló */
   submitError?: string | null;
 }
 
-// ---------------------------------------------------------------------------
-// Constantes de UI
-// ---------------------------------------------------------------------------
-
-const CURRENT_YEAR = new Date().getFullYear();
-
-function formatSeason(startYear: number): string {
-  return `${startYear}/${String(startYear + 1).slice(2)}`;
+interface FormState {
+  nombre: string;
+  temporada: string;
+  categoria: string;
+  duracionPartido: string;
 }
 
-/** 9 temporadas: 2 atrás, año actual, 6 adelante */
-const SEASON_OPTIONS: SelectOption[] = Array.from({ length: 9 }, (_, i) => {
-  const year = CURRENT_YEAR - 2 + i;
-  return { value: String(year), label: formatSeason(year) };
-});
-
-const CATEGORY_OPTIONS: SelectOption[] = (
-  Object.entries(CATEGORY_LABELS) as [LeagueCategory, string][]
-).map(([value, label]) => ({ value, label }));
-
-const DEFAULT_FORM: CreateLeagueForm = {
-  name: '',
-  seasonStartYear: CURRENT_YEAR,
-  category: 'senior',
-  maxMatches: 45,
-  matchMinutes: 90,
-  logoUri: null,
-  logoUrl: null,
-  logoHash: null,
-  logoWidth: null,
-  logoHeight: null,
+const INITIAL_FORM: FormState = {
+  nombre: '',
+  temporada: '',
+  categoria: '',
+  duracionPartido: '',
 };
 
-// ---------------------------------------------------------------------------
-// Componente interno: stepper numérico
-// ---------------------------------------------------------------------------
+const TEMPORADAS = [
+  { value: '2024/25', label: '2024/25' },
+  { value: '2025/26', label: '2025/26' },
+  { value: '2026/27', label: '2026/27' },
+  { value: '2027/28', label: '2027/28' },
+];
 
-interface StepperFieldProps {
-  label: string;
-  value: number;
-  onIncrement: () => void;
-  onDecrement: () => void;
+const CATEGORIAS = [
+  { value: '', label: 'Sin categoría' },
+  { value: 'Senior', label: 'Senior' },
+  { value: 'Juvenil A', label: 'Juvenil A' },
+  { value: 'Juvenil B', label: 'Juvenil B' },
+  { value: 'Cadete', label: 'Cadete' },
+  { value: 'Infantil', label: 'Infantil' },
+  { value: 'Veteranos +35', label: 'Veteranos +35' },
+  { value: 'Veteranos +40', label: 'Veteranos +40' },
+];
+
+const DURACION_PARTIDOS = [
+  { value: '', label: 'Usar configuración por defecto' },
+  { value: '60', label: '60 minutos' },
+  { value: '70', label: '70 minutos' },
+  { value: '80', label: '80 minutos' },
+  { value: '90', label: '90 minutos' },
+];
+
+function FieldError({ message }: { message?: string }) {
+  if (!message) return null;
+  return <Text style={{ color: Colors.semantic.error, fontSize: 12, marginTop: 6 }}>{message}</Text>;
 }
 
-function StepperField({ label, value, onIncrement, onDecrement }: StepperFieldProps) {
+function ShieldPreview({ name }: { name: string }) {
+  const initial = name.trim().charAt(0).toUpperCase() || 'G';
+  const palette = useMemo(() => {
+    const colors = [Colors.brand.primary, Colors.brand.secondary, Colors.brand.accent, Colors.semantic.warning];
+    const index = name.length % colors.length;
+    return colors[index];
+  }, [name]);
+
   return (
-    <View style={{ flex: 1 }}>
-      <Text
-        style={{
-          color: Colors.text.secondary,
-          fontSize: theme.fontSize.xs,
-          marginBottom: theme.spacing.sm,
-          lineHeight: 16,
-        }}
-      >
-        {label}
-      </Text>
-      <View
-        style={{
-          flexDirection: 'row',
-          alignItems: 'center',
-          borderRadius: 14,
-          borderWidth: 1,
-          borderColor: Colors.bg.surface2,
-          backgroundColor: Colors.bg.base,
-          height: 52,
-          overflow: 'hidden',
-        }}
-      >
-        <TouchableOpacity
-          onPress={onDecrement}
-          style={{ width: 44, height: 52, alignItems: 'center', justifyContent: 'center' }}
-          hitSlop={{ top: 4, bottom: 4 }}
-        >
-          <Ionicons name="remove" size={18} color={Colors.text.secondary} />
-        </TouchableOpacity>
-        <Text
-          style={{
-            flex: 1,
-            textAlign: 'center',
-            color: Colors.text.primary,
-            fontSize: theme.fontSize.md,
-            fontWeight: '600',
-          }}
-        >
-          {value}
-        </Text>
-        <TouchableOpacity
-          onPress={onIncrement}
-          style={{ width: 44, height: 52, alignItems: 'center', justifyContent: 'center' }}
-          hitSlop={{ top: 4, bottom: 4 }}
-        >
-          <Ionicons name="add" size={18} color={Colors.text.secondary} />
-        </TouchableOpacity>
-      </View>
+    <View
+      style={{
+        width: 72,
+        height: 72,
+        borderRadius: 22,
+        backgroundColor: `${palette}22`,
+        borderWidth: 1,
+        borderColor: `${palette}88`,
+        alignItems: 'center',
+        justifyContent: 'center',
+      }}
+    >
+      <Ionicons name="shield" size={22} color={palette} />
+      <Text style={{ color: palette, fontSize: 20, fontWeight: '800', marginTop: 2 }}>{initial}</Text>
     </View>
   );
 }
 
-// ---------------------------------------------------------------------------
-// Modal principal
-// ---------------------------------------------------------------------------
-
-function CreateLeagueModalComponent({
+export function CreateLeagueModal({
   visible,
   onConfirm,
   onCancel,
-  mode = 'create',
-  initialValues,
   submitting = false,
-  submitError = null,
+  submitError,
 }: CreateLeagueModalProps) {
-  const [form, setForm] = useState<CreateLeagueForm>(DEFAULT_FORM);
+  const insets = useSafeAreaInsets();
+  const [form, setForm] = useState<FormState>(INITIAL_FORM);
+  const [errors, setErrors] = useState<Record<string, string>>({});
 
-  /**
-   * Ref para capturar initialValues en el momento exacto de apertura
-   * sin añadirlos al array de dependencias del useEffect.
-   */
-  const initialValuesRef = useRef<Partial<CreateLeagueForm> | undefined>(initialValues);
-  initialValuesRef.current = initialValues;
-
-  /** Spinner mientras el picker nativo o ImageManipulator están procesando */
-  const [isPickingImage, setIsPickingImage] = useState(false);
-
-  const slideAnim = useRef(new Animated.Value(120)).current;
-  const opacityAnim = useRef(new Animated.Value(0)).current;
-
-  /** Animación entrada/salida + reset del formulario al abrir */
-  useEffect(() => {
-    if (visible) {
-      setForm(
-        mode === 'edit'
-          ? { ...DEFAULT_FORM, ...initialValuesRef.current }
-          : DEFAULT_FORM
-      );
-      Animated.parallel([
-        Animated.timing(opacityAnim, {
-          toValue: 1,
-          duration: 220,
-          easing: Easing.out(Easing.cubic),
-          useNativeDriver: true,
-        }),
-        Animated.timing(slideAnim, {
-          toValue: 0,
-          duration: 320,
-          easing: Easing.out(Easing.back(1.05)),
-          useNativeDriver: true,
-        }),
-      ]).start();
-    } else {
-      Animated.parallel([
-        Animated.timing(opacityAnim, { toValue: 0, duration: 160, useNativeDriver: true }),
-        Animated.timing(slideAnim, { toValue: 120, duration: 200, useNativeDriver: true }),
-      ]).start();
-    }
-  }, [visible, opacityAnim, slideAnim]);
-
-  /** Actualiza un campo del formulario sin repetir setForm en cada input */
-  const update = useCallback(
-    <K extends keyof CreateLeagueForm>(key: K, value: CreateLeagueForm[K]) => {
-      setForm((prev) => ({ ...prev, [key]: value }));
-    },
-    []
-  );
-
-  /** Limpia todos los metadatos del logo a la vez para no dejar estado huérfano */
-  const clearLogo = useCallback(() => {
-    setForm((prev) => ({
-      ...prev,
-      logoUri: null,
-      logoUrl: null,
-      logoHash: null,
-      logoWidth: null,
-      logoHeight: null,
-    }));
+  const updateField = useCallback(<K extends keyof FormState>(key: K, value: FormState[K]) => {
+    setForm(prev => ({ ...prev, [key]: value }));
+    setErrors(prev => {
+      if (!prev[key]) return prev;
+      const next = { ...prev };
+      delete next[key];
+      return next;
+    });
   }, []);
 
-  /**
-   * Abre la galería nativa, recorta en cuadrado y normaliza la imagen.
-   * No sube todavía — solo prepara el estado local con el URI procesado.
-   */
-  const handlePickImage = useCallback(async () => {
-    try {
-      const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
-      if (status !== 'granted') {
-        Alert.alert(
-          'Permiso denegado',
-          'Necesitamos acceso a tu galería para subir el logo de la liga.'
-        );
-        return;
-      }
+  const handleClose = useCallback(() => {
+    if (submitting) return;
+    setForm(INITIAL_FORM);
+    setErrors({});
+    onCancel();
+  }, [onCancel, submitting]);
 
-      setIsPickingImage(true);
+  const validate = useCallback(() => {
+    const next: Record<string, string> = {};
+    if (!form.nombre.trim()) next.nombre = 'El nombre es obligatorio';
+    else if (form.nombre.trim().length < 3) next.nombre = 'Mínimo 3 caracteres';
+    if (!form.temporada) next.temporada = 'Selecciona una temporada';
+    setErrors(next);
+    return Object.keys(next).length === 0;
+  }, [form]);
 
-      const result = await ImagePicker.launchImageLibraryAsync({
-        mediaTypes: ['images'],
-        allowsEditing: true,
-        aspect: [1, 1],
-        quality: 1,
-        base64: false,
-      });
-
-      if (result.canceled) return;
-
-      const asset = result.assets[0];
-
-      // Redimensionar a 512×512 y comprimir al 80 %
-      const processed = await ImageManipulator.manipulateAsync(
-        asset.uri,
-        [{ resize: { width: 512, height: 512 } }],
-        { compress: 0.8, format: ImageManipulator.SaveFormat.JPEG }
-      );
-
-      // Si ya existía URL remota, la invalidamos porque el logo ha cambiado
-      setForm((prev) => ({
-        ...prev,
-        logoUri: processed.uri,
-        logoWidth: processed.width,
-        logoHeight: processed.height,
-        logoUrl: null,
-        logoHash: null,
-      }));
-    } catch {
-      Alert.alert('Error', 'No se pudo seleccionar el logo de la liga.');
-    } finally {
-      setIsPickingImage(false);
-    }
-  }, []);
-
-  /** Válido si el nombre tiene al menos 2 caracteres */
-  const isValid = form.name.trim().length >= 2;
-
-  /**
-   * Mapea el estado interno al contrato de POST /ligas/ y emite el payload.
-   * No incluye campos de configuración avanzada.
-   * No cierra el modal — el caller lo cierra solo si la petición tiene éxito.
-   */
-  const handleConfirm = useCallback(() => {
-    if (!isValid || submitting) return;
+  const handleSubmit = useCallback(async () => {
+    if (!validate()) return;
 
     const payload: LigaCreateRequest = {
-      nombre: form.name.trim(),
-      temporada: `${form.seasonStartYear}/${String(form.seasonStartYear + 1).slice(2)}`,
-      categoria: form.category ?? null,
-      // Enviados como número, nunca como string
-      cantidad_partidos: form.maxMatches,
-      duracion_partido: form.matchMinutes,
-      logo_url: form.logoUrl ?? null,
+      nombre: form.nombre.trim(),
+      temporada: form.temporada,
+      categoria: form.categoria || undefined,
+      activa: true,
+      // No enviamos logo_url ni cantidad_partidos: esos campos ya no existen en el flujo móvil.
+      duracion_partido: form.duracionPartido ? Number(form.duracionPartido) : undefined,
     };
 
-    onConfirm(payload);
-  }, [form, isValid, onConfirm, submitting]);
-
-  /** URI a mostrar en el preview: local tiene prioridad sobre remota */
-  const previewUri = form.logoUri ?? form.logoUrl ?? null;
+    await onConfirm(payload);
+  }, [form, onConfirm, validate]);
 
   return (
-    <Modal transparent visible={visible} animationType="none" statusBarTranslucent>
+    <Modal visible={visible} animationType="slide" presentationStyle="pageSheet" onRequestClose={handleClose}>
       <KeyboardAvoidingView
-        style={{ flex: 1 }}
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        style={{ flex: 1, backgroundColor: Colors.bg.base }}
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
       >
-        <Animated.View
+        <View
           style={{
-            flex: 1,
-            backgroundColor: '#000000b3',
-            opacity: opacityAnim,
-            justifyContent: 'flex-end',
+            paddingTop: insets.top + theme.spacing.md,
+            paddingHorizontal: theme.spacing.xl,
+            paddingBottom: theme.spacing.md,
+            borderBottomWidth: 1,
+            borderBottomColor: Colors.bg.surface2,
+            flexDirection: 'row',
+            alignItems: 'center',
+            justifyContent: 'space-between',
           }}
         >
-          {/* Toca fuera para cerrar */}
-          <Pressable style={{ flex: 1 }} onPress={onCancel} />
+          <View>
+            <Text style={{ color: Colors.text.primary, fontSize: theme.fontSize.lg, fontWeight: '800' }}>
+              Nueva liga
+            </Text>
+            <Text style={{ color: Colors.text.secondary, fontSize: theme.fontSize.xs, marginTop: 2 }}>
+              Configura la base de tu competición
+            </Text>
+          </View>
 
-          <Animated.View
+          <TouchableOpacity
+            onPress={handleClose}
+            disabled={submitting}
+            activeOpacity={0.75}
             style={{
-              transform: [{ translateY: slideAnim }],
-              backgroundColor: Colors.bg.surface1,
-              borderTopLeftRadius: 32,
-              borderTopRightRadius: 32,
-              maxHeight: '92%',
-              borderWidth: 1,
-              borderColor: Colors.bg.surface2,
+              width: 38,
+              height: 38,
+              borderRadius: 19,
+              backgroundColor: Colors.bg.surface2,
+              alignItems: 'center',
+              justifyContent: 'center',
+              opacity: submitting ? 0.5 : 1,
             }}
           >
-            {/* ── Header ── */}
+            <Ionicons name="close" size={20} color={Colors.text.secondary} />
+          </TouchableOpacity>
+        </View>
+
+        <ScrollView
+          style={{ flex: 1 }}
+          contentContainerStyle={{ padding: theme.spacing.xl, paddingBottom: theme.spacing.xxl }}
+          keyboardShouldPersistTaps="handled"
+          showsVerticalScrollIndicator={false}
+        >
+          {submitError ? (
             <View
               style={{
-                paddingHorizontal: theme.spacing.xl,
-                paddingTop: theme.spacing.md,
-                paddingBottom: theme.spacing.lg,
-                borderBottomWidth: 1,
-                borderBottomColor: Colors.bg.surface2,
+                backgroundColor: 'rgba(255,69,52,0.1)',
+                borderWidth: 1,
+                borderColor: Colors.semantic.error,
+                borderRadius: theme.borderRadius.lg,
+                padding: theme.spacing.md,
+                marginBottom: theme.spacing.lg,
+                flexDirection: 'row',
+                gap: theme.spacing.sm,
               }}
             >
-              {/* Drag handle */}
-              <View
-                style={{
-                  width: 40,
-                  height: 4,
-                  borderRadius: 2,
-                  backgroundColor: Colors.bg.surface2,
-                  alignSelf: 'center',
-                  marginBottom: 20,
-                }}
-              />
-              <View
-                style={{
-                  flexDirection: 'row',
-                  alignItems: 'center',
-                  justifyContent: 'space-between',
-                }}
-              >
-                <Text
-                  style={{
-                    color: Colors.text.primary,
-                    fontSize: theme.fontSize.xxl,
-                    fontWeight: '700',
-                  }}
-                >
-                  {mode === 'edit' ? 'Editar liga' : 'Nueva Liga'}
-                </Text>
-                <TouchableOpacity
-                  onPress={onCancel}
-                  style={{
-                    height: 36,
-                    width: 36,
-                    borderRadius: 12,
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    backgroundColor: Colors.bg.surface2,
-                  }}
-                >
-                  <Ionicons name="close" size={20} color={Colors.text.secondary} />
-                </TouchableOpacity>
-              </View>
+              <Ionicons name="alert-circle-outline" size={18} color={Colors.semantic.error} />
+              <Text style={{ flex: 1, color: Colors.semantic.error, fontSize: theme.fontSize.sm }}>{submitError}</Text>
             </View>
+          ) : null}
 
-            {/* ── Cuerpo del formulario ── */}
-            <ScrollView
-              style={{ paddingHorizontal: theme.spacing.xl }}
-              contentContainerStyle={{ paddingTop: theme.spacing.xl, paddingBottom: 32 }}
-              showsVerticalScrollIndicator={false}
-              keyboardShouldPersistTaps="handled"
-            >
-              {/* ── Logo ── */}
-              {isPickingImage ? (
-                <View
-                  style={{
-                    width: 110,
-                    height: 110,
-                    borderRadius: 24,
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    alignSelf: 'center',
-                    marginBottom: 28,
-                    backgroundColor: Colors.bg.base,
-                  }}
-                >
-                  <ActivityIndicator color={Colors.brand.primary} />
-                </View>
-              ) : previewUri ? (
-                <View style={{ alignSelf: 'center', alignItems: 'center', marginBottom: 28 }}>
-                  <Image
-                    source={{ uri: previewUri }}
-                    style={{ width: 110, height: 110, borderRadius: 24 }}
-                    contentFit="cover"
-                    transition={200}
-                  />
-                  <View style={{ flexDirection: 'row', gap: theme.spacing.lg, marginTop: 10 }}>
-                    <TouchableOpacity
-                      onPress={handlePickImage}
-                      style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}
-                    >
-                      <Ionicons name="pencil-outline" size={14} color={Colors.brand.accent} />
-                      <Text style={{ color: Colors.brand.accent, fontSize: theme.fontSize.xs }}>
-                        Cambiar
-                      </Text>
-                    </TouchableOpacity>
-                    <TouchableOpacity
-                      onPress={clearLogo}
-                      style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}
-                    >
-                      <Ionicons name="trash-outline" size={14} color={Colors.semantic.error} />
-                      <Text style={{ color: Colors.semantic.error, fontSize: theme.fontSize.xs }}>
-                        Eliminar
-                      </Text>
-                    </TouchableOpacity>
-                  </View>
-                </View>
-              ) : (
-                /* Sin imagen: shield-outline tappable para abrir picker */
-                <TouchableOpacity
-                  onPress={handlePickImage}
-                  activeOpacity={0.75}
-                  style={{ alignSelf: 'center', alignItems: 'center', marginBottom: 28 }}
-                >
-                  <View
-                    style={{
-                      width: 110,
-                      height: 110,
-                      borderRadius: 24,
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      backgroundColor: Colors.bg.base,
-                      borderWidth: 1,
-                      borderColor: Colors.bg.surface2,
-                    }}
-                  >
-                    <Ionicons name="shield-outline" size={44} color={Colors.text.disabled} />
-                  </View>
-                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 8 }}>
-                    <Ionicons name="cloud-upload-outline" size={13} color={Colors.brand.accent} />
-                    <Text style={{ color: Colors.brand.accent, fontSize: theme.fontSize.xs }}>
-                      Subir logo
-                    </Text>
-                  </View>
-                </TouchableOpacity>
-              )}
-
-              {/* ── Nombre ── */}
-              <Text
-                style={{
-                  color: Colors.text.secondary,
-                  fontSize: 13,
-                  marginBottom: theme.spacing.sm,
-                }}
-              >
-                Nombre de la liga
-              </Text>
-              <TextInput
-                style={{
-                  borderRadius: 14,
-                  borderWidth: 1,
-                  // Resalta el borde cuando hay contenido
-                  borderColor: form.name ? Colors.brand.primary : Colors.bg.surface2,
-                  backgroundColor: Colors.bg.base,
-                  paddingHorizontal: theme.spacing.lg,
-                  height: 52,
-                  color: Colors.text.primary,
-                  fontSize: 15,
-                  marginBottom: 20,
-                }}
-                placeholder="La liga"
-                placeholderTextColor={Colors.text.disabled}
-                value={form.name}
-                onChangeText={(t) => update('name', t)}
-                autoCapitalize="words"
-                returnKeyType="done"
-              />
-
-              {/* ── Temporada + Categoría ── */}
-              <View style={{ flexDirection: 'row', gap: 12, marginBottom: 20 }}>
-                <OptionSelectField
-                  label="Temporada"
-                  value={String(form.seasonStartYear)}
-                  options={SEASON_OPTIONS}
-                  onChange={(v) => update('seasonStartYear', Number(v))}
-                />
-                <OptionSelectField
-                  label="Categoría"
-                  value={form.category}
-                  options={CATEGORY_OPTIONS}
-                  onChange={(v) => update('category', v as LeagueCategory)}
-                />
-              </View>
-
-              {/* ── Partidos + Minutos ── */}
-              <View style={{ flexDirection: 'row', gap: 12, marginBottom: 8 }}>
-                <StepperField
-                  label="Cantidad máxima de partidos"
-                  value={form.maxMatches}
-                  onIncrement={() => update('maxMatches', form.maxMatches + 1)}
-                  onDecrement={() => update('maxMatches', Math.max(1, form.maxMatches - 1))}
-                />
-                <StepperField
-                  label="Minutos posibles de los partidos"
-                  value={form.matchMinutes}
-                  onIncrement={() => update('matchMinutes', form.matchMinutes + 5)}
-                  onDecrement={() => update('matchMinutes', Math.max(40, form.matchMinutes - 5))}
-                />
-              </View>
-            </ScrollView>
-
-            {/* ── Footer ── */}
-            <View
+          <View style={{ marginBottom: theme.spacing.lg }}>
+            <Text style={{ color: Colors.text.secondary, fontSize: 13, marginBottom: 8 }}>
+              Nombre de la liga
+            </Text>
+            <TextInput
+              value={form.nombre}
+              onChangeText={(value) => updateField('nombre', value)}
+              editable={!submitting}
+              placeholder="Ej: Liga Amateur Sevilla"
+              placeholderTextColor={Colors.text.disabled}
               style={{
-                paddingHorizontal: theme.spacing.xl,
-                paddingTop: theme.spacing.lg,
-                paddingBottom: 40,
-                borderTopWidth: 1,
-                borderTopColor: Colors.bg.surface2,
+                height: 52,
+                backgroundColor: Colors.bg.surface2,
+                borderRadius: theme.borderRadius.lg,
+                paddingHorizontal: theme.spacing.lg,
+                color: Colors.text.primary,
+                fontSize: theme.fontSize.md,
               }}
-            >
-              {submitError ? (
-                <Text
-                  style={{
-                    color: Colors.semantic.error,
-                    fontSize: theme.fontSize.xs,
-                    textAlign: 'center',
-                    marginBottom: theme.spacing.md,
-                  }}
-                >
-                  {submitError}
-                </Text>
-              ) : null}
+            />
+            <FieldError message={errors.nombre} />
+          </View>
 
-              <View style={{ flexDirection: 'row', gap: 12 }}>
-                <TouchableOpacity
-                  activeOpacity={0.75}
-                  onPress={onCancel}
-                  disabled={submitting}
-                  style={{
-                    flex: 1,
-                    height: 56,
-                    borderRadius: 16,
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    backgroundColor: Colors.bg.surface2,
-                    opacity: submitting ? 0.5 : 1,
-                  }}
-                >
-                  <Text style={{ color: Colors.text.secondary, fontSize: 15, fontWeight: '600' }}>
-                    Cancelar
-                  </Text>
-                </TouchableOpacity>
+          <View pointerEvents={submitting ? 'none' : 'auto'} style={{ opacity: submitting ? 0.55 : 1, marginBottom: theme.spacing.lg }}>
+            <OptionSelectField
+              label="Temporada"
+              value={form.temporada}
+              options={TEMPORADAS}
+              placeholder="Selecciona temporada"
+              onChange={(value) => updateField('temporada', value)}
+            />
+            <FieldError message={errors.temporada} />
+          </View>
 
-                <TouchableOpacity
-                  activeOpacity={isValid && !submitting ? 0.88 : 1}
-                  onPress={handleConfirm}
-                  disabled={!isValid || submitting}
-                  style={{
-                    flex: 2,
-                    height: 56,
-                    borderRadius: 16,
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    backgroundColor: isValid
-                      ? Colors.brand.primary
-                      : `${Colors.brand.primary}40`,
-                    flexDirection: 'row',
-                    gap: theme.spacing.sm,
-                  }}
-                >
-                  {submitting ? (
-                    <ActivityIndicator size="small" color="#0A0A0C" />
-                  ) : (
-                    <>
-                      <Ionicons
-                        name={mode === 'edit' ? 'save-outline' : 'add-circle-outline'}
-                        size={20}
-                        color="#0A0A0C"
-                        style={{ opacity: isValid ? 1 : 0.5 }}
-                      />
-                      <Text
-                        style={{
-                          color: '#0A0A0C',
-                          fontSize: 15,
-                          fontWeight: '700',
-                          opacity: isValid ? 1 : 0.5,
-                        }}
-                      >
-                        {mode === 'edit' ? 'Guardar cambios' : 'Crear Liga'}
-                      </Text>
-                    </>
-                  )}
-                </TouchableOpacity>
-              </View>
-            </View>
-          </Animated.View>
-        </Animated.View>
+          <View pointerEvents={submitting ? 'none' : 'auto'} style={{ opacity: submitting ? 0.55 : 1, marginBottom: theme.spacing.lg }}>
+            <OptionSelectField
+              label="Categoría"
+              value={form.categoria}
+              options={CATEGORIAS}
+              placeholder="Sin categoría"
+              onChange={(value) => updateField('categoria', value)}
+            />
+          </View>
+
+          <View pointerEvents={submitting ? 'none' : 'auto'} style={{ opacity: submitting ? 0.55 : 1 }}>
+            <OptionSelectField
+              label="Duración del partido"
+              value={form.duracionPartido}
+              options={DURACION_PARTIDOS}
+              placeholder="Seleccionar duración"
+              onChange={(value) => updateField('duracionPartido', value)}
+            />
+          </View>
+        </ScrollView>
+
+        <View
+          style={{
+            paddingHorizontal: theme.spacing.xl,
+            paddingTop: theme.spacing.md,
+            paddingBottom: insets.bottom + theme.spacing.md,
+            borderTopWidth: 1,
+            borderTopColor: Colors.bg.surface2,
+            flexDirection: 'row',
+            gap: theme.spacing.md,
+          }}
+        >
+          <TouchableOpacity
+            onPress={handleClose}
+            disabled={submitting}
+            activeOpacity={0.85}
+            style={{
+              flex: 1,
+              height: 50,
+              borderRadius: theme.borderRadius.lg,
+              borderWidth: 1,
+              borderColor: Colors.bg.surface2,
+              alignItems: 'center',
+              justifyContent: 'center',
+              opacity: submitting ? 0.55 : 1,
+            }}
+          >
+            <Text style={{ color: Colors.text.primary, fontWeight: '700' }}>Cancelar</Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            onPress={handleSubmit}
+            disabled={submitting}
+            activeOpacity={0.9}
+            style={{
+              flex: 1,
+              height: 50,
+              borderRadius: theme.borderRadius.lg,
+              backgroundColor: Colors.brand.primary,
+              alignItems: 'center',
+              justifyContent: 'center',
+              flexDirection: 'row',
+              gap: theme.spacing.sm,
+              opacity: submitting ? 0.7 : 1,
+            }}
+          >
+            {submitting ? <ActivityIndicator size="small" color={Colors.bg.base} /> : null}
+            <Text style={{ color: Colors.bg.base, fontWeight: '800' }}>
+              {submitting ? 'Creando...' : 'Crear liga'}
+            </Text>
+          </TouchableOpacity>
+        </View>
       </KeyboardAvoidingView>
     </Modal>
   );
 }
-
-export const CreateLeagueModal = memo(CreateLeagueModalComponent);

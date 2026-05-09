@@ -38,6 +38,8 @@ export type CalendarRole = 'admin' | 'coach' | 'field_delegate' | 'player' | 'ob
  *   debe detectarse como conflicto — ver utils/calendarConflicts.ts.
  * - El backend debe respetar esta distinción en la persistencia.
  */
+// Diferencia clave para el menú: los partidos manuales no deben activar
+// las opciones de editar/eliminar calendario automático.
 export type MatchSource = 'automatic' | 'manual';
 
 /** Estado del partido dentro del calendario */

@@ -83,6 +83,8 @@ const EMPTY_FORM: CreateManualMatchFormData = {
   round: "",
 };
 
+// Medidas concentradas en una constante para ajustar el bottom sheet
+// sin buscar valores sueltos por todo el componente.
 const MODAL_LAYOUT = {
   overlayOpacityStart: 0,
   overlayOpacityEnd: 1,
@@ -117,6 +119,8 @@ const MODAL_LAYOUT = {
   elevation: 24,
 } as const;
 
+// Espaciados del modal. Separarlos del layout evita mezclar
+// decisiones visuales con lógica de formulario.
 const MODAL_SPACING = {
   sheetPaddingTop: theme.spacing.md,
   sheetPaddingHorizontal: theme.spacing.xl,
@@ -310,6 +314,7 @@ export function CreateManualMatchModal({
     (visibleError ? MODAL_LAYOUT.estimatedErrorHeight : 0),
     MODAL_LAYOUT.minScrollHeight,
   );
+  // Solo bloqueamos por envío en curso: los errores de validación se muestran al pulsar guardar.
   const primaryDisabled = isSubmitting;
 
   useEffect(() => {
@@ -381,6 +386,8 @@ export function CreateManualMatchModal({
       return;
     }
 
+    // Normalizar antes de salir del modal evita que cada pantalla tenga que
+    // conocer los formatos que devuelve DateTimePickerField.
     const normalizedDate = normalizeDateForSubmit(form.date);
     const normalizedTime = normalizeTimeForSubmit(form.time);
 

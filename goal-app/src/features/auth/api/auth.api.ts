@@ -1,12 +1,13 @@
 /**
- * Auth API - Endpoints de autenticación
+ * Auth API - Endpoints de autenticación.
  *
- * Conecta con el backend de GoalApp para:
- * - Login (OAuth2PasswordRequestForm)
- * - Registro
- * - Recuperación de contraseña
- * - Reset de contraseña
- * - Obtener usuario actual
+ * Esta capa solo se encarga de hablar con el backend:
+ * - construye las peticiones HTTP;
+ * - adapta los nombres de campos que espera la API;
+ * - transforma respuestas fallidas en errores controlados.
+ *
+ * No debe guardar sesión ni modificar estado global. Esa responsabilidad queda
+ * para la capa de servicio/hooks.
  */
 
 import type {
@@ -14,29 +15,37 @@ import type {
   RegisterRequest,
   RegisterResponse,
   PasswordRecoveryResponse,
-  PasswordRecoveryRequest,
   PasswordResetConfirm,
   PasswordResetResponse,
   AuthUser,
 } from '../types/auth.types';
 import { ENV } from '@/src/shared/constants/env';
 
-// Fuente única de verdad — misma URL que el resto de la app (ENV.API_URL)
+/**
+ * URL base compartida por toda la app.
+ * Mantenerla centralizada evita que cada endpoint apunte a entornos distintos
+ * por error: local, staging o producción.
+ */
 const BASE_URL = ENV.API_URL;
 
 /**
  * LOGIN - POST /api/v1/auth/login
  *
- * El backend usa OAuth2PasswordRequestForm que espera form-data
- * con 'username' (no 'email') y 'password'
+ * El backend usa OAuth2PasswordRequestForm, por eso no se envía JSON.
+ * FastAPI espera los campos como formulario codificado:
+ * - username: aquí usamos el email del usuario;
+ * - password: contraseña introducida en el formulario.
  */
 export async function login(
   email: string,
   password: string
 ): Promise<LoginResponse> {
-  // Crear FormData para application/x-www-form-urlencoded
+  /**
+   * URLSearchParams genera el formato application/x-www-form-urlencoded
+   * que necesita OAuth2PasswordRequestForm.
+   */
   const formData = new URLSearchParams();
-  formData.append('username', email);  // Backend espera 'username'
+  formData.append('username', email);
   formData.append('password', password);
 
   const response = await fetch(`${BASE_URL}/auth/login`, {
@@ -48,6 +57,10 @@ export async function login(
   });
 
   if (!response.ok) {
+    /**
+     * En login el backend puede devolver texto plano.
+     * Se lee como text() para no romper si no llega un JSON válido.
+     */
     const error = await response.text();
     throw new Error(error || 'Error en login');
   }
@@ -58,8 +71,8 @@ export async function login(
 /**
  * REGISTER - POST /api/v1/usuarios/
  *
- * Nota: El registro está en /usuarios/, no en /auth/
- * El backend espera 'contraseña' con ñ
+ * El registro pertenece al recurso usuarios, no a /auth/.
+ * Importante: el backend espera el campo `contraseña` con ñ.
  */
 export async function register(
   data: RegisterRequest
@@ -72,11 +85,19 @@ export async function register(
     body: JSON.stringify({
       nombre: data.nombre,
       email: data.email,
-      contraseña: data.contraseña,  // Con ñ
+      /**
+       * No cambiar a `password` ni `contrasena` si el backend mantiene
+       * el schema actual. El nombre debe coincidir exactamente con la API.
+       */
+      contraseña: data.contraseña,
     }),
   });
 
   if (!response.ok) {
+    /**
+     * En registro normalmente llega un JSON con `detail`.
+     * El catch evita que la app falle si el backend responde con otro formato.
+     */
     const error = await response.json().catch(() => ({ detail: 'Error en registro' }));
     throw new Error(error.detail || 'Error en registro');
   }
@@ -87,7 +108,8 @@ export async function register(
 /**
  * FORGOT PASSWORD - POST /api/v1/auth/forgot-password
  *
- * El backend siempre devuelve 200 por seguridad (no enumera emails)
+ * Por seguridad, el backend debería responder igual aunque el email no exista.
+ * Así se evita revelar qué correos están registrados en la aplicación.
  */
 export async function forgotPassword(
   email: string
@@ -101,7 +123,9 @@ export async function forgotPassword(
   });
 
   if (!response.ok) {
-    // El backend siempre devuelve 200 por seguridad
+    /**
+     * Mensaje genérico intencionado: no se debe indicar si el email existe o no.
+     */
     throw new Error('Error en recuperación');
   }
 
@@ -110,6 +134,8 @@ export async function forgotPassword(
 
 /**
  * RESET PASSWORD - POST /api/v1/auth/reset-password
+ *
+ * Confirma el cambio de contraseña usando el token recibido por email.
  */
 export async function resetPassword(
   data: PasswordResetConfirm
@@ -121,6 +147,10 @@ export async function resetPassword(
     },
     body: JSON.stringify({
       token: data.token,
+      /**
+       * Nombre exacto esperado por el backend.
+       * Si se cambia aquí sin cambiar el backend, el reset dejará de funcionar.
+       */
       nueva_contrasena: data.nueva_contrasena,
     }),
   });
@@ -136,7 +166,8 @@ export async function resetPassword(
 /**
  * GET CURRENT USER - GET /api/v1/auth/me
  *
- * Requiere token en header Authorization
+ * Se usa después del login para obtener los datos reales del usuario autenticado.
+ * El token debe enviarse como Bearer porque este endpoint está protegido.
  */
 export async function getCurrentUser(
   accessToken: string
@@ -145,11 +176,15 @@ export async function getCurrentUser(
     method: 'GET',
     headers: {
       'Content-Type': 'application/json',
-      'Authorization': `Bearer ${accessToken}`,
+      Authorization: `Bearer ${accessToken}`,
     },
   });
 
   if (!response.ok) {
+    /**
+     * Si este endpoint falla después del login, la sesión no debe guardarse
+     * porque no tenemos un usuario válido asociado al token.
+     */
     throw new Error('Error al obtener usuario');
   }
 

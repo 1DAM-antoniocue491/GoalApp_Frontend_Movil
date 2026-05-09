@@ -49,11 +49,14 @@ export function useCalendarData(ligaId: number, leagueName: string): CalendarDat
     }
     setIsError(false);
     try {
+      // El hook recibe datos ya normalizados; no debe conocer detalles de endpoints.
       const data = await calendarService.getCalendarData(ligaId, leagueName);
       hasLoadedOnce.current = true;
       setJourneys(data.journeys);
       setViewState(data.viewState);
     } catch {
+      // El service intenta devolver fallbacks seguros, pero si algo escapa
+      // dejamos marcado el error para que la pantalla pueda mostrar estado visual.
       setIsError(true);
     } finally {
       setIsLoading(false);

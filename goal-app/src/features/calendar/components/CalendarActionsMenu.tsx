@@ -143,6 +143,8 @@ function CalendarActionsMenuComponent({
   const opacityAnim = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
+    // Animación manual para poder controlar overlay y desplazamiento del sheet
+    // de forma independiente al animationType nativo del Modal.
     if (visible) {
       Animated.parallel([
         Animated.timing(opacityAnim, {
@@ -186,6 +188,8 @@ function CalendarActionsMenuComponent({
   const canAddMatch = permissions.canAddMatch;
   const hasActions = canCreate || canEdit || canDelete || canAddMatch || !!onAddTeam;
 
+  // Si el rol actual no tiene ninguna acción disponible, no montamos el Modal.
+  // Así evitamos mostrar un menú vacío o accesible por accidente.
   if (!hasActions) return null;
 
   return (

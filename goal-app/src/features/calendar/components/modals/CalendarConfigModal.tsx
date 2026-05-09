@@ -242,7 +242,8 @@ function CalendarConfigModalComponent({
   const slideAnim = useRef(new Animated.Value(400)).current;
   const opacityAnim = useRef(new Animated.Value(0)).current;
 
-  // Estado del formulario
+  // Estado del formulario. Se mantiene local para que el usuario pueda cancelar
+  // sin mutar la configuración real hasta confirmar.
   const [calType, setCalType] = useState<CalendarType>(initialData?.type ?? 'two_way');
   const [startDate, setStartDate] = useState(initialData?.startDate ?? '');
   const [matchDays, setMatchDays] = useState<number[]>(initialData?.matchDays ?? [5, 6]); // Sáb/Dom por defecto
@@ -300,6 +301,7 @@ function CalendarConfigModalComponent({
     }
   }, [visible, opacityAnim, slideAnim]);
 
+  // Validación mínima de UI: el servicio/backend harán la validación definitiva.
   const isValid = startDate.length > 0 && matchDays.length > 0 && matchTime.length > 0;
 
   const handleConfirm = () => {

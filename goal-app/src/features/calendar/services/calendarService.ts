@@ -64,6 +64,10 @@ function normalizarEstado(estado: string | undefined | null): CalendarMatchStatu
 
 const MESES = ['ENE', 'FEB', 'MAR', 'ABR', 'MAY', 'JUN', 'JUL', 'AGO', 'SEP', 'OCT', 'NOV', 'DIC'];
 
+/**
+ * Convierte la fecha del backend a los formatos que esperan las cards.
+ * Devuelve guiones si la fecha viene vacía o no se puede parsear para no romper la UI.
+ */
 function parseFechaHora(fechaHora: string | null | undefined) {
   if (!fechaHora) return { day: '–', month: '–', time: '–', dateFormatted: '–' };
   try {
@@ -475,6 +479,7 @@ export const calendarService = {
    * - red/timeout: error de conexión
    */
   async createCalendar(ligaId: number, input: CreateCalendarInput): Promise<ServiceResult> {
+    // El formulario usa nombres pensados para UI; aquí se traduce al contrato real de la API.
     const payload: CreateCalendarRequest = {
       tipo: input.type === 'one_way' ? 'ida' : 'ida_vuelta',
       fecha_inicio: toApiDate(input.startDate),

@@ -3,6 +3,11 @@
  *
  * Pantalla principal del calendario de la liga.
  * Datos reales vía useCalendarData → calendarService → calendar.api.
+ *
+ * Regla importante:
+ * esta pantalla solo coordina UI, navegación, modales y permisos.
+ * La normalización de datos del backend vive en calendarService para evitar
+ * duplicar mapeos o reglas en los componentes visuales.
  */
 
 import React, { useRef, useState, useEffect } from 'react';
@@ -79,6 +84,9 @@ import type { CreateManualMatchFormData } from './modals/CreateManualMatchModal'
 // ---------------------------------------------------------------------------
 // Adaptadores CalendarMatch → tipos de cada card
 // ---------------------------------------------------------------------------
+// Las cards de partidos ya existen en el módulo matches y tienen su propio contrato.
+// Estos adaptadores aíslan ese contrato para que CalendarMatch pueda evolucionar
+// sin obligar a modificar LiveMatchCard, ProgrammedMatchCard o FinishedMatchCard.
 
 function toLiveData(m: CalendarMatch) {
   return {
@@ -305,23 +313,6 @@ function EmptyFilterState({ filter }: { filter: JourneyStatusFilter }) {
   );
 }
 
-function PlaceholderTab({ label }: { label: string }) {
-  return (
-    <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', padding: 40 }}>
-      <Ionicons name="construct-outline" size={36} color={Colors.text.disabled} />
-      <Text
-        style={{
-          color: Colors.text.disabled,
-          fontSize: theme.fontSize.sm,
-          marginTop: 12,
-          textAlign: 'center',
-        }}
-      >
-        {label} disponible próximamente
-      </Text>
-    </View>
-  );
-}
 
 function ManualMatchBadge() {
   return (
@@ -472,8 +463,8 @@ export function CalendarScreen() {
     viewState === 'no_calendar'
       ? 'no_calendar'
       : hasMatchesInPlayOrFinished
-      ? 'locked'
-      : 'editable';
+        ? 'locked'
+        : 'editable';
 
   // ── Handlers del menú de admin ──
   const handleMenuPress = () => setMenuVisible(true);
@@ -538,11 +529,13 @@ export function CalendarScreen() {
   };
 
   // ── Handlers de acciones en jornada ──
-  const handleAddMatch = () => setNewMatchModalVisible(true);
 
-  const handleAddTeam = () => setCreateTeamVisible(true);
 
   // ── Confirm de modales ──
+  /**
+   * Crea o regenera el calendario desde el mismo formulario.
+   * El modo activo decide si se llama al endpoint de creación o al de edición.
+   */
   const handleCalendarConfigConfirm = async (data: CalendarConfigData) => {
     setCalendarModalError(undefined);
     setCalendarModalSubmitting(true);
@@ -568,12 +561,13 @@ export function CalendarScreen() {
     }
   };
 
+  /**
+   * Crea un partido manual sin marcarlo como calendario automático.
+   * Esto permite añadir partidos sueltos sin desbloquear opciones de editar/eliminar calendario.
+   */
   const handleNewMatchConfirm = async (data: CreateManualMatchFormData) => {
     if (ligaId <= 0) return;
 
-    // Número de jornada: preferir backendNumber (real) sobre number (visual)
-    const activeJornada = journeys[journeyIndex];
-    const jornadaNum = activeJornada?.backendNumber ?? activeJornada?.number ?? 1;
 
     // Combinar fecha + hora en ISO: YYYY-MM-DDTHH:MM:00
     // TODO API: si el backend requiere UTC, ajustar conversión aquí
@@ -774,7 +768,7 @@ export function CalendarScreen() {
       <CalendarHeader
         leagueName={leagueName}
         season={temporada}
-        // TODO: pasar logo real cuando el store incluya crestUrl de la liga activa
+        //  pasar logo real cuando el store incluya crestUrl de la liga activa
         hasMultipleSeasons={false}
         onMenuPress={handleMenuPress}
       />

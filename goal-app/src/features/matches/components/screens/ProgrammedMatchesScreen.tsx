@@ -56,7 +56,7 @@ export function ProgrammedMatchesScreen() {
             <TouchableOpacity onPress={() => router.push(`/matches/programmed/${match.id_partido}/convocation`)} style={{ flexGrow: 1, height: 44, borderRadius: 14, backgroundColor: Colors.bg.surface2, alignItems: 'center', justifyContent: 'center', flexDirection: 'row', gap: 8 }}><Ionicons name="people-outline" size={18} color={Colors.text.primary} /><Text style={{ color: Colors.text.primary, fontWeight: '800' }}>Convocatoria</Text></TouchableOpacity>
             <TouchableOpacity onPress={() => router.push(`/matches/programmed/${match.id_partido}/lineup`)} style={{ flexGrow: 1, height: 44, borderRadius: 14, backgroundColor: Colors.bg.surface2, alignItems: 'center', justifyContent: 'center', flexDirection: 'row', gap: 8 }}><Ionicons name="shirt-outline" size={18} color={Colors.text.primary} /><Text style={{ color: Colors.text.primary, fontWeight: '800' }}>Alineación</Text></TouchableOpacity>
             <TouchableOpacity onPress={() => openStartMatch(context)} style={{ flexGrow: 1, height: 44, borderRadius: 14, backgroundColor: Colors.brand.primary, alignItems: 'center', justifyContent: 'center' }}><Text style={{ color: Colors.bg.base, fontWeight: '900' }}>Iniciar</Text></TouchableOpacity>
-          </View>
+          </View> 
         </View>;
       })}
     </ScrollView>

@@ -92,9 +92,6 @@ function getNotificationNavigation(
   if (t.includes('clasificacion') || t.includes('estadistica')) {
     return { targetRoute: routes.private.tabs.statistics };
   }
-  if (t.includes('liga') || t.includes('rol')) {
-    return { targetRoute: routes.league.index };
-  }
   return {};
 }
 

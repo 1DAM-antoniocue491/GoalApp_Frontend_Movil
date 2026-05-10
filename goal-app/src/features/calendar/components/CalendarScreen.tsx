@@ -663,7 +663,6 @@ export function CalendarScreen() {
       startedAt: match.startedAt ?? null,
       homeTeamId: match.homeTeamId ?? undefined,
       awayTeamId: match.awayTeamId ?? undefined,
-      eventsLocked: (match.minute ?? 1) >= (match.duration ?? 90),
     });
   };
 
@@ -796,7 +795,7 @@ export function CalendarScreen() {
                     <LiveMatchCard
                       match={toLiveData(match)}
                       permissions={dashPerms}
-                      actionsDisabled={modalProps.pending}
+                      actionsDisabled={modalProps.pending.any}
                       onRegisterEvent={handleRegisterEvent}
                       onEndMatch={handleEndMatch}
                     />
@@ -814,7 +813,7 @@ export function CalendarScreen() {
                       onPress={() => handleMatchPress(match.id, match.status)}
                       onStartMatch={() => handleStartMatch(match.id)}
                       onEditMatch={dashPerms.canEditMatch ? () => handleEditMatch(match.id) : undefined}
-                      actionsDisabled={modalProps.pending || editMatchSubmitting}
+                      actionsDisabled={modalProps.pending.any || editMatchSubmitting}
                     />
                     {match.source === 'manual' && <ManualMatchBadge />}
                   </View>
@@ -958,7 +957,7 @@ export function CalendarScreen() {
         match={activeEventMatch}
         onSelectEvent={modalProps.onSelectEvent}
         onCancel={modalProps.onCloseRegisterEvent}
-        isSubmitting={modalProps.pending}
+        disabled={modalProps.pending.any}
       />
 
       <GoalEventModal
@@ -966,7 +965,7 @@ export function CalendarScreen() {
         match={activeEventMatch}
         onConfirm={modalProps.onGoalConfirm}
         onCancel={modalProps.onCloseGoal}
-        isSubmitting={modalProps.pending}
+        submitting={modalProps.pending.any}
       />
 
       <YellowCardModal
@@ -974,7 +973,7 @@ export function CalendarScreen() {
         match={activeEventMatch}
         onConfirm={modalProps.onYellowCardConfirm}
         onCancel={modalProps.onCloseYellowCard}
-        isSubmitting={modalProps.pending}
+        submitting={modalProps.pending.any}
       />
 
       <RedCardModal
@@ -982,7 +981,7 @@ export function CalendarScreen() {
         match={activeEventMatch}
         onConfirm={modalProps.onRedCardConfirm}
         onCancel={modalProps.onCloseRedCard}
-        isSubmitting={modalProps.pending}
+        submitting={modalProps.pending.any}
       />
 
       <SubstitutionModal
@@ -990,7 +989,7 @@ export function CalendarScreen() {
         match={activeEventMatch}
         onConfirm={modalProps.onSubstitutionConfirm}
         onCancel={modalProps.onCloseSubstitution}
-        isSubmitting={modalProps.pending}
+        submitting={modalProps.pending.any}
       />
 
       <EndMatchModal
@@ -998,7 +997,7 @@ export function CalendarScreen() {
         match={activeEndMatch}
         onConfirm={modalProps.onEndMatchConfirm}
         onCancel={modalProps.onCloseEndMatch}
-        isSubmitting={modalProps.pending}
+        submitting={modalProps.pending.any}
       />
 
       <StartMatchModal
@@ -1006,7 +1005,7 @@ export function CalendarScreen() {
         match={activeStartMatch}
         onConfirm={modalProps.onStartMatchConfirm}
         onCancel={modalProps.onCloseStartMatch}
-        isSubmitting={modalProps.pending}
+        isSubmitting={modalProps.pending.any}
       />
     </View>
   );

@@ -1,70 +1,42 @@
-import React, { memo, useEffect, useMemo, useState } from 'react';
-import { View } from 'react-native';
+import React, { memo, useMemo, useState, useEffect } from 'react';
+import { Modal, Pressable, Text, TouchableOpacity, View } from 'react-native';
 import { Colors } from '@/src/shared/constants/colors';
+import { theme } from '@/src/shared/styles/theme';
 import { OptionSelectField } from '@/src/shared/components/ui/OptionSelectField';
-import type { LiveMatchContext } from './RegisterEventModal';
-import { MatchModalActions, MatchModalButton, MatchModalShell } from './MatchModalShell';
-import { FieldTitle, TeamPicker, toPlayerOptions } from './matchEventModalHelpers';
+import type { SelectOption } from '@/src/shared/components/ui/OptionSelectField';
+import type { LiveMatchContext, LiveMatchPlayer } from './RegisterEventModal';
 
-export interface SubstitutionEventData {
-  team: 'home' | 'away';
-  playerOutId: number;
-  playerInId: number;
+function toOptions(players?: LiveMatchPlayer[]): SelectOption[] {
+  return (players ?? []).map(p => ({
+    value: String(p.id_jugador),
+    label: `${p.dorsal ? p.dorsal + ' · ' : ''}${p.nombre}`,
+  }));
 }
 
-interface SubstitutionModalProps {
-  visible: boolean;
-  match: LiveMatchContext | null;
-  onConfirm: (data: SubstitutionEventData) => void;
-  onCancel: () => void;
-  isSubmitting?: boolean;
-}
-
-function SubstitutionModalComponent({ visible, match, onConfirm, onCancel, isSubmitting = false }: SubstitutionModalProps) {
-  const [team, setTeam] = useState<'home' | 'away'>('home');
-  const [playerOutId, setPlayerOutId] = useState('');
-  const [playerInId, setPlayerInId] = useState('');
-
-  useEffect(() => {
-    if (visible) {
-      setTeam('home');
-      setPlayerOutId('');
-      setPlayerInId('');
-    }
-  }, [visible]);
-
-  const baseOptions = useMemo(() => toPlayerOptions(team === 'home' ? match?.homePlayers : match?.awayPlayers), [team, match]);
-  const outOptions = baseOptions.filter((option) => option.value !== playerInId);
-  const inOptions = baseOptions.filter((option) => option.value !== playerOutId);
-  const canConfirm = !isSubmitting && Number(playerOutId) > 0 && Number(playerInId) > 0 && playerOutId !== playerInId;
-
+function TeamPicker({ homeTeam, awayTeam, value, onChange }: { homeTeam: string; awayTeam: string; value: 'home' | 'away'; onChange: (v: 'home' | 'away') => void }) {
   return (
-    <MatchModalShell
-      visible={visible}
-      title="Sustitución"
-      subtitle={`Minuto automático: ${match?.minute ?? 1}' / ${match?.duration ?? 90}'`}
-      icon="swap-horizontal-outline"
-      iconColor={Colors.brand.secondary}
-      pending={isSubmitting}
-      onClose={onCancel}
-      footer={
-        <MatchModalActions>
-          <MatchModalButton label="Cancelar" variant="secondary" disabled={isSubmitting} onPress={onCancel} />
-          <MatchModalButton label="Guardar" variant="primary" loading={isSubmitting} disabled={!canConfirm} onPress={() => onConfirm({ team, playerOutId: Number(playerOutId), playerInId: Number(playerInId) })} />
-        </MatchModalActions>
-      }
-    >
-      <FieldTitle>Equipo</FieldTitle>
-      <TeamPicker homeTeam={match?.homeTeam ?? 'Local'} awayTeam={match?.awayTeam ?? 'Visitante'} value={team} disabled={isSubmitting} onChange={(next) => { setTeam(next); setPlayerOutId(''); setPlayerInId(''); }} />
-
-      <View style={{ marginTop: 18 }}>
-        <OptionSelectField label="Sale" value={playerOutId} options={outOptions} placeholder="Jugador que sale" onChange={setPlayerOutId} />
-      </View>
-      <View style={{ marginTop: 14 }}>
-        <OptionSelectField label="Entra" value={playerInId} options={inOptions} placeholder="Jugador que entra" onChange={setPlayerInId} />
-      </View>
-    </MatchModalShell>
+    <View style={{ flexDirection: 'row', gap: 10 }}>
+      {(['home', 'away'] as const).map(side => {
+        const active = value === side;
+        return (
+          <TouchableOpacity key={side} onPress={() => onChange(side)} activeOpacity={0.9} style={{ flex: 1, minHeight: 54, borderRadius: theme.borderRadius.lg, alignItems: 'center', justifyContent: 'center', backgroundColor: active ? Colors.brand.primary + '20' : Colors.bg.surface2, borderWidth: 1, borderColor: active ? Colors.brand.primary : 'transparent' }}>
+            <Text numberOfLines={1} style={{ color: active ? Colors.brand.primary : Colors.text.secondary, fontWeight: '700' }}>{side === 'home' ? homeTeam : awayTeam}</Text>
+            <Text style={{ color: Colors.text.disabled, fontSize: 11 }}>{side === 'home' ? 'Local' : 'Visitante'}</Text>
+          </TouchableOpacity>
+        );
+      })}
+    </View>
   );
 }
 
+export interface SubstitutionEventData { team: 'home' | 'away'; playerOutId: number; playerInId: number; }
+interface SubstitutionModalProps { visible: boolean; match: LiveMatchContext | null; submitting?: boolean; onConfirm: (data: SubstitutionEventData) => void; onCancel: () => void; }
+function SubstitutionModalComponent({ visible, match, submitting = false, onConfirm, onCancel }: SubstitutionModalProps) {
+  const [team, setTeam] = useState<'home' | 'away'>('home'); const [playerOutId, setPlayerOutId] = useState(''); const [playerInId, setPlayerInId] = useState('');
+  useEffect(() => { if (visible) { setTeam('home'); setPlayerOutId(''); setPlayerInId(''); } }, [visible]);
+  const baseOptions = useMemo(() => toOptions(team === 'home' ? match?.homePlayers : match?.awayPlayers), [team, match]);
+  const inOptions = baseOptions.filter(o => o.value !== playerOutId); const outOptions = baseOptions.filter(o => o.value !== playerInId);
+  const canConfirm = Number(playerOutId) > 0 && Number(playerInId) > 0 && playerInId !== playerOutId;
+  return <Modal transparent visible={visible} animationType="slide" statusBarTranslucent onRequestClose={onCancel}><View style={{ flex: 1, justifyContent: 'flex-end', backgroundColor: 'rgba(0,0,0,0.65)' }}><Pressable style={{ flex: 1 }} onPress={submitting ? undefined : onCancel} /><View style={{ backgroundColor: Colors.bg.surface1, borderTopLeftRadius: 30, borderTopRightRadius: 30, padding: 22, paddingBottom: 40 }}><Text style={{ color: Colors.text.primary, fontSize: 24, fontWeight: '800' }}>Sustitución</Text><Text style={{ color: Colors.text.secondary, marginTop: 6 }}>Minuto automático: {match?.minute ?? 0}'</Text><View style={{ marginTop: 20 }}><TeamPicker homeTeam={match?.homeTeam ?? 'Local'} awayTeam={match?.awayTeam ?? 'Visitante'} value={team} onChange={(v) => { setTeam(v); setPlayerOutId(''); setPlayerInId(''); }} /></View><View style={{ marginTop: 18 }}><OptionSelectField label="Sale" value={playerOutId} options={outOptions} placeholder="Jugador que sale" onChange={setPlayerOutId} /></View><View style={{ marginTop: 12 }}><OptionSelectField label="Entra" value={playerInId} options={inOptions} placeholder="Jugador que entra" onChange={setPlayerInId} /></View><View style={{ flexDirection: 'row', gap: 12, marginTop: 24 }}><TouchableOpacity disabled={submitting} onPress={onCancel} style={{ flex: 1, height: 54, borderRadius: 16, alignItems: 'center', justifyContent: 'center', backgroundColor: Colors.bg.surface2 }}><Text style={{ color: Colors.text.primary, fontWeight: '700' }}>Cancelar</Text></TouchableOpacity><TouchableOpacity disabled={!canConfirm || submitting} onPress={() => onConfirm({ team, playerOutId: Number(playerOutId), playerInId: Number(playerInId) })} style={{ flex: 1, height: 54, borderRadius: 16, alignItems: 'center', justifyContent: 'center', backgroundColor: canConfirm ? Colors.brand.secondary : Colors.bg.surface2 }}><Text style={{ color: Colors.bg.base, fontWeight: '800' }}>{submitting ? 'Guardando...' : 'Guardar'}</Text></TouchableOpacity></View></View></View></Modal>;
+}
 export const SubstitutionModal = memo(SubstitutionModalComponent);

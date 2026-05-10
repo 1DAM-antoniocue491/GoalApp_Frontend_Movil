@@ -3,9 +3,7 @@
  * Tipos reales del dominio de partidos/eventos.
  */
 
-export type CanonicalMatchStatus = 'programado' | 'en_juego' | 'finalizado' | 'cancelado' | 'suspendido';
-export type MatchStatus = CanonicalMatchStatus | 'en_vivo' | 'live' | 'finished' | 'cancelled' | 'canceled' | 'suspended' | string;
-export type EditableScheduledMatchStatus = 'programado' | 'cancelado' | 'suspendido';
+export type MatchStatus = 'programado' | 'en_juego' | 'en_vivo' | 'finalizado' | 'cancelado' | string;
 export type BackendEventType = 'gol' | 'tarjeta_amarilla' | 'tarjeta_roja' | 'cambio';
 
 export interface EquipoPartidoApi {
@@ -41,7 +39,6 @@ export interface PartidoApi {
   inicio_en?: string | null;
   started_at?: string | null;
   fecha_inicio?: string | null;
-  duracion_partido?: number | null;
   created_at?: string;
   updated_at?: string;
 }
@@ -51,7 +48,7 @@ export interface CreateManualMatchRequest {
   id_jornada?: number | null;
   id_equipo_local: number;
   id_equipo_visitante: number;
-  /** ISO literal enviado al backend: YYYY-MM-DDTHH:MM:SS */
+  /** ISO: YYYY-MM-DDTHH:MM:SS */
   fecha: string;
 }
 
@@ -62,11 +59,20 @@ export interface UpdateMatchRequest {
   estado?: MatchStatus;
 }
 
-export interface UpdateScheduledMatchRequest {
-  id_equipo_local?: number;
-  id_equipo_visitante?: number;
-  fecha?: string;
-  estado?: EditableScheduledMatchStatus;
+export type UpdateScheduledMatchRequest = UpdateMatchRequest;
+
+export type EditableScheduledMatchStatus = 'programado' | 'cancelado' | 'suspendido';
+
+export interface MatchEventApi {
+  id_evento?: number;
+  id_partido?: number;
+  id_jugador?: number;
+  tipo_evento?: string;
+  minuto?: number;
+  id_jugador_sale?: number;
+  id_equipo?: number;
+  incidencias?: string | null;
+  created_at?: string;
 }
 
 export interface CreateMatchEventRequest {
@@ -75,7 +81,6 @@ export interface CreateMatchEventRequest {
   tipo_evento: BackendEventType;
   minuto: number;
   id_jugador_sale?: number;
-  /** Equipo al que se asigna el evento. En gol es imprescindible para marcador fiable. */
   id_equipo?: number;
   incidencias?: string;
 }
@@ -99,11 +104,6 @@ export interface MatchPlayerOption {
 export interface MatchPlayersBySide {
   home: MatchPlayerOption[];
   away: MatchPlayerOption[];
-}
-
-export interface MatchScore {
-  home: number;
-  away: number;
 }
 
 export interface ServiceResult<T = void> {

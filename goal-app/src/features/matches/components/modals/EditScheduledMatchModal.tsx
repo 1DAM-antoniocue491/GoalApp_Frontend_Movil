@@ -26,7 +26,7 @@ interface EditScheduledMatchModalProps {
   onCancel: () => void;
 }
 
-const STATUS_OPTIONS: Array<{ value: EditableScheduledMatchStatus; label: string; description: string; icon: keyof typeof Ionicons.glyphMap }> = [
+const STATUS_OPTIONS: { value: EditableScheduledMatchStatus; label: string; description: string; icon: keyof typeof Ionicons.glyphMap }[] = [
   { value: 'programado', label: 'Programado', description: 'Mantener el partido activo en calendario', icon: 'calendar-outline' },
   { value: 'cancelado', label: 'Cancelado', description: 'No se jugará este partido', icon: 'close-circle-outline' },
   { value: 'suspendido', label: 'Suspendido', description: 'Queda detenido o aplazado por incidencia', icon: 'pause-circle-outline' },

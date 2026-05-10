@@ -74,7 +74,7 @@ export function ProgrammedMatchConvocationScreen() {
 
   const persist = async (allowUnderMin = false) => {
     if (actionsLocked) return;
-    const ok = await save({ allowUnderMin });
+    const ok = await save();
     if (ok) {
       Alert.alert('Convocatoria guardada', 'La convocatoria se actualizó correctamente.', [{ text: 'Aceptar', onPress: () => router.back() }]);
     }

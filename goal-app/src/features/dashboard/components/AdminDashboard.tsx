@@ -186,7 +186,7 @@ export function AdminDashboard({
                 permissions={permissions}
                 onRegisterEvent={handleRegisterEvent}
                 onEndMatch={handleEndMatch}
-                actionsDisabled={modalProps.pending}
+                actionsDisabled={modalProps.pending.any}
               />
             </View>
           )}
@@ -212,49 +212,49 @@ export function AdminDashboard({
         match={activeEventMatch}
         onSelectEvent={modalProps.onSelectEvent}
         onCancel={modalProps.onCloseRegisterEvent}
-        isSubmitting={modalProps.pending}
+        disabled={modalProps.pending.any}
       />
       <GoalEventModal
         visible={modals.goal}
         match={activeEventMatch}
         onConfirm={modalProps.onGoalConfirm}
         onCancel={modalProps.onCloseGoal}
-        isSubmitting={modalProps.pending}
+        submitting={modalProps.pending.any}
       />
       <YellowCardModal
         visible={modals.yellowCard}
         match={activeEventMatch}
         onConfirm={modalProps.onYellowCardConfirm}
         onCancel={modalProps.onCloseYellowCard}
-        isSubmitting={modalProps.pending}
+        submitting={modalProps.pending.any}
       />
       <RedCardModal
         visible={modals.redCard}
         match={activeEventMatch}
         onConfirm={modalProps.onRedCardConfirm}
         onCancel={modalProps.onCloseRedCard}
-        isSubmitting={modalProps.pending}
+        submitting={modalProps.pending.any}
       />
       <SubstitutionModal
         visible={modals.substitution}
         match={activeEventMatch}
         onConfirm={modalProps.onSubstitutionConfirm}
         onCancel={modalProps.onCloseSubstitution}
-        isSubmitting={modalProps.pending}
+        submitting={modalProps.pending.any}
       />
       <EndMatchModal
         visible={modals.endMatch}
         match={activeEndMatch}
         onConfirm={modalProps.onEndMatchConfirm}
         onCancel={modalProps.onCloseEndMatch}
-        isSubmitting={modalProps.pending}
+        submitting={modalProps.pending.any}
       />
       <StartMatchModal
         visible={modals.startMatch}
         match={activeStartMatch}
         onConfirm={modalProps.onStartMatchConfirm}
         onCancel={modalProps.onCloseStartMatch}
-        isSubmitting={modalProps.pending}
+        isSubmitting={modalProps.pending.any}
       />
       <EditScheduledMatchModal
         visible={Boolean(editingMatch)}

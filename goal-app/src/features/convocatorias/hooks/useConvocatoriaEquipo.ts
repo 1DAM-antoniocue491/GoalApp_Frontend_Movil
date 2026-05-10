@@ -30,7 +30,7 @@ export function useConvocatoriaEquipo({ partidoId, equipoId, readonly }: UseConv
     }
   }, [partidoId, equipoId]);
 
-  useEffect(() => { void load(); }, [load]);
+  useEffect(() => { load(); }, [load]);
 
   const counts = useMemo(() => {
     const titulares = players.filter(p => p.estado === 'titular').length;
@@ -38,68 +38,26 @@ export function useConvocatoriaEquipo({ partidoId, equipoId, readonly }: UseConv
     return { titulares, suplentes, total: titulares + suplentes };
   }, [players]);
 
-  const canEdit = !readonly && !data?.locked;
+  const canEdit = !readonly;
 
   const setPlayerState = useCallback((playerId: number, nextState: ConvocatoriaPlayerState) => {
-    if (!canEdit || saving || loading) return;
-    setError(null);
+    if (!canEdit) return;
+    setPlayers(prev => prev.map(player => player.id_jugador === playerId ? { ...player, estado: nextState } : player));
+  }, [canEdit]);
 
-    setPlayers(prev => {
-      const current = prev.find(player => player.id_jugador === playerId);
-      if (!current || current.estado === nextState) return prev;
-
-      const nextTotal = prev.reduce((total, player) => {
-        const state = player.id_jugador === playerId ? nextState : player.estado;
-        return total + (state === 'no_convocado' ? 0 : 1);
-      }, 0);
-      const nextTitulares = prev.reduce((total, player) => {
-        const state = player.id_jugador === playerId ? nextState : player.estado;
-        return total + (state === 'titular' ? 1 : 0);
-      }, 0);
-
-      if (data?.limits && nextTotal > data.limits.maxConvocados) {
-        setError(`No puedes convocar más de ${data.limits.maxConvocados} jugadores.`);
-        return prev;
-      }
-      if (data?.limits && nextTitulares > data.limits.maxTitulares) {
-        setError(`No puedes seleccionar más de ${data.limits.maxTitulares} titulares.`);
-        return prev;
-      }
-
-      return prev.map(player => player.id_jugador === playerId ? { ...player, estado: nextState } : player);
-    });
-  }, [canEdit, data?.limits, saving, loading]);
-
-  const save = useCallback(async (options?: { allowUnderMin?: boolean }) => {
-    if (!partidoId || !data || !canEdit || saving || loading) return false;
+  const save = useCallback(async () => {
+    if (!partidoId || !data || !canEdit) return false;
     setSaving(true);
     setError(null);
-    try {
-      const result = await saveConvocatoriaEquipoService(partidoId, players, data.limits, options);
-      if (!result.success) {
-        setError(result.error ?? 'No se pudo guardar la convocatoria.');
-        return false;
-      }
-      await load();
-      return true;
-    } finally {
-      setSaving(false);
+    const result = await saveConvocatoriaEquipoService(partidoId, players, data.limits);
+    setSaving(false);
+    if (!result.success) {
+      setError(result.error ?? 'No se pudo guardar la convocatoria.');
+      return false;
     }
-  }, [partidoId, data, canEdit, saving, loading, players, load]);
+    await load();
+    return true;
+  }, [partidoId, data, canEdit, players, load]);
 
-  return {
-    data,
-    players,
-    counts,
-    limits: data?.limits,
-    locked: Boolean(data?.locked),
-    lockReason: data?.lockReason,
-    canEdit,
-    loading,
-    saving,
-    error,
-    refresh: load,
-    setPlayerState,
-    save,
-  };
+  return { data, players, counts, limits: data?.limits, locked: Boolean(data?.locked), lockReason: data?.lockReason, canEdit, loading, saving, error, refresh: load, setPlayerState, save };
 }

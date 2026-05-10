@@ -109,7 +109,7 @@ export function ProgrammedMatchesScreen() {
               key={match.id_partido}
               match={cardMatch}
               permissions={permissions}
-              actionsDisabled={modalProps.pending || savingEdit}
+              actionsDisabled={modalProps.pending.any || savingEdit}
               onStartMatch={() => openStartMatch({ id: cardMatch.id, homeTeam: cardMatch.homeTeam, awayTeam: cardMatch.awayTeam, date: `${cardMatch.day} ${cardMatch.month}`, time: cardMatch.time, venue: cardMatch.venue })}
               onEditMatch={permissions.canEditMatch ? () => setEditingMatch(match) : undefined}
             />
@@ -117,7 +117,7 @@ export function ProgrammedMatchesScreen() {
         })}
       </ScrollView>
 
-      <StartMatchModal visible={modals.startMatch} match={activeStartMatch} onConfirm={modalProps.onStartMatchConfirm} onCancel={modalProps.onCloseStartMatch} isSubmitting={modalProps.pending} />
+      <StartMatchModal visible={modals.startMatch} match={activeStartMatch} onConfirm={modalProps.onStartMatchConfirm} onCancel={modalProps.onCloseStartMatch} isSubmitting={modalProps.pending.any} />
       <EditScheduledMatchModal visible={Boolean(editingMatch)} match={editingMatch} saving={savingEdit} onConfirm={handleEditConfirm} onCancel={() => { if (!savingEdit) setEditingMatch(null); }} />
     </View>
   );

@@ -1,9 +1,9 @@
 /**
  * useMatchActionModals.ts
- * Centraliza modales operativos con API real y sincronización global.
+ * Centraliza modales operativos con API real y bloqueo anti-doble toque.
  */
 
-import { useCallback, useState } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 import { Alert } from 'react-native';
 import type { LiveMatchContext, MatchEventType } from '@/src/features/matches/components/modals/RegisterEventModal';
 import type { LiveMatchSummary, EndMatchData } from '@/src/features/matches/components/modals/EndMatchModal';
@@ -15,11 +15,9 @@ import type { SubstitutionEventData } from '@/src/features/matches/components/mo
 import {
   createMatchEventService,
   finishMatchService,
-  getComputedScoreFromEventsService,
   getMatchPlayersBySideService,
   startMatchService,
 } from '../services/matchesService';
-import { emitMatchDataChanged } from '../services/matchSync';
 
 export interface MatchModalVisibility {
   registerEvent: boolean;
@@ -31,12 +29,21 @@ export interface MatchModalVisibility {
   endMatch: boolean;
 }
 
+export interface MatchActionPendingState {
+  hydratingEventPlayers: boolean;
+  hydratingEndMatch: boolean;
+  submittingEvent: boolean;
+  startingMatch: boolean;
+  endingMatch: boolean;
+  any: boolean;
+}
+
 export interface MatchActionModalProps {
   modals: MatchModalVisibility;
   activeEventMatch: LiveMatchContext | null;
   activeEndMatch: LiveMatchSummary | null;
   activeStartMatch: ProgrammedMatchContext | null;
-  pending: boolean;
+  pending: MatchActionPendingState;
   onSelectEvent: (type: MatchEventType) => void;
   onGoalConfirm: (data: GoalEventData) => void;
   onYellowCardConfirm: (data: YellowCardEventData) => void;
@@ -57,17 +64,10 @@ function getMatchIdValue(id?: string | number | null): number {
   return Number(id ?? 0);
 }
 
-function notifyError(error?: string) {
-  Alert.alert('No se pudo completar la acción', error || 'Inténtalo de nuevo.');
-}
-
-function getCurrentVisualMinute(match: LiveMatchContext): number {
-  const duration = Math.max(1, Number(match.duration ?? 90));
-  const startedAt = match.startedAt ? new Date(match.startedAt).getTime() : NaN;
-  if (!Number.isNaN(startedAt)) {
-    return Math.max(1, Math.min(duration, Math.floor((Date.now() - startedAt) / 60000) + 1));
-  }
-  return Math.max(1, Math.min(duration, Math.floor(Number(match.minute ?? 1))));
+function getTeamIdFromContext(match: LiveMatchContext, team?: 'home' | 'away'): number | undefined {
+  if (team === 'home') return match.homeTeamId;
+  if (team === 'away') return match.awayTeamId;
+  return undefined;
 }
 
 export function useMatchActionModals(onChanged?: () => void | Promise<void>) {
@@ -78,16 +78,21 @@ export function useMatchActionModals(onChanged?: () => void | Promise<void>) {
   const [substitutionVisible, setSubstitutionVisible] = useState(false);
   const [startMatchVisible, setStartMatchVisible] = useState(false);
   const [endMatchVisible, setEndMatchVisible] = useState(false);
-  const [pending, setPending] = useState(false);
 
   const [activeEventMatch, setActiveEventMatch] = useState<LiveMatchContext | null>(null);
   const [activeEndMatch, setActiveEndMatch] = useState<LiveMatchSummary | null>(null);
   const [activeStartMatch, setActiveStartMatch] = useState<ProgrammedMatchContext | null>(null);
 
-  const syncAfterChange = useCallback(async () => {
-    emitMatchDataChanged();
-    await onChanged?.();
-  }, [onChanged]);
+  const [hydratingEventPlayers, setHydratingEventPlayers] = useState(false);
+  const [hydratingEndMatch, setHydratingEndMatch] = useState(false);
+  const [submittingEvent, setSubmittingEvent] = useState(false);
+  const [startingMatch, setStartingMatch] = useState(false);
+  const [endingMatch, setEndingMatch] = useState(false);
+
+  const pending = useMemo<MatchActionPendingState>(() => {
+    const any = hydratingEventPlayers || hydratingEndMatch || submittingEvent || startingMatch || endingMatch;
+    return { hydratingEventPlayers, hydratingEndMatch, submittingEvent, startingMatch, endingMatch, any };
+  }, [hydratingEventPlayers, hydratingEndMatch, submittingEvent, startingMatch, endingMatch]);
 
   const hydratePlayers = useCallback(async <T extends LiveMatchContext | LiveMatchSummary>(match: T): Promise<T> => {
     const matchId = getMatchIdValue(match.id);
@@ -96,36 +101,36 @@ export function useMatchActionModals(onChanged?: () => void | Promise<void>) {
     return { ...match, homePlayers: result.data.home, awayPlayers: result.data.away };
   }, []);
 
+  const notifyError = (error?: string) => Alert.alert('No se pudo completar la acción', error || 'Inténtalo de nuevo.');
+
   const openRegisterEvent = useCallback((match: LiveMatchContext) => {
-    if (pending) return;
-    if (match.eventsLocked) {
-      Alert.alert('Tiempo finalizado', 'Finaliza el partido y escoge el MVP.');
-      return;
-    }
+    if (pending.any) return;
     setActiveEventMatch(match);
     setRegisterEventVisible(true);
-    void hydratePlayers(match).then(setActiveEventMatch);
-  }, [hydratePlayers, pending]);
+    setHydratingEventPlayers(true);
+    void hydratePlayers(match)
+      .then(setActiveEventMatch)
+      .finally(() => setHydratingEventPlayers(false));
+  }, [hydratePlayers, pending.any]);
 
   const openStartMatch = useCallback((match: ProgrammedMatchContext) => {
-    if (pending) return;
+    if (pending.any) return;
     setActiveStartMatch(match);
     setStartMatchVisible(true);
-  }, [pending]);
+  }, [pending.any]);
 
   const openEndMatch = useCallback((match: LiveMatchSummary) => {
-    if (pending) return;
+    if (pending.any) return;
     setActiveEndMatch(match);
     setEndMatchVisible(true);
-    void hydratePlayers(match).then(setActiveEndMatch);
-  }, [hydratePlayers, pending]);
-
-  const closeIfIdle = (close: () => void) => {
-    if (!pending) close();
-  };
+    setHydratingEndMatch(true);
+    void hydratePlayers(match)
+      .then(setActiveEndMatch)
+      .finally(() => setHydratingEndMatch(false));
+  }, [hydratePlayers, pending.any]);
 
   const handleSelectEvent = (type: MatchEventType) => {
-    if (pending || activeEventMatch?.eventsLocked) return;
+    if (pending.any) return;
     setRegisterEventVisible(false);
     if (type === 'goal') setGoalVisible(true);
     else if (type === 'yellow_card') setYellowCardVisible(true);
@@ -134,125 +139,96 @@ export function useMatchActionModals(onChanged?: () => void | Promise<void>) {
   };
 
   const submitEvent = async (input: {
-    team?: 'home' | 'away';
     id_jugador: number;
     tipo_evento: 'gol' | 'tarjeta_amarilla' | 'tarjeta_roja' | 'cambio';
     id_jugador_sale?: number;
+    team?: 'home' | 'away';
     incidencias?: string;
   }) => {
-    if (!activeEventMatch || pending) return;
-    if (activeEventMatch.eventsLocked) {
-      Alert.alert('Tiempo finalizado', 'No se pueden registrar más eventos. Finaliza el partido y escoge el MVP.');
-      return;
-    }
-
-    setPending(true);
-    const idEquipo = input.team === 'home'
-      ? activeEventMatch.homeTeamId
-      : input.team === 'away'
-        ? activeEventMatch.awayTeamId
-        : undefined;
-
+    if (!activeEventMatch || submittingEvent) return;
+    setSubmittingEvent(true);
     const result = await createMatchEventService({
       id_partido: getMatchIdValue(activeEventMatch.id),
       id_jugador: input.id_jugador,
       tipo_evento: input.tipo_evento,
-      minuto: getCurrentVisualMinute(activeEventMatch),
+      minuto: Math.max(1, Number(activeEventMatch.minute ?? 1)),
       id_jugador_sale: input.id_jugador_sale,
-      id_equipo: idEquipo,
+      id_equipo: getTeamIdFromContext(activeEventMatch, input.team),
       incidencias: input.incidencias,
     });
-
-    setPending(false);
+    setSubmittingEvent(false);
     if (!result.success) {
       notifyError(result.error);
       return;
     }
-
     setGoalVisible(false);
     setYellowCardVisible(false);
     setRedCardVisible(false);
     setSubstitutionVisible(false);
-    setRegisterEventVisible(false);
-    await syncAfterChange();
+    void onChanged?.();
   };
 
   const handleGoalConfirm = (data: GoalEventData) => submitEvent({
-    team: data.team,
     id_jugador: data.scorerId,
     tipo_evento: 'gol',
+    team: data.team,
     incidencias: data.ownGoal ? 'Gol en propia puerta' : undefined,
   });
 
   const handleYellowCardConfirm = (data: YellowCardEventData) => submitEvent({
-    team: data.team,
     id_jugador: data.playerId,
     tipo_evento: 'tarjeta_amarilla',
-    incidencias: 'Tarjeta amarilla',
+    team: data.team,
   });
 
   const handleRedCardConfirm = (data: RedCardEventData) => submitEvent({
-    team: data.team,
     id_jugador: data.playerId,
     tipo_evento: 'tarjeta_roja',
-    incidencias: data.cardType === 'second_yellow' ? 'Roja por segunda amarilla' : 'Roja directa',
+    team: data.team,
+    incidencias: data.cardType === 'second_yellow' ? 'Segunda amarilla' : 'Roja directa',
   });
 
   const handleSubstitutionConfirm = (data: SubstitutionEventData) => submitEvent({
-    team: data.team,
     id_jugador: data.playerInId,
     id_jugador_sale: data.playerOutId,
     tipo_evento: 'cambio',
-    incidencias: 'Sustitución',
+    team: data.team,
   });
 
   const handleEndMatchConfirm = async (data: EndMatchData) => {
-    if (!activeEndMatch || pending) return;
-    if (data.mvpScore < 1 || data.mvpScore > 10) {
-      Alert.alert('Puntuación no válida', 'La puntuación del MVP debe estar entre 1 y 10.');
-      return;
-    }
-
-    setPending(true);
-    const fallback = { home: activeEndMatch.homeScore, away: activeEndMatch.awayScore };
-    const score = await getComputedScoreFromEventsService(
-      getMatchIdValue(activeEndMatch.id),
-      activeEndMatch.homeTeamId,
-      activeEndMatch.awayTeamId,
-      fallback,
-    );
-
+    if (!activeEndMatch || endingMatch) return;
+    setEndingMatch(true);
     const result = await finishMatchService(getMatchIdValue(activeEndMatch.id), {
-      goles_local: score.home,
-      goles_visitante: score.away,
+      goles_local: activeEndMatch.homeScore,
+      goles_visitante: activeEndMatch.awayScore,
       id_mvp: data.mvpId,
       puntuacion_mvp: data.mvpScore,
       incidencias: data.observations,
     });
-
-    setPending(false);
+    setEndingMatch(false);
     if (!result.success) {
       notifyError(result.error);
       return;
     }
-
     setEndMatchVisible(false);
-    await syncAfterChange();
+    void onChanged?.();
   };
 
   const handleStartMatchConfirm = async () => {
-    if (!activeStartMatch || pending) return;
-    setPending(true);
+    if (!activeStartMatch || startingMatch) return;
+    setStartingMatch(true);
     const result = await startMatchService(getMatchIdValue(activeStartMatch.id));
-    setPending(false);
-
+    setStartingMatch(false);
     if (!result.success) {
       notifyError(result.error);
       return;
     }
-
     setStartMatchVisible(false);
-    await syncAfterChange();
+    void onChanged?.();
+  };
+
+  const closeIfIdle = (close: () => void) => {
+    if (!pending.any) close();
   };
 
   const modals: MatchModalVisibility = {
@@ -292,7 +268,6 @@ export function useMatchActionModals(onChanged?: () => void | Promise<void>) {
     activeEventMatch,
     activeEndMatch,
     activeStartMatch,
-    pending,
     openRegisterEvent,
     openStartMatch,
     openEndMatch,

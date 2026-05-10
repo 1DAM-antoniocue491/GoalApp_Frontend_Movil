@@ -2,8 +2,11 @@
  * matchesService.ts
  * Servicios reales para partidos, eventos y jugadores de partido.
  *
- * Toda normalización de estados, horas y minutaje queda aquí para que
- * dashboard, calendario y pantallas de partidos muestren lo mismo.
+ * Correcciones incluidas:
+ * - El minuto en vivo NO se toma como fuente principal desde `minuto_actual` del backend,
+ *   porque puede llegar como 90 justo al iniciar.
+ * - El minuto se calcula visualmente en front desde una hora de inicio fiable.
+ * - Si no hay hora real fiable, se usa un inicio local persistente en memoria mientras la app esté abierta.
  */
 
 import { ApiError } from '@/src/shared/api/client';
@@ -11,15 +14,14 @@ import { getLeagueConfig } from '@/src/features/leagues/api/leagues.api';
 import { getJugadoresByEquipo } from '@/src/features/convocatorias/api/convocatoria.api';
 import type { JugadorEquipoApi } from '@/src/features/convocatorias/types/convocatoria.types';
 import type {
-  CanonicalMatchStatus,
   PartidoApi,
   CreateManualMatchRequest,
   UpdateScheduledMatchRequest,
   CreateMatchEventRequest,
   FinishMatchRequest,
+  MatchEventApi,
   MatchPlayerOption,
   MatchPlayersBySide,
-  MatchScore,
   ServiceResult,
 } from '../types/matches.types';
 import {
@@ -38,7 +40,24 @@ import {
 } from '../api/matches.api';
 
 const DEFAULT_MATCH_DURATION = 90;
-const START_WINDOW_MINUTES = 60;
+const localLiveStartedAtByMatchId = new Map<number, number>();
+
+const MESES_ABREV = ['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'];
+
+export function parseBackendDateTimeLiteral(value?: string | null): {
+  date: string; day: string; month: string; time: string; dateFormatted: string;
+} {
+  const empty = { date: '', day: '–', month: '–', time: '', dateFormatted: '–' };
+  if (!value) return empty;
+  const clean = String(value).trim();
+  const m = clean.match(/^(\d{4})-(\d{2})-(\d{2})(?:[T\s](\d{2}):(\d{2}))?/);
+  if (!m) return empty;
+  const [, year, monthRaw, dayRaw, hour = '00', minute = '00'] = m;
+  const day = String(Number(dayRaw));
+  const monthIndex = Math.max(0, Math.min(11, Number(monthRaw) - 1));
+  const month = MESES_ABREV[monthIndex] ?? '–';
+  return { date: `${year}-${monthRaw}-${dayRaw}`, day, month, time: `${hour}:${minute}`, dateFormatted: `${day} ${month}` };
+}
 
 function getApiErrorMessage(error: unknown): string {
   if (error instanceof ApiError) return error.message || `Error ${error.status}`;
@@ -46,17 +65,19 @@ function getApiErrorMessage(error: unknown): string {
   return 'Error desconocido';
 }
 
-export function normalizeMatchStatus(status: string | undefined | null): CanonicalMatchStatus {
+export function normalizeMatchStatus(
+  status: string | undefined | null,
+): 'programado' | 'en_juego' | 'finalizado' | 'cancelado' | 'suspendido' {
   const s = String(status ?? '').toLowerCase().trim();
-  if (s === 'en_juego' || s === 'en_vivo' || s === 'live' || s === 'en_curso') return 'en_juego';
-  if (s === 'finalizado' || s === 'finished' || s === 'completado' || s === 'terminado') return 'finalizado';
+  if (s === 'en_juego' || s === 'en_vivo' || s === 'live') return 'en_juego';
+  if (s === 'finalizado' || s === 'finished') return 'finalizado';
   if (s === 'cancelado' || s === 'cancelled' || s === 'canceled') return 'cancelado';
   if (s === 'suspendido' || s === 'suspended') return 'suspendido';
   return 'programado';
 }
 
 export function getMatchId(partido: PartidoApi): number {
-  return partido.id_partido;
+  return Number(partido.id_partido);
 }
 
 export function getMatchDate(partido: PartidoApi): string | null {
@@ -83,86 +104,82 @@ export function getJornadaNumber(partido: PartidoApi): number | null {
   return partido.jornada ?? partido.numero_jornada ?? partido.num_jornada ?? partido.id_jornada ?? null;
 }
 
-export function getMatchDurationFromPartido(partido: PartidoApi): number {
-  const raw = Number(partido.duracion_partido ?? DEFAULT_MATCH_DURATION);
-  return Number.isFinite(raw) && raw > 0 ? Math.floor(raw) : DEFAULT_MATCH_DURATION;
+function clampMinute(minute: number, duration = DEFAULT_MATCH_DURATION): number {
+  const safeDuration = Number.isFinite(duration) && duration > 0 ? Math.floor(duration) : DEFAULT_MATCH_DURATION;
+  if (!Number.isFinite(minute)) return 1;
+  return Math.max(1, Math.min(safeDuration, Math.floor(minute)));
+}
+
+function parseDateMs(value?: string | null): number | null {
+  if (!value) return null;
+  const ms = new Date(value).getTime();
+  if (Number.isNaN(ms)) return null;
+  return ms;
+}
+
+function getReliableStartedAtMs(partido: PartidoApi, duration = DEFAULT_MATCH_DURATION): number | null {
+  const maybeWithExtraFields = partido as PartidoApi & { fecha_inicio?: string | null; inicio_partido?: string | null };
+  const directCandidates = [
+    partido.inicio_en,
+    partido.started_at,
+    maybeWithExtraFields.fecha_inicio,
+    maybeWithExtraFields.inicio_partido,
+  ];
+
+  const now = Date.now();
+  const maxReasonableElapsedMs = Math.max(duration, DEFAULT_MATCH_DURATION) * 60 * 1000 * 3;
+
+  for (const candidate of directCandidates) {
+    const ms = parseDateMs(candidate);
+    if (ms == null) continue;
+    // Permitimos un pequeño margen de reloj adelantado, pero no fechas claramente futuras.
+    if (ms > now + 2 * 60 * 1000) continue;
+    return ms;
+  }
+
+  // Fallback persistente desde backend: si no existe una hora real de inicio,
+  // `updated_at` suele cambiar al pasar a `en_juego`. Es más seguro que usar
+  // la fecha programada, que puede mandar el partido directamente al minuto 90.
+  if (normalizeMatchStatus(partido.estado) === 'en_juego') {
+    const updatedMs = parseDateMs(partido.updated_at ?? null);
+    if (updatedMs != null && updatedMs <= now + 2 * 60 * 1000 && now - updatedMs <= maxReasonableElapsedMs) {
+      return updatedMs;
+    }
+  }
+
+  return null;
 }
 
 /**
- * Extrae fecha y hora de forma literal, sin convertir UTC a hora local.
- * Soluciona el desfase visual de +2h cuando backend devuelve `Z`.
+ * Calcula el minuto visual del partido en vivo.
+ *
+ * Regla definitiva:
+ * - Si hay hora real fiable de inicio, el minuto se calcula desde esa hora.
+ * - Si no la hay, el front mantiene una hora local de primera visualización del partido.
+ * - Nunca usamos `minuto_actual = 90` del backend como fuente principal.
+ * - El mínimo visible es 1 y el máximo visible es la duración de liga.
  */
-export function parseBackendDateTimeLiteral(raw?: string | null) {
-  if (!raw) return { date: '', time: '', day: '–', month: '–', dateFormatted: '–' };
+export function getLiveMinute(partido: PartidoApi, _tick?: number, duration = DEFAULT_MATCH_DURATION): number {
+  const matchId = getMatchId(partido);
+  const reliableStartedAt = getReliableStartedAtMs(partido, duration);
 
-  const clean = String(raw).trim();
-  const match = clean.match(/^(\d{4})-(\d{2})-(\d{2})(?:[T\s](\d{2}):(\d{2}))?/);
-  if (!match) return { date: '', time: '', day: '–', month: '–', dateFormatted: '–' };
-
-  const [, year, month, day, hour = '00', minute = '00'] = match;
-  const monthIndex = Math.max(0, Math.min(11, Number(month) - 1));
-  const monthLabel = ['ENE', 'FEB', 'MAR', 'ABR', 'MAY', 'JUN', 'JUL', 'AGO', 'SEP', 'OCT', 'NOV', 'DIC'][monthIndex] ?? '–';
-
-  return {
-    date: `${year}-${month}-${day}`,
-    time: `${hour}:${minute}`,
-    day: String(Number(day)),
-    month: monthLabel,
-    dateFormatted: `${String(Number(day))} ${monthLabel}`,
-  };
-}
-
-/**
- * Construye el datetime que espera el backend y resta 2 horas antes de enviar.
- * Se usa al crear/editar partidos para compensar el desfase detectado en backend.
- */
-export function buildBackendMatchDateTime(date: string, time: string): string {
-  const dateParts = date.includes('/') ? date.split('/').reverse().join('-') : date.split('T')[0];
-  const [year, month, day] = dateParts.split('-').map(Number);
-  const [hour, minute] = time.split(':').map(Number);
-  const base = new Date(year, month - 1, day, hour, minute, 0, 0);
-  base.setHours(base.getHours() - 2);
-  return `${base.getFullYear()}-${String(base.getMonth() + 1).padStart(2, '0')}-${String(base.getDate()).padStart(2, '0')}T${String(base.getHours()).padStart(2, '0')}:${String(base.getMinutes()).padStart(2, '0')}:00`;
-}
-
-function parseLiteralTimestamp(raw?: string | null): number | null {
-  if (!raw) return null;
-  const parts = parseBackendDateTimeLiteral(raw);
-  if (!parts.date || !parts.time) return null;
-  const [y, m, d] = parts.date.split('-').map(Number);
-  const [hh, mm] = parts.time.split(':').map(Number);
-  const ts = new Date(y, m - 1, d, hh, mm, 0, 0).getTime();
-  return Number.isFinite(ts) ? ts : null;
-}
-
-export function getMatchStartTimestamp(partido: PartidoApi): number | null {
-  return parseLiteralTimestamp(partido.inicio_en ?? partido.started_at ?? partido.fecha_inicio ?? partido.fecha_hora ?? partido.fecha);
-}
-
-export function getLiveMinute(partido: PartidoApi, fallbackMinute?: number): number {
-  const duration = getMatchDurationFromPartido(partido);
-  const started = getMatchStartTimestamp(partido);
-
-  if (started != null) {
-    const elapsed = Math.floor((Date.now() - started) / 60000) + 1;
-    return Math.max(1, Math.min(duration, elapsed));
+  if (reliableStartedAt != null) {
+    localLiveStartedAtByMatchId.set(matchId, reliableStartedAt);
+    return clampMinute(Math.floor((Date.now() - reliableStartedAt) / 60000) + 1, duration);
   }
 
-  const explicit = partido.minuto_actual ?? partido.minuto ?? fallbackMinute ?? 1;
-  if (typeof explicit === 'number' && Number.isFinite(explicit)) {
-    return Math.max(1, Math.min(duration, Math.floor(explicit)));
-  }
-  return 1;
+  const existingLocalStart = localLiveStartedAtByMatchId.get(matchId);
+  const localStart = existingLocalStart ?? Date.now();
+  if (!existingLocalStart) localLiveStartedAtByMatchId.set(matchId, localStart);
+
+  return clampMinute(Math.floor((Date.now() - localStart) / 60000) + 1, duration);
 }
 
-export function isMatchTimeExpired(partido: PartidoApi): boolean {
-  return getLiveMinute(partido) >= getMatchDurationFromPartido(partido);
-}
-
-export function canStartMatchByDate(partido: PartidoApi): boolean {
-  const start = parseLiteralTimestamp(getMatchDate(partido));
-  if (start == null) return false;
-  return Date.now() >= start - START_WINDOW_MINUTES * 60000;
+export function hasReachedMatchDuration(partido: PartidoApi, duration = DEFAULT_MATCH_DURATION): boolean {
+  const reliableStartedAt = getReliableStartedAtMs(partido, duration) ?? localLiveStartedAtByMatchId.get(getMatchId(partido));
+  if (reliableStartedAt == null) return false;
+  const elapsed = Math.floor((Date.now() - reliableStartedAt) / 60000) + 1;
+  return elapsed >= duration;
 }
 
 function mapJugadorToOption(jugador: JugadorEquipoApi, equipo: 'home' | 'away'): MatchPlayerOption {
@@ -175,74 +192,45 @@ function mapJugadorToOption(jugador: JugadorEquipoApi, equipo: 'home' | 'away'):
   };
 }
 
-async function getLeagueMatchDuration(ligaId?: number | null): Promise<number> {
-  if (!ligaId) return DEFAULT_MATCH_DURATION;
-  try {
-    const config = await getLeagueConfig(ligaId);
-    const raw = Number(config.minutos_partido ?? DEFAULT_MATCH_DURATION);
-    return Number.isFinite(raw) && raw > 0 ? Math.floor(raw) : DEFAULT_MATCH_DURATION;
-  } catch {
-    return DEFAULT_MATCH_DURATION;
-  }
-}
-
-function attachDuration(partidos: PartidoApi[], duration: number): PartidoApi[] {
-  return partidos.map((p) => ({ ...p, duracion_partido: p.duracion_partido ?? duration }));
-}
-
-function sortByAttention(a: PartidoApi, b: PartidoApi): number {
-  const sa = normalizeMatchStatus(a.estado);
-  const sb = normalizeMatchStatus(b.estado);
-  const priority: Record<CanonicalMatchStatus, number> = {
-    en_juego: 0,
-    programado: 1,
-    finalizado: 2,
-    suspendido: 3,
-    cancelado: 4,
-  };
-  if (priority[sa] !== priority[sb]) return priority[sa] - priority[sb];
-
-  const da = parseLiteralTimestamp(getMatchDate(a)) ?? 0;
-  const db = parseLiteralTimestamp(getMatchDate(b)) ?? 0;
-
-  if (sa === 'finalizado') return db - da;
-  return da - db;
-}
-
 export async function getMatchesByLeagueService(ligaId: number): Promise<PartidoApi[]> {
   try {
-    const [matches, duration] = await Promise.all([getMatchesByLeague(ligaId), getLeagueMatchDuration(ligaId)]);
-    return attachDuration(matches, duration).sort(sortByAttention);
+    return await getMatchesByLeague(ligaId);
   } catch {
-    const [matches, duration] = await Promise.all([getPlainMatchesByLeague(ligaId), getLeagueMatchDuration(ligaId)]);
-    return attachDuration(matches, duration).sort(sortByAttention);
+    return getPlainMatchesByLeague(ligaId);
   }
 }
 
 export async function getUpcomingMatchesService(ligaId: number, limit = 20): Promise<PartidoApi[]> {
-  const [matches, duration] = await Promise.all([getUpcomingMatches(ligaId, limit), getLeagueMatchDuration(ligaId)]);
-  return attachDuration(matches, duration).filter((m) => normalizeMatchStatus(m.estado) === 'programado').sort(sortByAttention);
+  return getUpcomingMatches(ligaId, limit);
 }
 
 export async function getLiveMatchesService(ligaId: number): Promise<PartidoApi[]> {
-  const [matches, duration] = await Promise.all([getLiveMatches(ligaId), getLeagueMatchDuration(ligaId)]);
-  return attachDuration(matches, duration).filter((m) => normalizeMatchStatus(m.estado) === 'en_juego').sort(sortByAttention);
+  return getLiveMatches(ligaId);
 }
 
 export async function getFinishedMatchesService(ligaId: number): Promise<PartidoApi[]> {
   const matches = await getMatchesByLeagueService(ligaId);
-  return matches.filter((m) => normalizeMatchStatus(m.estado) === 'finalizado').sort(sortByAttention);
+  return matches.filter(match => normalizeMatchStatus(match.estado) === 'finalizado');
 }
 
 export async function getJornadasByLeagueService(ligaId: number): Promise<unknown> {
   return getJornadasByLeague(ligaId);
 }
 
+export async function getLeagueMatchDurationService(ligaId: number): Promise<number> {
+  if (!ligaId) return DEFAULT_MATCH_DURATION;
+  try {
+    const config = await getLeagueConfig(ligaId);
+    return Number(config.minutos_partido ?? DEFAULT_MATCH_DURATION) || DEFAULT_MATCH_DURATION;
+  } catch {
+    return DEFAULT_MATCH_DURATION;
+  }
+}
+
 export async function getMatchByIdService(matchId: number): Promise<ServiceResult<PartidoApi>> {
   try {
     const data = await getMatchById(matchId);
-    const duration = await getLeagueMatchDuration(data.id_liga);
-    return { success: true, data: { ...data, duracion_partido: data.duracion_partido ?? duration } };
+    return { success: true, data };
   } catch (error) {
     return { success: false, error: getApiErrorMessage(error) };
   }
@@ -250,11 +238,7 @@ export async function getMatchByIdService(matchId: number): Promise<ServiceResul
 
 export async function createManualMatchService(data: CreateManualMatchRequest): Promise<ServiceResult<PartidoApi>> {
   try {
-    const parts = parseBackendDateTimeLiteral(data.fecha);
-    const payload = parts.date && parts.time
-      ? { ...data, fecha: buildBackendMatchDateTime(parts.date, parts.time) }
-      : data;
-    const result = await createManualMatch(payload);
+    const result = await createManualMatch(data);
     return { success: true, data: result };
   } catch (error) {
     return { success: false, error: getApiErrorMessage(error) };
@@ -263,12 +247,7 @@ export async function createManualMatchService(data: CreateManualMatchRequest): 
 
 export async function updateScheduledMatchService(matchId: number, data: UpdateScheduledMatchRequest): Promise<ServiceResult<PartidoApi>> {
   try {
-    const safeStatus = data.estado && ['programado', 'cancelado', 'suspendido'].includes(data.estado)
-      ? data.estado
-      : undefined;
-    const parts = parseBackendDateTimeLiteral(data.fecha);
-    const safeFecha = parts.date && parts.time ? buildBackendMatchDateTime(parts.date, parts.time) : data.fecha;
-    const result = await updateMatch(matchId, { ...data, fecha: safeFecha, estado: safeStatus });
+    const result = await updateMatch(matchId, data);
     return { success: true, data: result };
   } catch (error) {
     return { success: false, error: getApiErrorMessage(error) };
@@ -278,6 +257,10 @@ export async function updateScheduledMatchService(matchId: number, data: UpdateS
 export async function startMatchService(matchId: number): Promise<ServiceResult<PartidoApi>> {
   try {
     const result = await startMatch(matchId);
+    // Si el backend no devuelve hora real de inicio, fijamos una referencia local
+    // para que el partido no aparezca como minuto 90 ni vuelva a 0 dentro de la sesión.
+    const startedAt = getReliableStartedAtMs(result, DEFAULT_MATCH_DURATION);
+    localLiveStartedAtByMatchId.set(matchId, startedAt ?? Date.now());
     return { success: true, data: result };
   } catch (error) {
     return { success: false, error: getApiErrorMessage(error) };
@@ -287,7 +270,17 @@ export async function startMatchService(matchId: number): Promise<ServiceResult<
 export async function finishMatchService(matchId: number, data: FinishMatchRequest): Promise<ServiceResult<PartidoApi>> {
   try {
     const result = await finishMatch(matchId, data);
+    localLiveStartedAtByMatchId.delete(matchId);
     return { success: true, data: result };
+  } catch (error) {
+    return { success: false, error: getApiErrorMessage(error) };
+  }
+}
+
+export async function getMatchEventsService(matchId: number): Promise<ServiceResult<MatchEventApi[]>> {
+  try {
+    const result = await getMatchEvents(matchId);
+    return { success: true, data: result as MatchEventApi[] };
   } catch (error) {
     return { success: false, error: getApiErrorMessage(error) };
   }
@@ -299,45 +292,6 @@ export async function createMatchEventService(data: CreateMatchEventRequest): Pr
     return { success: true, data: result };
   } catch (error) {
     return { success: false, error: getApiErrorMessage(error) };
-  }
-}
-
-function getNumberField(source: Record<string, unknown>, keys: string[]): number | null {
-  for (const key of keys) {
-    const raw = source[key];
-    const parsed = Number(raw);
-    if (Number.isFinite(parsed) && parsed > 0) return parsed;
-  }
-  return null;
-}
-
-export async function getComputedScoreFromEventsService(
-  matchId: number,
-  homeTeamId?: number | null,
-  awayTeamId?: number | null,
-  fallback: MatchScore = { home: 0, away: 0 },
-): Promise<MatchScore> {
-  try {
-    const events = await getMatchEvents(matchId);
-    if (!homeTeamId || !awayTeamId) return fallback;
-
-    let home = 0;
-    let away = 0;
-
-    for (const event of events) {
-      if (!event || typeof event !== 'object') continue;
-      const e = event as Record<string, unknown>;
-      const tipo = String(e.tipo_evento ?? e.tipo ?? e.event_type ?? '').toLowerCase();
-      if (tipo !== 'gol' && tipo !== 'goal') continue;
-
-      const teamId = getNumberField(e, ['id_equipo', 'equipo_id', 'idEquipo', 'teamId']);
-      if (teamId === homeTeamId) home += 1;
-      if (teamId === awayTeamId) away += 1;
-    }
-
-    return { home, away };
-  } catch {
-    return fallback;
   }
 }
 
@@ -365,5 +319,6 @@ export async function getMatchPlayersBySideService(matchId: number): Promise<Ser
 }
 
 export async function getMatchDurationService(match: PartidoApi): Promise<number> {
-  return getLeagueMatchDuration(match.id_liga);
+  if (!match.id_liga) return DEFAULT_MATCH_DURATION;
+  return getLeagueMatchDurationService(match.id_liga);
 }

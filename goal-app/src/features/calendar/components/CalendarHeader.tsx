@@ -31,6 +31,12 @@ interface CalendarHeaderProps {
    * Dejar false mientras no haya lógica de temporadas múltiples.
    */
   hasMultipleSeasons?: boolean;
+  /**
+   * Controla si el menú de tres puntos se renderiza.
+   * No lo dejamos solo deshabilitado: para roles no administradores debe desaparecer
+   * para evitar que parezca una acción disponible.
+   */
+  showMenu?: boolean;
   onMenuPress?: () => void;
   /** Solo se llama si hasMultipleSeasons === true */
   onSeasonPress?: () => void;
@@ -41,9 +47,14 @@ export function CalendarHeader({
   season,
   leagueLogo,
   hasMultipleSeasons = false,
+  showMenu = true,
   onMenuPress,
   onSeasonPress,
 }: CalendarHeaderProps) {
+  // El menú solo debe existir cuando hay permiso y una acción real asociada.
+  // Así evitamos mostrar los tres puntos a usuarios que no pueden crear/editar calendario o partidos.
+  const shouldRenderMenu = showMenu && typeof onMenuPress === 'function';
+
   return (
     <SafeAreaView edges={['top']} style={{ backgroundColor: Colors.bg.base }}>
       <View
@@ -142,25 +153,27 @@ export function CalendarHeader({
         </View>
 
         {/* ── Menú contextual ── */}
-        <Pressable
-          onPress={onMenuPress}
-          hitSlop={8}
-          style={{
-            width: 36,
-            height: 36,
-            borderRadius: 18,
-            backgroundColor: Colors.bg.surface1,
-            borderWidth: 1,
-            borderColor: Colors.bg.surface2,
-            alignItems: 'center',
-            justifyContent: 'center',
-          }}
-          android_ripple={{ color: 'rgba(255,255,255,0.08)', borderless: true, radius: 18 }}
-          accessibilityRole="button"
-          accessibilityLabel="Menú del calendario"
-        >
-          <Ionicons name="ellipsis-horizontal" size={18} color={Colors.text.primary} />
-        </Pressable>
+        {shouldRenderMenu && (
+          <Pressable
+            onPress={onMenuPress}
+            hitSlop={8}
+            style={{
+              width: 36,
+              height: 36,
+              borderRadius: 18,
+              backgroundColor: Colors.bg.surface1,
+              borderWidth: 1,
+              borderColor: Colors.bg.surface2,
+              alignItems: 'center',
+              justifyContent: 'center',
+            }}
+            android_ripple={{ color: 'rgba(255,255,255,0.08)', borderless: true, radius: 18 }}
+            accessibilityRole="button"
+            accessibilityLabel="Menú del calendario"
+          >
+            <Ionicons name="ellipsis-horizontal" size={18} color={Colors.text.primary} />
+          </Pressable>
+        )}
       </View>
 
       {/* ── Separador inferior ── */}

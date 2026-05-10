@@ -351,6 +351,9 @@ export function CalendarScreen() {
   const leagueName = session?.leagueName ?? '–';
   const temporada = session?.temporada ?? '–';
   const role = (session?.role ?? 'observer') as CalendarRole;
+  // Único rol con acceso al menú contextual del calendario.
+  // Los roles no administradores no deben ver los tres puntos ni poder abrir acciones de gestión.
+  const isAdmin = role === 'admin';
 
   // ── Datos reales del calendario ──
   const {
@@ -467,7 +470,12 @@ export function CalendarScreen() {
         : 'editable';
 
   // ── Handlers del menú de admin ──
-  const handleMenuPress = () => setMenuVisible(true);
+  const handleMenuPress = () => {
+    // Defensa extra: aunque el botón se oculte en CalendarHeader,
+    // nunca abrimos el menú si la sesión actual no es administradora.
+    if (!isAdmin) return;
+    setMenuVisible(true);
+  };
 
   const handleOpenCreateCalendar = () => {
     setMenuVisible(false);
@@ -770,6 +778,8 @@ export function CalendarScreen() {
         season={temporada}
         //  pasar logo real cuando el store incluya crestUrl de la liga activa
         hasMultipleSeasons={false}
+        // Ocultamos por completo los tres puntos a cualquier rol que no sea administrador.
+        showMenu={isAdmin}
         onMenuPress={handleMenuPress}
       />
 
@@ -814,18 +824,20 @@ export function CalendarScreen() {
       {/* ── Modales ── */}
 
       {/* Menú de acciones de admin (desde el header) */}
-      <CalendarActionsMenu
-        visible={menuVisible}
-        permissions={calendarPerms}
-        calendarMenuState={calendarMenuState}
-        hasGeneratedCalendar={hasGeneratedCalendar}
-        onClose={() => setMenuVisible(false)}
-        onCreateCalendar={handleOpenCreateCalendar}
-        onEditCalendar={handleOpenEditCalendar}
-        onDeleteCalendar={handleOpenDeleteCalendar}
-        onAddMatch={handleOpenAddMatch}
-        onAddTeam={calendarPerms.canAddMatch ? handleOpenAddTeam : undefined}
-      />
+      {isAdmin && (
+        <CalendarActionsMenu
+          visible={menuVisible}
+          permissions={calendarPerms}
+          calendarMenuState={calendarMenuState}
+          hasGeneratedCalendar={hasGeneratedCalendar}
+          onClose={() => setMenuVisible(false)}
+          onCreateCalendar={handleOpenCreateCalendar}
+          onEditCalendar={handleOpenEditCalendar}
+          onDeleteCalendar={handleOpenDeleteCalendar}
+          onAddMatch={handleOpenAddMatch}
+          onAddTeam={calendarPerms.canAddMatch ? handleOpenAddTeam : undefined}
+        />
+      )}
 
       {/* Modal crear / editar calendario */}
       <CalendarConfigModal

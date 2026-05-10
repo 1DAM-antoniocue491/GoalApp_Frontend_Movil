@@ -205,6 +205,16 @@ export function useDashboardData(leagueId: string): DashboardHookResult {
     loadData();
   }, [loadData]);
 
+  // Refetch discreto cada vez que el usuario vuelve a esta pantalla.
+  // Solo si ya se cargaron datos al menos una vez para no duplicar la carga inicial.
+  useFocusEffect(
+    useCallback(() => {
+      if (hasLoadedOnce.current) {
+        void loadData();
+      }
+    }, [loadData]),
+  );
+
   return {
     data,
     isLoading,

@@ -41,21 +41,17 @@ import type {
 /**
  * Mapea el estado del backend al status del calendario.
  *
- * Leniente: solo cancelado/cancelled se omite.
- * Todo estado no reconocido se trata como 'programmed' para no silenciar partidos
- * cuando el backend cambia nomenclatura sin avisar.
+ * Cancelados y suspendidos se mantienen en el apartado de programados, pero
+ * se ordenan al final. Así el admin puede localizarlos/editar sin que
+ * desaparezcan de la vista.
  */
 function normalizarEstado(
   estado: string | undefined | null,
-): CalendarMatchStatus | null {
+): CalendarMatchStatus {
   if (!estado) return "programmed";
   const s = estado.toLowerCase().trim();
-  // Únicos estados que se omiten
-  if (s === "cancelado" || s === "cancelled") return null;
-  // En vivo
   if (s === "en_juego" || s === "en_vivo" || s === "live" || s === "en_curso")
     return "live";
-  // Finalizado
   if (
     s === "finalizado" ||
     s === "finished" ||
@@ -63,7 +59,6 @@ function normalizarEstado(
     s === "terminado"
   )
     return "finished";
-  // Programado (incluye cualquier desconocido)
   return "programmed";
 }
 
@@ -91,19 +86,37 @@ const MESES = [
  * Devuelve guiones si la fecha viene vacía o no se puede parsear para no romper la UI.
  */
 function parseFechaHora(fechaHora: string | null | undefined) {
-  if (!fechaHora)
-    return { day: "–", month: "–", time: "–", dateFormatted: "–" };
-  try {
-    const d = new Date(fechaHora);
-    if (isNaN(d.getTime()))
-      return { day: "–", month: "–", time: "–", dateFormatted: "–" };
-    const day = String(d.getDate());
-    const month = MESES[d.getMonth()] ?? "–";
-    const time = `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
-    return { day, month, time, dateFormatted: `${day} ${month}` };
-  } catch {
-    return { day: "–", month: "–", time: "–", dateFormatted: "–" };
+  if (!fechaHora) {
+    return { day: "–", month: "–", time: "–", dateFormatted: "–", timestamp: Number.POSITIVE_INFINITY };
   }
+
+  const raw = String(fechaHora).trim();
+  const parsed = new Date(raw);
+  if (!Number.isNaN(parsed.getTime())) {
+    // La fecha se muestra en hora local. Si al backend se le envía 2h menos
+    // con sufijo Z, el usuario seguirá viendo exactamente la hora que eligió.
+    const day = String(parsed.getDate());
+    const month = MESES[parsed.getMonth()] ?? "–";
+    const time = `${String(parsed.getHours()).padStart(2, "0")}:${String(parsed.getMinutes()).padStart(2, "0")}`;
+    return { day, month, time, dateFormatted: `${day} ${month}`, timestamp: parsed.getTime() };
+  }
+
+  const literal = raw.match(/^(\d{4})-(\d{2})-(\d{2})(?:[T\s](\d{2}):(\d{2}))?/);
+  if (literal) {
+    const [, year, month, day, hour = "00", minute = "00"] = literal;
+    const monthIndex = Number(month) - 1;
+    const monthLabel = MESES[monthIndex] ?? "–";
+    const timestamp = new Date(Number(year), monthIndex, Number(day), Number(hour), Number(minute), 0).getTime();
+    return {
+      day: String(Number(day)),
+      month: monthLabel,
+      time: `${hour}:${minute}`,
+      dateFormatted: `${String(Number(day))} ${monthLabel}`,
+      timestamp,
+    };
+  }
+
+  return { day: "–", month: "–", time: "–", dateFormatted: "–", timestamp: Number.POSITIVE_INFINITY };
 }
 
 // ---------------------------------------------------------------------------
@@ -140,10 +153,18 @@ function mapPartidoToCalendarMatch(
     month,
     time,
     date: dateFormatted,
+    rawDateTime: partido.fecha_hora ?? undefined,
+    backendStatus: partido.estado,
+    homeTeamId: partido.equipo_local?.id_equipo,
+    awayTeamId: partido.equipo_visitante?.id_equipo,
     // Marcador — presente en live y finished; 0 por defecto en programado
     homeScore: partido.goles_local ?? 0,
     awayScore: partido.goles_visitante ?? 0,
     minute: partido.minuto_actual ?? 0,
+    // Tiempo real de inicio — para calcular el minuto transcurrido en LiveMatchCard
+    startedAt: partido.inicio_en ?? partido.started_at ?? partido.fecha_inicio ?? undefined,
+    // Duración configurada del partido
+    duration: partido.minutos_partido ?? partido.duracion_partido ?? undefined,
     // Visual
     homeColor: partido.equipo_local.color_primario ?? undefined,
     awayColor: partido.equipo_visitante.color_primario ?? undefined,
@@ -234,14 +255,15 @@ function normalizeJornadasResponse(raw: unknown): JornadaConPartidosApi[] {
 
   const first = raw[0] as Record<string, unknown>;
 
-  // Caso A: array de objetos con campo 'partidos'
-  if ("partidos" in first || "jornada" in first || "numero_jornada" in first) {
-    return raw as JornadaConPartidosApi[];
-  }
-
-  // Caso C: array plano de partidos (tienen id_partido)
+  // Caso C: array plano de partidos. Debe evaluarse antes que jornada,
+  // porque esos partidos también pueden traer campo jornada.
   if ("id_partido" in first) {
     return groupFlatPartidos(raw as PartidoCalendarioApi[]);
+  }
+
+  // Caso A: array de objetos agrupados con campo 'partidos'
+  if ("partidos" in first || "jornada" in first || "numero_jornada" in first) {
+    return raw as JornadaConPartidosApi[];
   }
 
   return raw as JornadaConPartidosApi[];
@@ -260,6 +282,41 @@ function resolveTeamColor(
     embeddedTeam?.colores ??
     undefined
   );
+}
+
+
+function getMatchTimestamp(match: CalendarMatch): number {
+  if (match.rawDateTime) {
+    const parsed = new Date(match.rawDateTime).getTime();
+    if (!Number.isNaN(parsed)) return parsed;
+  }
+  return Number.POSITIVE_INFINITY;
+}
+
+function sortCalendarMatches(matches: CalendarMatch[]): CalendarMatch[] {
+  const now = Date.now();
+  const statusPriority: Record<CalendarMatchStatus, number> = { live: 0, programmed: 1, finished: 2 };
+  return [...matches].sort((a, b) => {
+    const pa = statusPriority[a.status] ?? 9;
+    const pb = statusPriority[b.status] ?? 9;
+    if (pa !== pb) return pa - pb;
+
+    const aBackend = String(a.backendStatus ?? '').toLowerCase();
+    const bBackend = String(b.backendStatus ?? '').toLowerCase();
+    const aInactive = aBackend.includes('cancel') || aBackend.includes('suspend');
+    const bInactive = bBackend.includes('cancel') || bBackend.includes('suspend');
+    if (aInactive !== bInactive) return aInactive ? 1 : -1;
+
+    const ta = getMatchTimestamp(a);
+    const tb = getMatchTimestamp(b);
+
+    if (a.status === 'finished') return tb - ta;
+
+    const aFuture = ta >= now;
+    const bFuture = tb >= now;
+    if (aFuture !== bFuture) return aFuture ? -1 : 1;
+    return aFuture ? ta - tb : tb - ta;
+  });
 }
 
 // ---------------------------------------------------------------------------
@@ -281,7 +338,7 @@ function mapPartidoJornadaToCalendarMatch(
   if (!status) return null;
 
   // Fecha flexible
-  const rawDate = partido.fecha_hora ?? partido.fecha;
+  const rawDate = partido.fecha_hora ?? (partido.fecha && partido.hora ? `${partido.fecha}T${partido.hora}` : partido.fecha);
   const { day, month, time, dateFormatted } = parseFechaHora(rawDate);
 
   // Resolver equipo local: priorizar mapa real de equipos
@@ -320,9 +377,17 @@ function mapPartidoJornadaToCalendarMatch(
     month,
     time,
     date: dateFormatted,
+    rawDateTime: rawDate ?? undefined,
+    backendStatus: partido.estado,
+    homeTeamId: homeId,
+    awayTeamId: awayId,
     homeScore: partido.goles_local ?? 0,
     awayScore: partido.goles_visitante ?? 0,
     minute: partido.minuto_actual ?? 0,
+    // Tiempo real de inicio — para calcular el minuto transcurrido en LiveMatchCard
+    startedAt: partido.inicio_en ?? partido.started_at ?? partido.fecha_inicio ?? undefined,
+    // Duración configurada del partido
+    duration: partido.minutos_partido ?? partido.duracion_partido ?? undefined,
     homeColor,
     awayColor,
     homeShieldLetter: homeName.charAt(0).toUpperCase(),
@@ -357,16 +422,18 @@ function mapJornadasToCalendarJourneys(
     const visualNumber = index + 1; // 1, 2, 3...
     const partidos = j.partidos ?? [];
 
-    const matches = partidos
-      .map((p) =>
-        mapPartidoJornadaToCalendarMatch(
-          p,
-          visualNumber,
-          leagueName,
-          teamsById,
-        ),
-      )
-      .filter((m): m is CalendarMatch => m !== null);
+    const matches = sortCalendarMatches(
+      partidos
+        .map((p) =>
+          mapPartidoJornadaToCalendarMatch(
+            p,
+            visualNumber,
+            leagueName,
+            teamsById,
+          ),
+        )
+        .filter((m): m is CalendarMatch => m !== null),
+    );
 
     // Incluir jornadas aunque tengan 0 matches válidos — el usuario debe poder navegar
     result.push({
@@ -414,6 +481,10 @@ function groupByJornada(
       jornadaMap.set(numero, { id, number: numero, matches: [] });
     }
     jornadaMap.get(numero)!.matches.push(match);
+  }
+
+  for (const journey of jornadaMap.values()) {
+    journey.matches = sortCalendarMatches(journey.matches);
   }
 
   // Ordenar por número backend y reasignar número visual secuencial

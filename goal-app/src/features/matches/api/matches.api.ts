@@ -1,6 +1,6 @@
 /**
  * matches.api.ts
- * Endpoints reales del módulo de partidos/eventos.
+ * Capa HTTP del módulo de partidos/eventos.
  */
 
 import { apiClient } from '@/src/shared/api/client';
@@ -8,7 +8,6 @@ import type {
   PartidoApi,
   CreateManualMatchRequest,
   UpdateMatchRequest,
-  UpdateScheduledMatchRequest,
   CreateMatchEventRequest,
   FinishMatchRequest,
   MatchEventApi,
@@ -49,11 +48,6 @@ export async function updateMatch(matchId: number, data: UpdateMatchRequest): Pr
   return res.data;
 }
 
-export async function updateScheduledMatch(matchId: number, data: UpdateScheduledMatchRequest): Promise<PartidoApi> {
-  const res = await apiClient.put<PartidoApi>(`/partidos/${matchId}`, data);
-  return res.data;
-}
-
 export async function getJornadasByLeague(ligaId: number): Promise<unknown> {
   const res = await apiClient.get<unknown>(`/partidos/ligas/${ligaId}/jornadas`);
   return res.data;
@@ -74,7 +68,7 @@ export async function getMatchEvents(matchId: number): Promise<MatchEventApi[]> 
   return Array.isArray(res.data) ? res.data : [];
 }
 
-export async function createMatchEvent(data: CreateMatchEventRequest): Promise<MatchEventApi> {
-  const res = await apiClient.post<MatchEventApi>('/eventos/', data);
+export async function createMatchEvent(data: CreateMatchEventRequest): Promise<unknown> {
+  const res = await apiClient.post<unknown>('/eventos/', data);
   return res.data;
 }

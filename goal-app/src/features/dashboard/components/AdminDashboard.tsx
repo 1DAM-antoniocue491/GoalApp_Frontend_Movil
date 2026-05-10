@@ -77,7 +77,7 @@ export function AdminDashboard({
   const {
     openRegisterEvent, openEndMatch, openStartMatch,
     modals, activeEventMatch, activeEndMatch, activeStartMatch, modalProps,
-  } = useMatchActionModals();
+  } = useMatchActionModals(refetch);
 
   // ── Handlers de acciones — delegan al flujo centralizado de modales ──
 
@@ -90,6 +90,10 @@ export function AdminDashboard({
       homeScore: data.liveMatch.homeScore,
       awayScore: data.liveMatch.awayScore,
       minute: data.liveMatch.minute,
+      duration: data.liveMatch.duration,
+      homeTeamId: data.liveMatch.homeTeamId,
+      awayTeamId: data.liveMatch.awayTeamId,
+      startedAt: data.liveMatch.startedAt,
     });
   };
 
@@ -114,6 +118,7 @@ export function AdminDashboard({
       date: `${match.day} ${match.month}`,
       time: match.time,
       venue: match.venue,
+      rawDateTime: match.rawDateTime,
     });
   };
 
@@ -150,6 +155,7 @@ export function AdminDashboard({
                 permissions={permissions}
                 onRegisterEvent={handleRegisterEvent}
                 onEndMatch={handleEndMatch}
+                actionsDisabled={modalProps.pending.any}
               />
             </View>
           )}
@@ -159,6 +165,7 @@ export function AdminDashboard({
             matches={data.upcomingMatches}
             permissions={permissions}
             onStartMatch={handleStartMatch}
+            actionsDisabled={modalProps.pending.any}
           />
 
           {/* ── Progreso: equipos activos + jornadas (solo admin) ── */}
@@ -172,42 +179,50 @@ export function AdminDashboard({
       <RegisterEventModal
         visible={modals.registerEvent}
         match={activeEventMatch}
+        disabled={modalProps.pending.any}
+        loading={modalProps.pending.hydratingEventPlayers}
         onSelectEvent={modalProps.onSelectEvent}
         onCancel={modalProps.onCloseRegisterEvent}
       />
       <GoalEventModal
         visible={modals.goal}
         match={activeEventMatch}
+        submitting={modalProps.pending.submittingEvent}
         onConfirm={modalProps.onGoalConfirm}
         onCancel={modalProps.onCloseGoal}
       />
       <YellowCardModal
         visible={modals.yellowCard}
         match={activeEventMatch}
+        submitting={modalProps.pending.submittingEvent}
         onConfirm={modalProps.onYellowCardConfirm}
         onCancel={modalProps.onCloseYellowCard}
       />
       <RedCardModal
         visible={modals.redCard}
         match={activeEventMatch}
+        submitting={modalProps.pending.submittingEvent}
         onConfirm={modalProps.onRedCardConfirm}
         onCancel={modalProps.onCloseRedCard}
       />
       <SubstitutionModal
         visible={modals.substitution}
         match={activeEventMatch}
+        submitting={modalProps.pending.submittingEvent}
         onConfirm={modalProps.onSubstitutionConfirm}
         onCancel={modalProps.onCloseSubstitution}
       />
       <EndMatchModal
         visible={modals.endMatch}
         match={activeEndMatch}
+        submitting={modalProps.pending.endingMatch || modalProps.pending.hydratingEndMatch}
         onConfirm={modalProps.onEndMatchConfirm}
         onCancel={modalProps.onCloseEndMatch}
       />
       <StartMatchModal
         visible={modals.startMatch}
         match={activeStartMatch}
+        submitting={modalProps.pending.startingMatch}
         onConfirm={modalProps.onStartMatchConfirm}
         onCancel={modalProps.onCloseStartMatch}
       />

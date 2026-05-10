@@ -44,15 +44,16 @@ export interface ProgrammedMatchContext {
   /** HH:MM */
   time?: string;
   venue?: string;
+  /** Fecha/hora cruda del backend para corregir desfase antes de iniciar. */
+  rawDateTime?: string | null;
 }
 
 interface StartMatchModalProps {
   visible: boolean;
   match: ProgrammedMatchContext | null;
+  submitting?: boolean;
   onConfirm: () => void;
   onCancel: () => void;
-  /** Evita dobles toques y bloquea cierre mientras se inicia el partido. */
-  submitting?: boolean;
 }
 
 // ---------------------------------------------------------------------------
@@ -94,9 +95,9 @@ function MatchDetailRow({
 function StartMatchModalComponent({
   visible,
   match,
+  submitting = false,
   onConfirm,
   onCancel,
-  submitting = false,
 }: StartMatchModalProps) {
   const slideAnim = useRef(new Animated.Value(350)).current;
   const opacityAnim = useRef(new Animated.Value(0)).current;
@@ -208,7 +209,7 @@ function StartMatchModalComponent({
               marginBottom: 6,
             }}
           >
-            Iniciar partido
+            {submitting ? 'Iniciando...' : 'Iniciar partido'}
           </Text>
           <Text
             style={{
@@ -311,23 +312,23 @@ function StartMatchModalComponent({
           {/* Botones */}
           <View style={{ gap: 10 }}>
             <TouchableOpacity
-              disabled={submitting}
               onPress={handleConfirm}
+              disabled={submitting}
               activeOpacity={0.88}
               style={{
                 height: 56,
                 borderRadius: 18,
                 alignItems: 'center',
                 justifyContent: 'center',
-                backgroundColor: submitting ? Colors.bg.surface2 : Colors.brand.primary,
+                backgroundColor: Colors.brand.primary,
                 flexDirection: 'row',
                 gap: 8,
               }}
             >
-              <Ionicons name={submitting ? 'hourglass-outline' : 'play-circle-outline'} size={20} color={submitting ? Colors.text.disabled : Colors.bg.base} />
+              <Ionicons name="play-circle-outline" size={20} color={Colors.bg.base} />
               <Text
                 style={{
-                  color: submitting ? Colors.text.disabled : Colors.bg.base,
+                  color: Colors.bg.base,
                   fontSize: 16,
                   fontWeight: '700',
                 }}
@@ -337,10 +338,10 @@ function StartMatchModalComponent({
             </TouchableOpacity>
 
             <TouchableOpacity
+              onPress={submitting ? undefined : onCancel}
               disabled={submitting}
-              onPress={onCancel}
               activeOpacity={0.7}
-              style={{ paddingVertical: 12, alignItems: 'center', opacity: submitting ? 0.45 : 1 }}
+              style={{ paddingVertical: 12, alignItems: 'center', opacity: submitting ? 0.5 : 1 }}
             >
               <Text
                 style={{

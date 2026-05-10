@@ -185,6 +185,16 @@ interface PartidoJornadaRaw {
   fecha?: string | null;
   hora?: string | null;
   estadio?: string | null;
+  goles_local?: number | null;
+  goles_visitante?: number | null;
+  minuto_actual?: number | null;
+  /** Timestamp de inicio — para calcular el minuto real transcurrido. */
+  inicio_en?: string | null;
+  started_at?: string | null;
+  fecha_inicio?: string | null;
+  /** Duración configurada del partido en minutos. */
+  duracion_partido?: number | null;
+  minutos_partido?: number | null;
   equipo_local?: {
     id_equipo?: number;
     id?: number;
@@ -418,6 +428,7 @@ function mapJornadaPartidoToUpcoming(
     venue: partido.estadio ?? '',
     homeColor: homeColor ?? undefined,
     awayColor: awayColor ?? undefined,
+    rawDateTime: fechaStr ?? null,
   };
 }
 
@@ -429,6 +440,7 @@ function mapJornadaPartidoToLive(
   partido: PartidoJornadaRaw,
   leagueName: string,
   teamsById: Map<number, EquipoListResponse>,
+  matchDuration: number,
 ): LiveMatchData | null {
   if (normalizarEstado(partido.estado) !== 'en_juego') return null;
 
@@ -443,13 +455,16 @@ function mapJornadaPartidoToLive(
   const homeTeam = partido.equipo_local?.nombre ?? homeTeamObj?.nombre ?? `Equipo ${homeId ?? '?'}`;
   const awayTeam = partido.equipo_visitante?.nombre ?? awayTeamObj?.nombre ?? `Equipo ${awayId ?? '?'}`;
 
+  const startedAt = partido.inicio_en ?? partido.started_at ?? partido.fecha_inicio ?? null;
+  const duration = partido.minutos_partido ?? partido.duracion_partido ?? matchDuration;
+
   return {
     id: String(partido.id_partido),
     homeTeam,
     awayTeam,
-    homeScore: 0,
-    awayScore: 0,
-    minute: 0,
+    homeScore: partido.goles_local ?? 0,
+    awayScore: partido.goles_visitante ?? 0,
+    minute: partido.minuto_actual ?? 0,
     leagueName,
     venue: partido.estadio ?? '',
     homeShieldLetter: homeTeam.charAt(0).toUpperCase(),
@@ -464,6 +479,10 @@ function mapJornadaPartidoToLive(
       partido.equipo_visitante?.colores ??
       awayTeamObj?.color_primario ??
       undefined,
+    homeTeamId: homeId,
+    awayTeamId: awayId,
+    startedAt,
+    duration,
   };
 }
 
@@ -474,6 +493,7 @@ function mapJornadaPartidoToLive(
 function mapPartidoToLiveMatch(
   partido: PartidoConEquiposResponse,
   leagueName: string,
+  matchDuration: number,
 ): LiveMatchData {
   const homeTeam = getTeamName(partido.equipo_local, `Equipo ${partido.equipo_local?.id_equipo ?? 'local'}`);
   const awayTeam = getTeamName(partido.equipo_visitante, `Equipo ${partido.equipo_visitante?.id_equipo ?? 'visitante'}`);
@@ -485,6 +505,14 @@ function mapPartidoToLiveMatch(
       hasAwayTeam: Boolean(partido.equipo_visitante),
     });
   }
+
+  const raw = partido as unknown as Record<string, unknown>;
+  const startedAt =
+    (raw.inicio_en as string | null | undefined) ??
+    (raw.started_at as string | null | undefined) ??
+    (raw.fecha_inicio as string | null | undefined) ??
+    null;
+  const duration = Number(raw.minutos_partido ?? raw.duracion_partido ?? matchDuration) || matchDuration;
 
   return {
     id: String(partido.id_partido),
@@ -499,6 +527,10 @@ function mapPartidoToLiveMatch(
     awayShieldLetter: awayTeam.charAt(0).toUpperCase(),
     homeColor: partido.equipo_local?.color_primario ?? undefined,
     awayColor: partido.equipo_visitante?.color_primario ?? undefined,
+    homeTeamId: partido.equipo_local?.id_equipo,
+    awayTeamId: partido.equipo_visitante?.id_equipo,
+    startedAt,
+    duration,
   };
 }
 
@@ -526,6 +558,7 @@ function mapPartidoToUpcoming(partido: PartidoConEquiposResponse): UpcomingMatch
     venue: partido.estadio ?? '',
     homeColor: partido.equipo_local?.color_primario ?? undefined,
     awayColor: partido.equipo_visitante?.color_primario ?? undefined,
+    rawDateTime: partido.fecha_hora ?? null,
   };
 }
 
@@ -840,13 +873,11 @@ export async function fetchDashboardData(ligaId: number): Promise<DashboardData>
   const liveFromJornadas = partidosDeJornadas.find(
     (p) => normalizarEstado(p.estado) === 'en_juego',
   );
+  const liveFromConEquipos = partidos.find((p) => normalizarEstado(p.estado) === 'en_juego');
   const liveMatch: LiveMatchData | null = liveFromJornadas
-    ? (mapJornadaPartidoToLive(liveFromJornadas, liga.nombre, teamsById) ?? null)
-    : (partidos.find((p) => normalizarEstado(p.estado) === 'en_juego')
-        ? mapPartidoToLiveMatch(
-            partidos.find((p) => normalizarEstado(p.estado) === 'en_juego')!,
-            liga.nombre,
-          )
+    ? (mapJornadaPartidoToLive(liveFromJornadas, liga.nombre, teamsById, matchDuration) ?? null)
+    : (liveFromConEquipos
+        ? mapPartidoToLiveMatch(liveFromConEquipos, liga.nombre, matchDuration)
         : null);
 
   // ── Próximos partidos ──
@@ -878,12 +909,20 @@ export async function fetchDashboardData(ligaId: number): Promise<DashboardData>
 
   // max_equipos desde configuración de liga — determina cuándo se completa la barra de progreso.
   // No usamos min_equipos aquí: la barra debe llegar al 100% solo cuando se alcanza el máximo configurado.
-  const maxEquipos: number | null = ligaConfigResult.status === 'fulfilled'
-    ? (ligaConfigResult.value?.max_equipos ?? null)
+  const ligaConfig = ligaConfigResult.status === 'fulfilled' ? ligaConfigResult.value : null;
+  const ligaConfigRaw = ligaConfig as Record<string, unknown> | null;
+
+  const maxEquipos: number | null = ligaConfigRaw?.max_equipos != null
+    ? (Number(ligaConfigRaw.max_equipos) || null)
     : null;
 
+  // Duración del partido: desde la configuración de liga (minutos_partido o duracion_partido).
+  // Se usa como fallback cuando el partido no trae el campo directamente.
+  const matchDuration: number =
+    Number(ligaConfigRaw?.minutos_partido ?? ligaConfigRaw?.duracion_partido ?? 90) || 90;
+
   if (ligaConfigResult.status === 'rejected') {
-    logger.warn('dashboard.api', '[ligaConfig] FALLÓ — se usará fallback para progress bar', {
+    logger.warn('dashboard.api', '[ligaConfig] FALLÓ — se usará fallback para progress bar y duración', {
       ligaId,
       error: ligaConfigResult.reason instanceof Error ? ligaConfigResult.reason.message : String(ligaConfigResult.reason),
     });

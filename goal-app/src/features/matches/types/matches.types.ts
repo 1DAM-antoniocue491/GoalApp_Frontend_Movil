@@ -1,10 +1,26 @@
 /**
  * matches.types.ts
- * Tipos reales del dominio de partidos/eventos.
+ * Tipos reales y defensivos del dominio de partidos/eventos.
+ *
+ * La app normaliza aquí varios valores que el backend puede devolver con
+ * nombres distintos para evitar romper filtros, tabs y navegación.
  */
 
-export type MatchStatus = 'programado' | 'en_juego' | 'en_vivo' | 'finalizado' | 'cancelado' | 'suspendido';
+export type NormalizedMatchStatus = 'programado' | 'en_juego' | 'finalizado' | 'cancelado' | 'suspendido';
+
 export type EditableScheduledMatchStatus = 'programado' | 'cancelado' | 'suspendido';
+
+export type MatchStatus =
+  | NormalizedMatchStatus
+  | 'en_vivo'
+  | 'live'
+  | 'playing'
+  | 'finished'
+  | 'cancelled'
+  | 'canceled'
+  | 'suspended'
+  | string;
+
 export type BackendEventType = 'gol' | 'tarjeta_amarilla' | 'tarjeta_roja' | 'cambio';
 
 export interface EquipoPartidoApi {
@@ -30,15 +46,19 @@ export interface PartidoApi {
   equipo_visitante?: EquipoPartidoApi | null;
   fecha?: string | null;
   fecha_hora?: string | null;
+  fecha_completa?: string | null;
   hora?: string | null;
   estadio?: string | null;
-  estado?: MatchStatus | string;
+  estado?: MatchStatus;
   goles_local?: number | null;
   goles_visitante?: number | null;
   minuto_actual?: number | null;
   minuto?: number | null;
+  minutos_partido?: number | null;
+  duracion_partido?: number | null;
   inicio_en?: string | null;
   started_at?: string | null;
+  fecha_inicio?: string | null;
   created_at?: string;
   updated_at?: string;
 }
@@ -48,7 +68,7 @@ export interface CreateManualMatchRequest {
   id_jornada?: number | null;
   id_equipo_local: number;
   id_equipo_visitante: number;
-  /** ISO: YYYY-MM-DDTHH:MM:SS */
+  /** ISO defensivo para backend: YYYY-MM-DDTHH:MM:SS */
   fecha: string;
 }
 
@@ -59,14 +79,9 @@ export interface UpdateMatchRequest {
   estado?: MatchStatus;
 }
 
-/**
- * Edición segura de partido programado.
- * Regla de negocio: desde este flujo solo se puede mantener programado,
- * cancelar o suspender. Nunca iniciar/finalizar desde edición.
- */
 export interface UpdateScheduledMatchRequest {
   fecha?: string;
-  estado?: EditableScheduledMatchStatus;
+  estado: EditableScheduledMatchStatus;
 }
 
 export interface CreateMatchEventRequest {
@@ -74,24 +89,23 @@ export interface CreateMatchEventRequest {
   id_jugador: number;
   tipo_evento: BackendEventType;
   minuto: number;
+  /** Equipo al que se le asigna el evento. En goles sirve para propia puerta. */
+  id_equipo?: number;
   id_jugador_sale?: number;
   incidencias?: string;
 }
 
 export interface MatchEventApi {
-  id_evento: number;
-  id_partido: number;
-  id_jugador: number;
-  tipo_evento: BackendEventType | 'mvp' | string;
-  minuto: number;
-  puntuacion_mvp?: number | null;
-  incidencias?: string | null;
-  created_at?: string;
-  updated_at?: string;
-  nombre_jugador?: string;
+  id_evento?: number;
+  id_partido?: number;
+  id_jugador?: number;
   id_equipo?: number;
-  nombre_equipo?: string;
+  equipo_id?: number;
+  tipo_evento?: BackendEventType | string;
+  tipo?: BackendEventType | string;
+  minuto?: number | string | null;
   id_jugador_sale?: number | null;
+  incidencias?: string | null;
 }
 
 export interface FinishMatchRequest {
@@ -113,6 +127,11 @@ export interface MatchPlayerOption {
 export interface MatchPlayersBySide {
   home: MatchPlayerOption[];
   away: MatchPlayerOption[];
+}
+
+export interface MatchScore {
+  goles_local: number;
+  goles_visitante: number;
 }
 
 export interface ServiceResult<T = void> {

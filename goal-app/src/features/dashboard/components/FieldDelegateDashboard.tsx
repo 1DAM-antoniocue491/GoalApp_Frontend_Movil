@@ -53,7 +53,7 @@ export function FieldDelegateDashboard({
   const {
     openRegisterEvent, openEndMatch, openStartMatch,
     modals, activeEventMatch, activeEndMatch, activeStartMatch, modalProps,
-  } = useMatchActionModals();
+  } = useMatchActionModals(refetch);
 
   const handleRegisterEvent = (_matchId: string) => {
     if (!data?.liveMatch) return;
@@ -64,6 +64,10 @@ export function FieldDelegateDashboard({
       homeScore: data.liveMatch.homeScore,
       awayScore: data.liveMatch.awayScore,
       minute: data.liveMatch.minute,
+      duration: data.liveMatch.duration,
+      homeTeamId: data.liveMatch.homeTeamId,
+      awayTeamId: data.liveMatch.awayTeamId,
+      startedAt: data.liveMatch.startedAt,
     });
   };
 
@@ -88,6 +92,7 @@ export function FieldDelegateDashboard({
       date: `${match.day} ${match.month}`,
       time: match.time,
       venue: match.venue,
+      rawDateTime: match.rawDateTime,
     });
   };
 
@@ -112,6 +117,7 @@ export function FieldDelegateDashboard({
                 permissions={permissions}
                 onRegisterEvent={handleRegisterEvent}
                 onEndMatch={handleEndMatch}
+                actionsDisabled={modalProps.pending.any}
               />
             </View>
           )}
@@ -121,6 +127,7 @@ export function FieldDelegateDashboard({
             matches={data.upcomingMatches}
             permissions={permissions}
             onStartMatch={handleStartMatch}
+            actionsDisabled={modalProps.pending.any}
           />
         </>
       )}
@@ -129,42 +136,50 @@ export function FieldDelegateDashboard({
       <RegisterEventModal
         visible={modals.registerEvent}
         match={activeEventMatch}
+        disabled={modalProps.pending.any}
+        loading={modalProps.pending.hydratingEventPlayers}
         onSelectEvent={modalProps.onSelectEvent}
         onCancel={modalProps.onCloseRegisterEvent}
       />
       <GoalEventModal
         visible={modals.goal}
         match={activeEventMatch}
+        submitting={modalProps.pending.submittingEvent}
         onConfirm={modalProps.onGoalConfirm}
         onCancel={modalProps.onCloseGoal}
       />
       <YellowCardModal
         visible={modals.yellowCard}
         match={activeEventMatch}
+        submitting={modalProps.pending.submittingEvent}
         onConfirm={modalProps.onYellowCardConfirm}
         onCancel={modalProps.onCloseYellowCard}
       />
       <RedCardModal
         visible={modals.redCard}
         match={activeEventMatch}
+        submitting={modalProps.pending.submittingEvent}
         onConfirm={modalProps.onRedCardConfirm}
         onCancel={modalProps.onCloseRedCard}
       />
       <SubstitutionModal
         visible={modals.substitution}
         match={activeEventMatch}
+        submitting={modalProps.pending.submittingEvent}
         onConfirm={modalProps.onSubstitutionConfirm}
         onCancel={modalProps.onCloseSubstitution}
       />
       <EndMatchModal
         visible={modals.endMatch}
         match={activeEndMatch}
+        submitting={modalProps.pending.endingMatch || modalProps.pending.hydratingEndMatch}
         onConfirm={modalProps.onEndMatchConfirm}
         onCancel={modalProps.onCloseEndMatch}
       />
       <StartMatchModal
         visible={modals.startMatch}
         match={activeStartMatch}
+        submitting={modalProps.pending.startingMatch}
         onConfirm={modalProps.onStartMatchConfirm}
         onCancel={modalProps.onCloseStartMatch}
       />

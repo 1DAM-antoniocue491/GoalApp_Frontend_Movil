@@ -1,6 +1,6 @@
 /**
  * ProgrammedMatchesScreen
- * Lista real de partidos programados. Iniciar, convocar, alinear y editar con API real.
+ * Lista real de partidos programados. Iniciar, convocar y editar con API real.
  */
 
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
@@ -16,6 +16,7 @@ import {
   getMatchDate,
   getUpcomingMatchesService,
   normalizeMatchStatus,
+  formatBackendCivilDateTime,
   updateScheduledMatchService,
 } from '../../services/matchesService';
 import type { PartidoApi } from '../../types/matches.types';
@@ -24,10 +25,7 @@ import { EditScheduledMatchModal } from '../modals/EditScheduledMatchModal';
 import type { EditScheduledMatchData } from '../modals/EditScheduledMatchModal';
 
 function formatDate(raw?: string | null): string {
-  if (!raw) return 'Fecha sin definir';
-  const d = new Date(raw);
-  if (Number.isNaN(d.getTime())) return raw;
-  return d.toLocaleString('es-ES', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' });
+  return formatBackendCivilDateTime(raw);
 }
 
 export function ProgrammedMatchesScreen() {
@@ -54,7 +52,7 @@ export function ProgrammedMatchesScreen() {
     }
   }, [leagueId]);
 
-  useEffect(() => { load(); }, [load]);
+  useEffect(() => { void load(); }, [load]);
 
   const { modals, activeStartMatch, openStartMatch, modalProps } = useMatchActionModals(load);
   const interactionLocked = loading || editSaving || modalProps.pending.any;
@@ -89,7 +87,6 @@ export function ProgrammedMatchesScreen() {
 
     setEditVisible(false);
     setActiveEditMatch(null);
-    Alert.alert('Partido actualizado', 'Los cambios se han guardado correctamente.');
     await load();
   };
 
@@ -113,13 +110,7 @@ export function ProgrammedMatchesScreen() {
 
           return (
             <View key={match.id_partido} style={{ backgroundColor: Colors.bg.surface1, borderRadius: 24, padding: 18, marginBottom: 16, borderWidth: 1, borderColor: Colors.bg.surface2 }}>
-              <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
-                <Text style={{ color: Colors.text.secondary, fontWeight: '800' }}>{formatDate(getMatchDate(match))}</Text>
-                <TouchableOpacity disabled={interactionLocked} onPress={() => openEdit(match)} style={{ height: 34, paddingHorizontal: 12, borderRadius: 12, backgroundColor: Colors.bg.surface2, alignItems: 'center', justifyContent: 'center', flexDirection: 'row', gap: 6, opacity: interactionLocked ? 0.45 : 1 }}>
-                  <Ionicons name="create-outline" size={15} color={Colors.text.primary} />
-                  <Text style={{ color: Colors.text.primary, fontWeight: '800', fontSize: 12 }}>Editar</Text>
-                </TouchableOpacity>
-              </View>
+              <Text style={{ color: Colors.text.secondary, fontWeight: '800' }}>{formatDate(getMatchDate(match))}</Text>
 
               <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: 18 }}>
                 <Text style={{ color: Colors.text.primary, fontSize: 16, fontWeight: '800', flex: 1 }}>{context.homeTeam}</Text>
@@ -128,16 +119,16 @@ export function ProgrammedMatchesScreen() {
               </View>
 
               <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 10, marginTop: 20 }}>
+                <TouchableOpacity disabled={interactionLocked} onPress={() => openStartMatch(context)} style={{ flexGrow: 1, height: 44, borderRadius: 14, backgroundColor: interactionLocked ? Colors.bg.surface2 : Colors.brand.primary, alignItems: 'center', justifyContent: 'center', opacity: interactionLocked ? 0.55 : 1 }}>
+                  <Text style={{ color: interactionLocked ? Colors.text.disabled : Colors.bg.base, fontWeight: '900' }}>{modalProps.pending.startingMatch ? 'Iniciando...' : 'Iniciar'}</Text>
+                </TouchableOpacity>
+                <TouchableOpacity disabled={interactionLocked} onPress={() => openEdit(match)} style={{ flexGrow: 1, height: 44, borderRadius: 14, backgroundColor: Colors.bg.surface2, alignItems: 'center', justifyContent: 'center', flexDirection: 'row', gap: 8, opacity: interactionLocked ? 0.45 : 1 }}>
+                  <Ionicons name="create-outline" size={18} color={Colors.text.primary} />
+                  <Text style={{ color: Colors.text.primary, fontWeight: '800' }}>Editar partido</Text>
+                </TouchableOpacity>
                 <TouchableOpacity disabled={interactionLocked} onPress={() => router.push(`/matches/programmed/${match.id_partido}/convocation`)} style={{ flexGrow: 1, height: 44, borderRadius: 14, backgroundColor: Colors.bg.surface2, alignItems: 'center', justifyContent: 'center', flexDirection: 'row', gap: 8, opacity: interactionLocked ? 0.45 : 1 }}>
                   <Ionicons name="people-outline" size={18} color={Colors.text.primary} />
                   <Text style={{ color: Colors.text.primary, fontWeight: '800' }}>Convocatoria</Text>
-                </TouchableOpacity>
-                <TouchableOpacity disabled={interactionLocked} onPress={() => router.push(`/matches/programmed/${match.id_partido}/lineup`)} style={{ flexGrow: 1, height: 44, borderRadius: 14, backgroundColor: Colors.bg.surface2, alignItems: 'center', justifyContent: 'center', flexDirection: 'row', gap: 8, opacity: interactionLocked ? 0.45 : 1 }}>
-                  <Ionicons name="shirt-outline" size={18} color={Colors.text.primary} />
-                  <Text style={{ color: Colors.text.primary, fontWeight: '800' }}>Alineación</Text>
-                </TouchableOpacity>
-                <TouchableOpacity disabled={interactionLocked} onPress={() => openStartMatch(context)} style={{ flexGrow: 1, height: 44, borderRadius: 14, backgroundColor: interactionLocked ? Colors.bg.surface2 : Colors.brand.primary, alignItems: 'center', justifyContent: 'center', opacity: interactionLocked ? 0.55 : 1 }}>
-                  <Text style={{ color: interactionLocked ? Colors.text.disabled : Colors.bg.base, fontWeight: '900' }}>{modalProps.pending.startingMatch ? 'Iniciando...' : 'Iniciar'}</Text>
                 </TouchableOpacity>
               </View>
             </View>

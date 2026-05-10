@@ -30,7 +30,7 @@ export function useConvocatoriaEquipo({ partidoId, equipoId, readonly }: UseConv
     }
   }, [partidoId, equipoId]);
 
-  useEffect(() => { load(); }, [load]);
+  useEffect(() => { void load(); }, [load]);
 
   const counts = useMemo(() => {
     const titulares = players.filter(p => p.estado === 'titular').length;
@@ -42,8 +42,33 @@ export function useConvocatoriaEquipo({ partidoId, equipoId, readonly }: UseConv
 
   const setPlayerState = useCallback((playerId: number, nextState: ConvocatoriaPlayerState) => {
     if (!canEdit || saving || loading) return;
-    setPlayers(prev => prev.map(player => player.id_jugador === playerId ? { ...player, estado: nextState } : player));
-  }, [canEdit, saving, loading]);
+    setError(null);
+
+    setPlayers(prev => {
+      const current = prev.find(player => player.id_jugador === playerId);
+      if (!current || current.estado === nextState) return prev;
+
+      const nextTotal = prev.reduce((total, player) => {
+        const state = player.id_jugador === playerId ? nextState : player.estado;
+        return total + (state === 'no_convocado' ? 0 : 1);
+      }, 0);
+      const nextTitulares = prev.reduce((total, player) => {
+        const state = player.id_jugador === playerId ? nextState : player.estado;
+        return total + (state === 'titular' ? 1 : 0);
+      }, 0);
+
+      if (data?.limits && nextTotal > data.limits.maxConvocados) {
+        setError(`No puedes convocar más de ${data.limits.maxConvocados} jugadores.`);
+        return prev;
+      }
+      if (data?.limits && nextTitulares > data.limits.maxTitulares) {
+        setError(`No puedes seleccionar más de ${data.limits.maxTitulares} titulares.`);
+        return prev;
+      }
+
+      return prev.map(player => player.id_jugador === playerId ? { ...player, estado: nextState } : player);
+    });
+  }, [canEdit, data?.limits, saving, loading]);
 
   const save = useCallback(async (options?: { allowUnderMin?: boolean }) => {
     if (!partidoId || !data || !canEdit || saving || loading) return false;
@@ -62,5 +87,19 @@ export function useConvocatoriaEquipo({ partidoId, equipoId, readonly }: UseConv
     }
   }, [partidoId, data, canEdit, saving, loading, players, load]);
 
-  return { data, players, counts, limits: data?.limits, locked: Boolean(data?.locked), lockReason: data?.lockReason, canEdit, loading, saving, error, refresh: load, setPlayerState, save };
+  return {
+    data,
+    players,
+    counts,
+    limits: data?.limits,
+    locked: Boolean(data?.locked),
+    lockReason: data?.lockReason,
+    canEdit,
+    loading,
+    saving,
+    error,
+    refresh: load,
+    setPlayerState,
+    save,
+  };
 }

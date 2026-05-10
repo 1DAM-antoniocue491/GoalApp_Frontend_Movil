@@ -1,16 +1,23 @@
 /**
  * EditScheduledMatchModal.tsx
- * Edición segura de partidos programados.
- * Solo permite mantener programado, cancelar o suspender.
+ * Modal RN + NativeWind para editar partidos programados.
+ * Usa el mismo DateTimePickerField que la creación de partido.
  */
 
 import React, { memo, useEffect, useMemo, useState } from 'react';
-import { Modal, Pressable, ScrollView, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { Modal, Pressable, ScrollView, Text, TouchableOpacity, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { Colors } from '@/src/shared/constants/colors';
 import { theme } from '@/src/shared/styles/theme';
+import { DateTimePickerField } from '@/src/shared/components/ui/DateTimePickerField';
 import type { EditableScheduledMatchStatus, PartidoApi } from '../../types/matches.types';
-import { getAwayTeamName, getHomeTeamName, getMatchDate, normalizeMatchStatus } from '../../services/matchesService';
+import {
+  buildBackendCivilDateTime,
+  getAwayTeamName,
+  getHomeTeamName,
+  getMatchDate,
+  normalizeMatchStatus,
+} from '../../services/matchesService';
 
 export interface EditScheduledMatchData {
   fecha: string;
@@ -25,44 +32,60 @@ interface EditScheduledMatchModalProps {
   onCancel: () => void;
 }
 
-const STATUS_OPTIONS: Array<{ value: EditableScheduledMatchStatus; label: string; description: string }> = [
+const STATUS_OPTIONS: { value: EditableScheduledMatchStatus; label: string; description: string }[] = [
   { value: 'programado', label: 'Programado', description: 'Mantener el partido activo en calendario' },
   { value: 'cancelado', label: 'Cancelado', description: 'No se jugará este partido' },
-  { value: 'suspendido', label: 'Suspendido', description: 'Queda detenido o aplazado por incidencia' },
+  { value: 'suspendido', label: 'Suspendido', description: 'Partido aplazado o detenido por incidencia' },
 ];
 
-function toDateAndTime(raw?: string | null): { date: string; time: string } {
-  if (!raw) return { date: '', time: '' };
-  const parsed = new Date(raw);
-  if (Number.isNaN(parsed.getTime())) {
-    const [date = '', timeWithSeconds = ''] = raw.split('T');
-    return { date, time: timeWithSeconds.slice(0, 5) };
-  }
-
-  const year = parsed.getUTCFullYear();
-  const month = String(parsed.getUTCMonth() + 1).padStart(2, '0');
-  const day = String(parsed.getUTCDate()).padStart(2, '0');
-  const hours = String(parsed.getUTCHours()).padStart(2, '0');
-  const minutes = String(parsed.getUTCMinutes()).padStart(2, '0');
-  return { date: `${year}-${month}-${day}`, time: `${hours}:${minutes}` };
+function formatDateForPicker(date: Date): string {
+  const day = String(date.getDate()).padStart(2, '0');
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  return `${day}/${month}/${date.getFullYear()}`;
 }
 
-function isValidDate(value: string): boolean {
-  return /^\d{4}-\d{2}-\d{2}$/.test(value);
+function formatTimeForPicker(date: Date): string {
+  return `${String(date.getHours()).padStart(2, '0')}:${String(date.getMinutes()).padStart(2, '0')}`;
+}
+
+function toPickerDateTime(raw?: string | null): { date: string; time: string } {
+  if (!raw) return { date: '', time: '' };
+  const parsed = new Date(raw);
+  if (!Number.isNaN(parsed.getTime())) {
+    return { date: formatDateForPicker(parsed), time: formatTimeForPicker(parsed) };
+  }
+
+  const fallback = String(raw).match(/^(\d{4})-(\d{2})-(\d{2})(?:[T\s](\d{2}):(\d{2}))?/);
+  if (fallback) {
+    const [, year, month, day, hour = '00', minute = '00'] = fallback;
+    return { date: `${day}/${month}/${year}`, time: `${hour}:${minute}` };
+  }
+
+  return { date: '', time: '' };
+}
+
+function isValidPickerDate(value: string): boolean {
+  return /^\d{2}\/\d{2}\/\d{4}$/.test(value) || /^\d{4}-\d{2}-\d{2}$/.test(value);
 }
 
 function isValidTime(value: string): boolean {
   return /^\d{2}:\d{2}$/.test(value);
 }
 
-function EditScheduledMatchModalComponent({ visible, match, saving, onConfirm, onCancel }: EditScheduledMatchModalProps) {
+function EditScheduledMatchModalComponent({
+  visible,
+  match,
+  saving = false,
+  onConfirm,
+  onCancel,
+}: EditScheduledMatchModalProps) {
   const [date, setDate] = useState('');
   const [time, setTime] = useState('');
   const [status, setStatus] = useState<EditableScheduledMatchStatus>('programado');
 
   useEffect(() => {
     if (!visible || !match) return;
-    const next = toDateAndTime(getMatchDate(match));
+    const next = toPickerDateTime(getMatchDate(match));
     setDate(next.date);
     setTime(next.time);
 
@@ -72,59 +95,77 @@ function EditScheduledMatchModalComponent({ visible, match, saving, onConfirm, o
 
   const error = useMemo(() => {
     if (!date || !time) return 'La fecha y la hora son obligatorias.';
-    if (!isValidDate(date)) return 'La fecha debe tener formato YYYY-MM-DD.';
-    if (!isValidTime(time)) return 'La hora debe tener formato HH:MM.';
+    if (!isValidPickerDate(date)) return 'Selecciona una fecha válida.';
+    if (!isValidTime(time)) return 'Selecciona una hora válida.';
     return null;
   }, [date, time]);
 
   const handleConfirm = () => {
-    if (error) return;
+    if (error || saving) return;
     onConfirm({
-      fecha: `${date}T${time}:00Z`,
+      // Regla del proyecto: se restan 2h antes de enviar al backend.
+      fecha: buildBackendCivilDateTime(date, time, { subtractHours: 2, appendZ: true }),
       estado: status,
     });
   };
 
   return (
-    <Modal transparent visible={visible} animationType="slide" statusBarTranslucent onRequestClose={saving ? () => undefined : onCancel}>
-      <View style={{ flex: 1, justifyContent: 'flex-end', backgroundColor: 'rgba(0,0,0,0.65)' }}>
-        <Pressable style={{ flex: 1 }} onPress={saving ? undefined : onCancel} />
-        <View style={{ backgroundColor: Colors.bg.surface1, borderTopLeftRadius: 30, borderTopRightRadius: 30, padding: 22, paddingBottom: 40, maxHeight: '90%' }}>
+    <Modal
+      transparent
+      visible={visible}
+      animationType="slide"
+      statusBarTranslucent
+      onRequestClose={saving ? () => undefined : onCancel}
+    >
+      <View className="flex-1 justify-end" style={{ backgroundColor: 'rgba(0,0,0,0.65)' }}>
+        <Pressable className="flex-1" onPress={saving ? undefined : onCancel} />
+        <View
+          className="px-6 pt-4"
+          style={{
+            backgroundColor: Colors.bg.surface1,
+            borderTopLeftRadius: 30,
+            borderTopRightRadius: 30,
+            paddingBottom: 40,
+            maxHeight: '90%',
+          }}
+        >
+          <View style={{ width: 42, height: 4, borderRadius: 2, backgroundColor: Colors.bg.surface2, alignSelf: 'center', marginBottom: 18 }} />
+
           <ScrollView keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
-            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
+            <View className="flex-row items-center" style={{ gap: 12 }}>
               <View style={{ width: 42, height: 42, borderRadius: 21, backgroundColor: Colors.brand.primary + '20', alignItems: 'center', justifyContent: 'center' }}>
                 <Ionicons name="create-outline" size={21} color={Colors.brand.primary} />
               </View>
-              <View style={{ flex: 1 }}>
+              <View className="flex-1">
                 <Text style={{ color: Colors.text.primary, fontSize: 22, fontWeight: '900' }}>Editar partido</Text>
-                {match ? <Text numberOfLines={1} style={{ color: Colors.text.secondary, marginTop: 2 }}>{getHomeTeamName(match)} vs {getAwayTeamName(match)}</Text> : null}
+                {match ? (
+                  <Text numberOfLines={1} style={{ color: Colors.text.secondary, marginTop: 2 }}>
+                    {getHomeTeamName(match)} vs {getAwayTeamName(match)}
+                  </Text>
+                ) : null}
               </View>
             </View>
 
-            <Text style={{ color: Colors.text.secondary, marginTop: 22, marginBottom: 8, fontWeight: '800' }}>Fecha</Text>
-            <TextInput
-              value={date}
-              editable={!saving}
-              onChangeText={setDate}
-              placeholder="YYYY-MM-DD"
-              placeholderTextColor={Colors.text.disabled}
-              autoCapitalize="none"
-              style={{ height: 52, borderRadius: 16, backgroundColor: Colors.bg.base, color: Colors.text.primary, paddingHorizontal: 16, borderWidth: 1, borderColor: Colors.bg.surface2, fontSize: 16 }}
-            />
+            <View className="flex-row" style={{ gap: 12, marginTop: 22 }}>
+              <DateTimePickerField
+                label="Fecha"
+                value={date}
+                mode="date"
+                icon="calendar-outline"
+                onChange={setDate}
+              />
+              <DateTimePickerField
+                label="Hora"
+                value={time}
+                mode="time"
+                icon="time-outline"
+                onChange={setTime}
+              />
+            </View>
 
-            <Text style={{ color: Colors.text.secondary, marginTop: 16, marginBottom: 8, fontWeight: '800' }}>Hora</Text>
-            <TextInput
-              value={time}
-              editable={!saving}
-              onChangeText={setTime}
-              placeholder="HH:MM"
-              placeholderTextColor={Colors.text.disabled}
-              autoCapitalize="none"
-              keyboardType="numbers-and-punctuation"
-              style={{ height: 52, borderRadius: 16, backgroundColor: Colors.bg.base, color: Colors.text.primary, paddingHorizontal: 16, borderWidth: 1, borderColor: Colors.bg.surface2, fontSize: 16 }}
-            />
-
-            <Text style={{ color: Colors.text.secondary, marginTop: 18, marginBottom: 10, fontWeight: '800' }}>Estado permitido</Text>
+            <Text style={{ color: Colors.text.secondary, marginTop: 18, marginBottom: 10, fontWeight: '800' }}>
+              Estado permitido
+            </Text>
             <View style={{ gap: 10 }}>
               {STATUS_OPTIONS.map(option => {
                 const active = status === option.value;
@@ -134,10 +175,21 @@ function EditScheduledMatchModalComponent({ visible, match, saving, onConfirm, o
                     disabled={saving}
                     onPress={() => setStatus(option.value)}
                     activeOpacity={0.9}
-                    style={{ borderRadius: theme.borderRadius.lg, backgroundColor: active ? Colors.brand.primary + '20' : Colors.bg.surface2, borderWidth: 1, borderColor: active ? Colors.brand.primary : 'transparent', padding: 14, opacity: saving ? 0.55 : 1 }}
+                    style={{
+                      borderRadius: theme.borderRadius.lg,
+                      backgroundColor: active ? Colors.brand.primary + '20' : Colors.bg.surface2,
+                      borderWidth: 1,
+                      borderColor: active ? Colors.brand.primary : 'transparent',
+                      padding: 14,
+                      opacity: saving ? 0.55 : 1,
+                    }}
                   >
-                    <Text style={{ color: active ? Colors.brand.primary : Colors.text.primary, fontWeight: '900' }}>{option.label}</Text>
-                    <Text style={{ color: Colors.text.secondary, marginTop: 3, fontSize: 12 }}>{option.description}</Text>
+                    <Text style={{ color: active ? Colors.brand.primary : Colors.text.primary, fontWeight: '900' }}>
+                      {option.label}
+                    </Text>
+                    <Text style={{ color: Colors.text.secondary, marginTop: 3, fontSize: 12 }}>
+                      {option.description}
+                    </Text>
                   </TouchableOpacity>
                 );
               })}
@@ -145,12 +197,22 @@ function EditScheduledMatchModalComponent({ visible, match, saving, onConfirm, o
 
             {error ? <Text style={{ color: Colors.semantic.warning, marginTop: 14 }}>{error}</Text> : null}
 
-            <View style={{ flexDirection: 'row', gap: 12, marginTop: 24 }}>
-              <TouchableOpacity disabled={saving} onPress={onCancel} style={{ flex: 1, height: 54, borderRadius: 16, alignItems: 'center', justifyContent: 'center', backgroundColor: Colors.bg.surface2, opacity: saving ? 0.6 : 1 }}>
+            <View className="flex-row" style={{ gap: 12, marginTop: 24 }}>
+              <TouchableOpacity
+                disabled={saving}
+                onPress={onCancel}
+                style={{ flex: 1, height: 54, borderRadius: 16, alignItems: 'center', justifyContent: 'center', backgroundColor: Colors.bg.surface2, opacity: saving ? 0.6 : 1 }}
+              >
                 <Text style={{ color: Colors.text.primary, fontWeight: '700' }}>Cancelar</Text>
               </TouchableOpacity>
-              <TouchableOpacity disabled={Boolean(error) || saving} onPress={handleConfirm} style={{ flex: 1, height: 54, borderRadius: 16, alignItems: 'center', justifyContent: 'center', backgroundColor: !error && !saving ? Colors.brand.primary : Colors.bg.surface2 }}>
-                <Text style={{ color: !error && !saving ? Colors.bg.base : Colors.text.disabled, fontWeight: '900' }}>{saving ? 'Guardando...' : 'Guardar'}</Text>
+              <TouchableOpacity
+                disabled={Boolean(error) || saving}
+                onPress={handleConfirm}
+                style={{ flex: 1, height: 54, borderRadius: 16, alignItems: 'center', justifyContent: 'center', backgroundColor: !error && !saving ? Colors.brand.primary : Colors.bg.surface2 }}
+              >
+                <Text style={{ color: !error && !saving ? Colors.bg.base : Colors.text.disabled, fontWeight: '900' }}>
+                  {saving ? 'Guardando...' : 'Guardar'}
+                </Text>
               </TouchableOpacity>
             </View>
           </ScrollView>

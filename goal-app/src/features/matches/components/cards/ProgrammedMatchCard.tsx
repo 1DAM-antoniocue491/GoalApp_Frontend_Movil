@@ -1,287 +1,207 @@
 /**
  * ProgrammedMatchCard.tsx
- *
- * Tarjeta compacta para un partido programado (próximo).
- * Fuente de verdad visual para partidos programados en toda la app.
- *
- * RESPONSABILIDAD: Renderizado de una fila de partido próximo.
- * Incluye equipos, fecha/hora y botón de acción según permisos.
- *
- * PERMISOS:
- * El botón "Iniciar" solo aparece si permissions.canStartMatch === true.
- * La lógica de permisos no está hardcodeada aquí — viene siempre del padre.
- *
- * POR QUÉ `style` EN VEZ DE `className` EN LOS BADGES DE EQUIPO:
- * - `backgroundColor: color + '22'` (transparencia dinámica) no es
- *   expresable con clases estáticas de Tailwind.
- * - `borderColor: color` dinámico tampoco tiene equivalente estático.
- * - El resto de layout usa `style` inline para consistencia dentro del componente.
+ * Tarjeta única para partidos programados en calendario y dashboard.
  */
 
 import React from 'react';
 import { View, Text, TouchableOpacity } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
-
 import type { UpcomingMatchData } from '@/src/shared/types/dashboard.types';
-// DashboardPermissions vive en dashboard — esta card la consume como contrato externo
 import type { DashboardPermissions } from '@/src/features/dashboard/services/dashboardService';
 import { routes } from '@/src/shared/config/routes';
 
-// ---------------------------------------------------------------------------
-// Props
-// ---------------------------------------------------------------------------
-
 export interface ProgrammedMatchCardProps {
-    match: UpcomingMatchData;
-    permissions: DashboardPermissions;
-    /** Si no se pasa, la card navega al detalle del partido por defecto */
-    onPress?: () => void;
-    onStartMatch?: () => void;
+  match: UpcomingMatchData;
+  permissions: DashboardPermissions;
+  onPress?: () => void;
+  onStartMatch?: () => void;
+  onEditMatch?: () => void;
+  actionsDisabled?: boolean;
 }
 
-// ---------------------------------------------------------------------------
-// Regla de negocio: ventana de inicio — solo se puede iniciar si faltan ≤60 min
-// ---------------------------------------------------------------------------
-
-/** Mapa de mes abreviado (ES) → índice JS (0-based) */
 const MONTH_MAP: Record<string, number> = {
-    ENE: 0, FEB: 1, MAR: 2, ABR: 3, MAY: 4, JUN: 5,
-    JUL: 6, AGO: 7, SEP: 8, OCT: 9, NOV: 10, DIC: 11,
+  ENE: 0, FEB: 1, MAR: 2, ABR: 3, MAY: 4, JUN: 5,
+  JUL: 6, AGO: 7, SEP: 8, OCT: 9, NOV: 10, DIC: 11,
 };
 
-/**
- * Devuelve true si el partido está dentro de la ventana de 1 hora.
- * Regla: now >= matchTime - 60 min
- * Devuelve false si la fecha no puede parsearse (conservador: no permite iniciar).
- * Asume el año actual; si la fecha ya pasó este año, intenta el siguiente.
- */
 function canStartMatchNow(day: string, month: string, time: string): boolean {
-    if (!day || !month || !time) return false;
-    const monthIndex = MONTH_MAP[month.toUpperCase()];
-    if (monthIndex === undefined) return false;
-    const [hStr, mStr] = time.split(':');
-    const hours = parseInt(hStr, 10);
-    const minutes = parseInt(mStr, 10);
-    if (isNaN(hours) || isNaN(minutes)) return false;
+  if (!day || !month || !time || day === '–' || month === '–' || time === '–') return false;
+  const monthIndex = MONTH_MAP[month.toUpperCase()];
+  if (monthIndex === undefined) return false;
+  const [hStr, mStr] = time.split(':');
+  const hours = parseInt(hStr, 10);
+  const minutes = parseInt(mStr, 10);
+  const dayNum = parseInt(day, 10);
+  if ([hours, minutes, dayNum].some(Number.isNaN)) return false;
 
-    const now = new Date();
-    const matchDate = new Date(now.getFullYear(), monthIndex, parseInt(day, 10), hours, minutes, 0);
+  const now = new Date();
+  const matchDate = new Date(now.getFullYear(), monthIndex, dayNum, hours, minutes, 0, 0);
+  if (matchDate.getTime() < now.getTime() - 24 * 60 * 60 * 1000) {
+    matchDate.setFullYear(now.getFullYear() + 1);
+  }
 
-    // Si ya pasó hace más de 2 horas este año, asumir que es del año siguiente
-    if (matchDate.getTime() < now.getTime() - 2 * 60 * 60 * 1000) {
-        matchDate.setFullYear(now.getFullYear() + 1);
-    }
-
-    return now.getTime() >= matchDate.getTime() - 60 * 60 * 1000;
+  return now.getTime() >= matchDate.getTime() - 60 * 60 * 1000;
 }
-
-// ---------------------------------------------------------------------------
-// Sub-componente privado: badge circular con la inicial del equipo
-// ---------------------------------------------------------------------------
 
 function TeamBadge({ letter, color }: { letter: string; color: string }) {
-    return (
-        <View
-            style={{
-                width: 30,
-                height: 30,
-                borderRadius: 15,
-                // Color con alpha 22 (hex) ≈ 13% de opacidad — fondo tintado del equipo
-                backgroundColor: color + '22',
-                borderWidth: 1.5,
-                borderColor: color,
-                alignItems: 'center',
-                justifyContent: 'center',
-            }}
-        >
-            <Text style={{ color, fontSize: 12, fontWeight: '700' }}>{letter}</Text>
-        </View>
-    );
+  return (
+    <View
+      style={{
+        width: 30,
+        height: 30,
+        borderRadius: 15,
+        backgroundColor: color + '22',
+        borderWidth: 1.5,
+        borderColor: color,
+        alignItems: 'center',
+        justifyContent: 'center',
+      }}
+    >
+      <Text style={{ color, fontSize: 12, fontWeight: '700' }}>{letter}</Text>
+    </View>
+  );
 }
 
-// ---------------------------------------------------------------------------
-// Componente principal
-// ---------------------------------------------------------------------------
-
 export function ProgrammedMatchCard({
-    match,
-    permissions,
-    onPress,
-    onStartMatch,
+  match,
+  permissions,
+  onPress,
+  onStartMatch,
+  onEditMatch,
+  actionsDisabled = false,
 }: ProgrammedMatchCardProps) {
-    const router = useRouter();
-    const homeColor = match.homeColor ?? '#A1A1AA';
-    const awayColor = match.awayColor ?? '#C4F135';
+  const router = useRouter();
+  const homeColor = match.homeColor ?? '#A1A1AA';
+  const awayColor = match.awayColor ?? '#C4F135';
+  const startAllowed = permissions.canStartMatch && canStartMatchNow(match.day, match.month, match.time) && !actionsDisabled;
 
-    // Regla de negocio: el partido solo puede iniciarse dentro de la ventana de 1 hora
-    const startAllowed = canStartMatchNow(match.day, match.month, match.time);
+  const handleCardPress = () => {
+    if (onPress) onPress();
+    else router.push(routes.private.matchRoutes.programmed.detail(match.id) as never);
+  };
 
-    // Navegación al detalle: usa callback del padre si existe, si no navega internamente
-    const handleCardPress = () => {
-        if (onPress) {
-            onPress();
-        } else {
-            router.push(routes.private.matchRoutes.programmed.detail(match.id) as never);
-        }
-    };
+  return (
+    <TouchableOpacity
+      onPress={handleCardPress}
+      activeOpacity={0.75}
+      style={{
+        flexDirection: 'row',
+        alignItems: 'center',
+        backgroundColor: '#1C1C22',
+        borderRadius: 12,
+        padding: 14,
+        marginBottom: 8,
+      }}
+    >
+      <View style={{ flex: 1, gap: 6 }}>
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+          <TeamBadge letter={match.homeTeam.charAt(0)} color={homeColor} />
+          <Text style={{ color: '#FFFFFF', fontSize: 15, fontWeight: '500' }} numberOfLines={1}>{match.homeTeam}</Text>
+        </View>
 
-    return (
-        <TouchableOpacity
-            onPress={handleCardPress}
-            activeOpacity={0.75}
-            style={{
-                flexDirection: 'row',
-                alignItems: 'center',
-                backgroundColor: '#1C1C22', // Surface L1 del design system
-                borderRadius: 12,
-                padding: 14,
-                marginBottom: 8,
-            }}
-        >
-            {/* ── Columna de equipos ── */}
-            <View style={{ flex: 1, gap: 6 }}>
-                {/* Equipo local */}
-                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
-                    <TeamBadge letter={match.homeTeam.charAt(0)} color={homeColor} />
-                    <Text style={{ color: '#FFFFFF', fontSize: 15, fontWeight: '500' }}>
-                        {match.homeTeam}
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+          <TeamBadge letter={match.awayTeam.charAt(0)} color={awayColor} />
+          <Text style={{ color: '#FFFFFF', fontSize: 15, fontWeight: '500' }} numberOfLines={1}>{match.awayTeam}</Text>
+        </View>
+
+        <Text style={{ color: '#52525B', fontSize: 12, marginTop: 2 }} numberOfLines={1}>
+          {match.round} · {match.venue || 'Sin sede'}
+        </Text>
+
+        {(permissions.canStartMatch || permissions.canManageSquad || onEditMatch) && (
+          <View style={{ marginTop: 6, gap: 6 }}>
+            {(permissions.canStartMatch || onEditMatch) && (
+              <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6, alignItems: 'center' }}>
+                {permissions.canStartMatch && (
+                  <TouchableOpacity
+                    onPress={(e) => {
+                      e.stopPropagation?.();
+                      if (startAllowed) onStartMatch?.();
+                    }}
+                    disabled={!startAllowed}
+                    style={{
+                      flexDirection: 'row',
+                      alignItems: 'center',
+                      gap: 5,
+                      backgroundColor: startAllowed ? '#C4F135' : '#2A2A35',
+                      paddingHorizontal: 12,
+                      paddingVertical: 5,
+                      borderRadius: 999,
+                    }}
+                  >
+                    <Ionicons name="play-circle-outline" size={13} color={startAllowed ? '#0F0F13' : '#52525B'} />
+                    <Text style={{ color: startAllowed ? '#0F0F13' : '#52525B', fontSize: 12, fontWeight: '700' }}>
+                      Iniciar
                     </Text>
-                </View>
-
-                {/* Equipo visitante */}
-                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
-                    <TeamBadge letter={match.awayTeam.charAt(0)} color={awayColor} />
-                    <Text style={{ color: '#FFFFFF', fontSize: 15, fontWeight: '500' }}>
-                        {match.awayTeam}
-                    </Text>
-                </View>
-
-                {/* Jornada y estadio — Caption 12px */}
-                <Text style={{ color: '#52525B', fontSize: 12, marginTop: 2 }}>
-                    {match.round} · {match.venue}
-                </Text>
-
-                {/* Botones de acción — visibles según permisos del rol */}
-                {(permissions.canStartMatch || permissions.canManageSquad) && (
-                    <View style={{ marginTop: 6, gap: 6 }}>
-
-                        {/* Iniciar — canStartMatch, solo dentro de la ventana de 1 hora */}
-                        {permissions.canStartMatch && (
-                            <View>
-                                <TouchableOpacity
-                                    onPress={(e) => {
-                                        e.stopPropagation?.();
-                                        if (startAllowed) onStartMatch?.();
-                                    }}
-                                    disabled={!startAllowed}
-                                    style={{
-                                        alignSelf: 'flex-start',
-                                        flexDirection: 'row',
-                                        alignItems: 'center',
-                                        gap: 5,
-                                        backgroundColor: startAllowed ? '#C4F135' : '#2A2A35',
-                                        paddingHorizontal: 12,
-                                        paddingVertical: 5,
-                                        borderRadius: 999,
-                                    }}
-                                >
-                                    <Ionicons
-                                        name="play-circle-outline"
-                                        size={13}
-                                        color={startAllowed ? '#0F0F13' : '#52525B'}
-                                    />
-                                    <Text style={{
-                                        color: startAllowed ? '#0F0F13' : '#52525B',
-                                        fontSize: 12,
-                                        fontWeight: '700',
-                                    }}>
-                                        Iniciar
-                                    </Text>
-                                </TouchableOpacity>
-                                {!startAllowed && (
-                                    <Text style={{ color: '#52525B', fontSize: 10, marginTop: 3 }}>
-                                        Disponible hasta 1 hora antes
-                                    </Text>
-                                )}
-                            </View>
-                        )}
-
-                        {/* Convocatoria + Alineación — canManageSquad (admin, coach) */}
-                        {permissions.canManageSquad && (
-                            <View style={{ flexDirection: 'row', gap: 6 }}>
-                                <TouchableOpacity
-                                    onPress={(e) => {
-                                        e.stopPropagation?.();
-                                        router.push(routes.private.matchRoutes.programmed.convocation(match.id) as never);
-                                    }}
-                                    style={{
-                                        flexDirection: 'row',
-                                        alignItems: 'center',
-                                        gap: 4,
-                                        backgroundColor: '#2A2A35',
-                                        paddingHorizontal: 10,
-                                        paddingVertical: 5,
-                                        borderRadius: 999,
-                                    }}
-                                >
-                                    <Ionicons name="people-outline" size={12} color="#A1A1AA" />
-                                    <Text style={{ color: '#A1A1AA', fontSize: 11, fontWeight: '600' }}>
-                                        Convocatoria
-                                    </Text>
-                                </TouchableOpacity>
-
-                                <TouchableOpacity
-                                    onPress={(e) => {
-                                        e.stopPropagation?.();
-                                        router.push(routes.private.matchRoutes.programmed.lineup(match.id) as never);
-                                    }}
-                                    style={{
-                                        flexDirection: 'row',
-                                        alignItems: 'center',
-                                        gap: 4,
-                                        backgroundColor: '#2A2A35',
-                                        paddingHorizontal: 10,
-                                        paddingVertical: 5,
-                                        borderRadius: 999,
-                                    }}
-                                >
-                                    <Ionicons name="shirt-outline" size={12} color="#A1A1AA" />
-                                    <Text style={{ color: '#A1A1AA', fontSize: 11, fontWeight: '600' }}>
-                                        Alineación
-                                    </Text>
-                                </TouchableOpacity>
-                            </View>
-                        )}
-                    </View>
+                  </TouchableOpacity>
                 )}
-            </View>
 
-            {/* ── Divisor vertical ── */}
-            <View
-                style={{
-                    width: 1,
-                    height: 56,
-                    backgroundColor: '#2A2A35', // Surface L2 del design system
-                    marginHorizontal: 14,
+                {onEditMatch && (
+                  <TouchableOpacity
+                    onPress={(e) => {
+                      e.stopPropagation?.();
+                      if (!actionsDisabled) onEditMatch?.();
+                    }}
+                    disabled={actionsDisabled}
+                    style={{
+                      flexDirection: 'row',
+                      alignItems: 'center',
+                      gap: 5,
+                      backgroundColor: '#2A2A35',
+                      paddingHorizontal: 12,
+                      paddingVertical: 5,
+                      borderRadius: 999,
+                      opacity: actionsDisabled ? 0.45 : 1,
+                    }}
+                  >
+                    <Ionicons name="create-outline" size={13} color="#A1A1AA" />
+                    <Text style={{ color: '#A1A1AA', fontSize: 12, fontWeight: '700' }}>Editar</Text>
+                  </TouchableOpacity>
+                )}
+              </View>
+            )}
+
+            {permissions.canStartMatch && !startAllowed && (
+              <Text style={{ color: '#52525B', fontSize: 10, marginTop: 3 }}>
+                Disponible desde 1 hora antes
+              </Text>
+            )}
+
+            {permissions.canManageSquad && (
+              <TouchableOpacity
+                onPress={(e) => {
+                  e.stopPropagation?.();
+                  if (!actionsDisabled) router.push(routes.private.matchRoutes.programmed.convocation(match.id) as never);
                 }}
-            />
+                disabled={actionsDisabled}
+                style={{
+                  alignSelf: 'flex-start',
+                  flexDirection: 'row',
+                  alignItems: 'center',
+                  gap: 4,
+                  backgroundColor: '#2A2A35',
+                  paddingHorizontal: 10,
+                  paddingVertical: 5,
+                  borderRadius: 999,
+                  opacity: actionsDisabled ? 0.45 : 1,
+                }}
+              >
+                <Ionicons name="people-outline" size={12} color="#A1A1AA" />
+                <Text style={{ color: '#A1A1AA', fontSize: 11, fontWeight: '600' }}>Convocatoria</Text>
+              </TouchableOpacity>
+            )}
+          </View>
+        )}
+      </View>
 
-            {/* ── Fecha y hora ── */}
-            <View style={{ alignItems: 'center', minWidth: 52 }}>
-                {/* Número del día — Title 24px Bold */}
-                <Text style={{ color: '#FFFFFF', fontSize: 24, fontWeight: 'bold', lineHeight: 28 }}>
-                    {match.day}
-                </Text>
-                {/* Mes — Caption uppercase */}
-                <Text style={{ color: '#A1A1AA', fontSize: 11, textTransform: 'uppercase' }}>
-                    {match.month}
-                </Text>
-                {/* Hora — color brand para destacar */}
-                <Text style={{ color: '#C4F135', fontSize: 13, fontWeight: '600', marginTop: 3 }}>
-                    {match.time}
-                </Text>
-            </View>
-        </TouchableOpacity>
-    );
+      <View style={{ width: 1, height: 56, backgroundColor: '#2A2A35', marginHorizontal: 14 }} />
+
+      <View style={{ alignItems: 'center', minWidth: 52 }}>
+        <Text style={{ color: '#FFFFFF', fontSize: 24, fontWeight: 'bold', lineHeight: 28 }}>{match.day}</Text>
+        <Text style={{ color: '#A1A1AA', fontSize: 11, textTransform: 'uppercase' }}>{match.month}</Text>
+        <Text style={{ color: '#C4F135', fontSize: 13, fontWeight: '600', marginTop: 3 }}>{match.time}</Text>
+      </View>
+    </TouchableOpacity>
+  );
 }

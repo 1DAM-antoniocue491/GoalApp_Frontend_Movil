@@ -15,6 +15,7 @@ import {
   getAwayTeamName,
   getHomeTeamId,
   getHomeTeamName,
+  getLeagueMatchDurationService,
   getLiveMatchesService,
   getLiveMinute,
   normalizeMatchStatus,
@@ -32,16 +33,22 @@ export function LiveMatchesScreen() {
   const { session } = useActiveLeague();
   const leagueId = Number(session?.leagueId ?? 0);
   const [matches, setMatches] = useState<PartidoApi[]>([]);
+  const [duration, setDuration] = useState(90);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [tick, setTick] = useState(0);
+  const [, setTick] = useState(0);
 
   const load = useCallback(async () => {
     if (!leagueId) return;
     setLoading(true);
     setError(null);
     try {
-      setMatches(await getLiveMatchesService(leagueId));
+      const [live, leagueDuration] = await Promise.all([
+        getLiveMatchesService(leagueId),
+        getLeagueMatchDurationService(leagueId),
+      ]);
+      setMatches(live);
+      setDuration(leagueDuration);
     } catch (e) {
       setError(e instanceof Error ? e.message : 'No se pudieron cargar los partidos en vivo.');
     } finally {
@@ -49,11 +56,15 @@ export function LiveMatchesScreen() {
     }
   }, [leagueId]);
 
-  useEffect(() => { load(); }, [load]);
+  useEffect(() => { void load(); }, [load]);
+
   useEffect(() => {
-    const id = setInterval(() => setTick(value => value + 1), 30000);
+    const id = setInterval(() => {
+      setTick(value => value + 1);
+      void load();
+    }, 30000);
     return () => clearInterval(id);
-  }, []);
+  }, [load]);
 
   const { modals, activeEventMatch, activeEndMatch, openRegisterEvent, openEndMatch, modalProps } = useMatchActionModals(load);
   const interactionLocked = loading || modalProps.pending.any;
@@ -73,9 +84,12 @@ export function LiveMatchesScreen() {
         {liveMatches.length === 0 && !loading ? <Text style={{ color: Colors.text.disabled, textAlign: 'center', marginTop: 80 }}>No hay partidos en vivo.</Text> : null}
 
         {liveMatches.map(match => {
-          const minute = getLiveMinute(match, tick);
-          const homeTeamId = getHomeTeamId(match);
-          const awayTeamId = getAwayTeamId(match);
+          const matchDuration = duration;
+          const minute = getLiveMinute(match, undefined, matchDuration);
+          // LiveMatchContext espera IDs opcionales: number | undefined.
+          // Los helpers pueden devolver null si el backend no trae el equipo; normalizamos para TypeScript.
+          const homeTeamId = getHomeTeamId(match) ?? undefined;
+          const awayTeamId = getAwayTeamId(match) ?? undefined;
           const context = {
             id: String(match.id_partido),
             homeTeam: getHomeTeamName(match),
@@ -85,13 +99,15 @@ export function LiveMatchesScreen() {
             homeScore: match.goles_local ?? 0,
             awayScore: match.goles_visitante ?? 0,
             minute,
+            duration: matchDuration,
+            startedAt: match.inicio_en ?? match.started_at ?? match.fecha_inicio ?? null,
           };
 
           return (
             <View key={match.id_partido} style={{ backgroundColor: Colors.bg.surface1, borderRadius: 24, padding: 18, marginBottom: 16, borderWidth: 1, borderColor: Colors.brand.primary + '45' }}>
               <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
                 <Text style={{ color: Colors.brand.primary, fontWeight: '900' }}>● EN VIVO</Text>
-                <Text style={{ color: Colors.text.primary, fontWeight: '900' }}>{minute}'</Text>
+                <Text style={{ color: Colors.text.primary, fontWeight: '900' }}>{minute}' / {matchDuration}'</Text>
               </View>
 
               <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: 22 }}>
@@ -103,7 +119,7 @@ export function LiveMatchesScreen() {
               <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 10, marginTop: 20 }}>
                 <TouchableOpacity disabled={interactionLocked} onPress={() => router.push(`/matches/live/${match.id_partido}/squad`)} style={{ flexGrow: 1, height: 44, borderRadius: 14, backgroundColor: Colors.bg.surface2, alignItems: 'center', justifyContent: 'center', flexDirection: 'row', gap: 8, opacity: interactionLocked ? 0.45 : 1 }}>
                   <Ionicons name="people-outline" size={18} color={Colors.text.primary} />
-                  <Text style={{ color: Colors.text.primary, fontWeight: '800' }}>Alineación</Text>
+                  <Text style={{ color: Colors.text.primary, fontWeight: '800' }}>Ver plantillas</Text>
                 </TouchableOpacity>
                 <TouchableOpacity disabled={interactionLocked} onPress={() => openRegisterEvent(context)} style={{ flexGrow: 1, height: 44, borderRadius: 14, backgroundColor: interactionLocked ? Colors.bg.surface2 : Colors.brand.primary, alignItems: 'center', justifyContent: 'center', flexDirection: 'row', gap: 8, opacity: interactionLocked ? 0.55 : 1 }}>
                   <Ionicons name="add-circle-outline" size={18} color={interactionLocked ? Colors.text.disabled : Colors.bg.base} />

@@ -42,7 +42,7 @@ import { calendarService } from '../services/calendarService';
 import { useTeamsByLeague } from '@/src/features/teams/hooks/useTeams';
 
 // Service de partidos — crear partido manual
-import { createManualMatchService } from '@/src/features/matches/services/matchesService';
+import { buildBackendCivilDateTime, createManualMatchService, updateScheduledMatchService } from '@/src/features/matches/services/matchesService';
 
 // Componentes propios del módulo
 import { CalendarHeader } from './CalendarHeader';
@@ -56,6 +56,7 @@ import { CreateManualMatchModal } from './modals/CreateManualMatchModal';
 import { RegisterEventModal } from '@/src/features/matches/components/modals/RegisterEventModal';
 import { EndMatchModal } from '@/src/features/matches/components/modals/EndMatchModal';
 import { StartMatchModal } from '@/src/features/matches/components/modals/StartMatchModal';
+import { EditScheduledMatchModal } from '@/src/features/matches/components/modals/EditScheduledMatchModal';
 import { GoalEventModal } from '@/src/features/matches/components/modals/GoalEventModal';
 import { YellowCardModal } from '@/src/features/matches/components/modals/YellowCardModal';
 import { RedCardModal } from '@/src/features/matches/components/modals/RedCardModal';
@@ -79,6 +80,8 @@ import {
 import type { CalendarConfigData } from './modals/CalendarConfigModal';
 import type { CreateCalendarInput } from '../services/calendarService';
 import type { CreateManualMatchFormData } from './modals/CreateManualMatchModal';
+import type { EditScheduledMatchData } from '@/src/features/matches/components/modals/EditScheduledMatchModal';
+import type { PartidoApi } from '@/src/features/matches/types/matches.types';
 
 
 // ---------------------------------------------------------------------------
@@ -93,9 +96,13 @@ function toLiveData(m: CalendarMatch) {
     id: m.id,
     homeTeam: m.homeTeam,
     awayTeam: m.awayTeam,
+    homeTeamId: m.homeTeamId,
+    awayTeamId: m.awayTeamId,
     homeScore: m.homeScore ?? 0,
     awayScore: m.awayScore ?? 0,
     minute: m.minute ?? 0,
+    duration: m.duration,
+    startedAt: m.startedAt,
     leagueName: m.leagueName,
     venue: m.venue,
     homeShieldLetter: m.homeShieldLetter,
@@ -362,7 +369,7 @@ export function CalendarScreen() {
     isLoading: isLoadingJourneys,
     isRefetching: isRefetchingJourneys,
     refetch: refetchJourneys,
-  } = useCalendarData(ligaId, leagueName);
+  } = useCalendarData(ligaId, leagueName, { autoRefreshMs: 30000 });
 
   // ── Equipos reales de la liga para el selector de partido manual ──
   const { data: teamsData } = useTeamsByLeague(ligaId);
@@ -402,6 +409,9 @@ export function CalendarScreen() {
   const [newMatchError, setNewMatchError] = useState<string | undefined>(undefined);
   const [newMatchSubmitting, setNewMatchSubmitting] = useState(false);
   const [createTeamVisible, setCreateTeamVisible] = useState(false);
+  const [editMatchModalVisible, setEditMatchModalVisible] = useState(false);
+  const [editMatchSubmitting, setEditMatchSubmitting] = useState(false);
+  const [activeEditMatch, setActiveEditMatch] = useState<CalendarMatch | null>(null);
 
   // Modales de acción sobre partidos — estado centralizado en el hook
   const {
@@ -413,7 +423,7 @@ export function CalendarScreen() {
     openStartMatch,
     openEndMatch,
     modalProps,
-  } = useMatchActionModals();
+  } = useMatchActionModals(refetchJourneys);
 
   // ── Scroll ──
   const scrollRef = useRef<ScrollView | null>(null);
@@ -577,9 +587,8 @@ export function CalendarScreen() {
     if (ligaId <= 0) return;
 
 
-    // Combinar fecha + hora en ISO: YYYY-MM-DDTHH:MM:00
-    // TODO API: si el backend requiere UTC, ajustar conversión aquí
-    const fechaHora = `${data.date}T${data.time}:00`;
+    // Se restan 2h antes de enviar al backend para que la validación de inicio use el instante correcto.
+    const fechaHora = buildBackendCivilDateTime(data.date, data.time, { subtractHours: 2, appendZ: true });
 
     setNewMatchError(undefined);
     setNewMatchSubmitting(true);
@@ -633,6 +642,48 @@ export function CalendarScreen() {
     return undefined;
   };
 
+  const toEditablePartido = (match: CalendarMatch): PartidoApi => ({
+    id_partido: Number(match.id),
+    fecha_hora: match.rawDateTime ?? undefined,
+    fecha: match.rawDateTime ?? undefined,
+    estado: match.status === 'programmed' ? 'programado' : match.status === 'live' ? 'en_juego' : 'finalizado',
+    id_equipo_local: match.homeTeamId,
+    id_equipo_visitante: match.awayTeamId,
+    equipo_local: { id_equipo: match.homeTeamId, nombre: match.homeTeam },
+    equipo_visitante: { id_equipo: match.awayTeamId, nombre: match.awayTeam },
+    estadio: match.venue,
+  });
+
+  const handleEditMatch = (matchId: string) => {
+    if (modalProps.pending.any || editMatchSubmitting) return;
+    const match = findMatch(matchId);
+    if (!match || match.status !== 'programmed') return;
+    setActiveEditMatch(match);
+    setEditMatchModalVisible(true);
+  };
+
+  const handleCloseEditMatch = () => {
+    if (editMatchSubmitting) return;
+    setEditMatchModalVisible(false);
+    setActiveEditMatch(null);
+  };
+
+  const handleEditMatchConfirm = async (data: EditScheduledMatchData) => {
+    if (!activeEditMatch || editMatchSubmitting) return;
+    setEditMatchSubmitting(true);
+    const result = await updateScheduledMatchService(Number(activeEditMatch.id), data);
+    setEditMatchSubmitting(false);
+
+    if (!result.success) {
+      Alert.alert('No se pudo actualizar el partido', result.error ?? 'Inténtalo de nuevo.');
+      return;
+    }
+
+    setEditMatchModalVisible(false);
+    setActiveEditMatch(null);
+    await refetchJourneys();
+  };
+
   // Adapta un CalendarMatch al contexto que necesita openRegisterEvent
   const handleRegisterEvent = (matchId: string) => {
     const match = findMatch(matchId);
@@ -641,9 +692,13 @@ export function CalendarScreen() {
       id: match.id,
       homeTeam: match.homeTeam,
       awayTeam: match.awayTeam,
+      homeTeamId: match.homeTeamId,
+      awayTeamId: match.awayTeamId,
       homeScore: match.homeScore ?? 0,
       awayScore: match.awayScore ?? 0,
       minute: match.minute ?? 0,
+      duration: match.duration,
+      startedAt: match.startedAt,
     });
   };
 
@@ -669,6 +724,7 @@ export function CalendarScreen() {
       date: match.date,
       time: match.time,
       venue: match.venue,
+      rawDateTime: match.rawDateTime,
     });
   };
 
@@ -742,8 +798,10 @@ export function CalendarScreen() {
                     <ProgrammedMatchCard
                       match={toProgrammedData(match)}
                       permissions={dashPerms}
+                      actionsDisabled={modalProps.pending.any || editMatchSubmitting}
                       onPress={() => handleMatchPress(match.id, match.status)}
                       onStartMatch={() => handleStartMatch(match.id)}
+                      onEditMatch={calendarPerms.canEditMatch ? () => handleEditMatch(match.id) : undefined}
                     />
                     {match.source === 'manual' && <ManualMatchBadge />}
                   </View>
@@ -877,6 +935,8 @@ export function CalendarScreen() {
       <RegisterEventModal
         visible={modals.registerEvent}
         match={activeEventMatch}
+        disabled={modalProps.pending.any}
+        loading={modalProps.pending.hydratingEventPlayers}
         onSelectEvent={modalProps.onSelectEvent}
         onCancel={modalProps.onCloseRegisterEvent}
       />
@@ -884,6 +944,7 @@ export function CalendarScreen() {
       <GoalEventModal
         visible={modals.goal}
         match={activeEventMatch}
+        submitting={modalProps.pending.submittingEvent}
         onConfirm={modalProps.onGoalConfirm}
         onCancel={modalProps.onCloseGoal}
       />
@@ -891,6 +952,7 @@ export function CalendarScreen() {
       <YellowCardModal
         visible={modals.yellowCard}
         match={activeEventMatch}
+        submitting={modalProps.pending.submittingEvent}
         onConfirm={modalProps.onYellowCardConfirm}
         onCancel={modalProps.onCloseYellowCard}
       />
@@ -898,6 +960,7 @@ export function CalendarScreen() {
       <RedCardModal
         visible={modals.redCard}
         match={activeEventMatch}
+        submitting={modalProps.pending.submittingEvent}
         onConfirm={modalProps.onRedCardConfirm}
         onCancel={modalProps.onCloseRedCard}
       />
@@ -905,6 +968,7 @@ export function CalendarScreen() {
       <SubstitutionModal
         visible={modals.substitution}
         match={activeEventMatch}
+        submitting={modalProps.pending.submittingEvent}
         onConfirm={modalProps.onSubstitutionConfirm}
         onCancel={modalProps.onCloseSubstitution}
       />
@@ -912,6 +976,7 @@ export function CalendarScreen() {
       <EndMatchModal
         visible={modals.endMatch}
         match={activeEndMatch}
+        submitting={modalProps.pending.endingMatch || modalProps.pending.hydratingEndMatch}
         onConfirm={modalProps.onEndMatchConfirm}
         onCancel={modalProps.onCloseEndMatch}
       />
@@ -919,8 +984,17 @@ export function CalendarScreen() {
       <StartMatchModal
         visible={modals.startMatch}
         match={activeStartMatch}
+        submitting={modalProps.pending.startingMatch}
         onConfirm={modalProps.onStartMatchConfirm}
         onCancel={modalProps.onCloseStartMatch}
+      />
+
+      <EditScheduledMatchModal
+        visible={editMatchModalVisible}
+        match={activeEditMatch ? toEditablePartido(activeEditMatch) : null}
+        saving={editMatchSubmitting}
+        onConfirm={handleEditMatchConfirm}
+        onCancel={handleCloseEditMatch}
       />
     </View>
   );

@@ -58,6 +58,18 @@ export interface LiveMatchData {
   /** Color primario del equipo. Procede de Team.primaryColor en data.ts. */
   homeColor?: string;
   awayColor?: string;
+  /** Duración configurada del partido en minutos (viene de la config de liga). */
+  duration?: number;
+  /** ID del equipo local — necesario para registrar eventos. */
+  homeTeamId?: number;
+  /** ID del equipo visitante — necesario para registrar eventos. */
+  awayTeamId?: number;
+  /**
+   * Timestamp ISO de cuando se inició el partido (inicio_en / started_at).
+   * Permite calcular el minuto real transcurrido en lugar de depender de
+   * un snapshot estático del backend.
+   */
+  startedAt?: string | null;
 }
 
 // ---------------------------------------------------------------------------
@@ -79,6 +91,8 @@ export interface UpcomingMatchData {
   /** Color primario del equipo local. Procede de Team.primaryColor. */
   homeColor?: string;
   awayColor?: string;
+  /** Fecha/hora cruda del backend — necesaria para corregir el desfase al iniciar el partido. */
+  rawDateTime?: string | null;
 }
 
 // ---------------------------------------------------------------------------

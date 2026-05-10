@@ -6,6 +6,7 @@
 import React, { memo, useEffect, useMemo, useState } from 'react';
 import { Modal, Pressable, ScrollView, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { Colors } from '@/src/shared/constants/colors';
+import { theme } from '@/src/shared/styles/theme';
 import { OptionSelectField } from '@/src/shared/components/ui/OptionSelectField';
 import type { SelectOption } from '@/src/shared/components/ui/OptionSelectField';
 import type { LiveMatchPlayer } from './RegisterEventModal';
@@ -16,8 +17,6 @@ export interface LiveMatchSummary {
   awayTeam: string;
   homeScore: number;
   awayScore: number;
-  homeTeamId?: number | null;
-  awayTeamId?: number | null;
   homePlayers?: LiveMatchPlayer[];
   awayPlayers?: LiveMatchPlayer[];
 }
@@ -32,17 +31,16 @@ export interface EndMatchData {
 interface EndMatchModalProps {
   visible: boolean;
   match: LiveMatchSummary | null;
+  submitting?: boolean;
   onConfirm: (data: EndMatchData) => void;
   onCancel: () => void;
-  /** Evita dobles toques y bloquea cierre mientras hay petición activa. */
-  submitting?: boolean;
 }
 
 function toOptions(players?: LiveMatchPlayer[]): SelectOption[] {
   return (players ?? []).map(p => ({ value: String(p.id_jugador), label: `${p.dorsal ? p.dorsal + ' · ' : ''}${p.nombre}` }));
 }
 
-function EndMatchModalComponent({ visible, match, onConfirm, onCancel, submitting = false }: EndMatchModalProps) {
+function EndMatchModalComponent({ visible, match, submitting = false, onConfirm, onCancel }: EndMatchModalProps) {
   const [mvpTeam, setMvpTeam] = useState<'home' | 'away'>('home');
   const [mvpId, setMvpId] = useState('');
   const [mvpScore, setMvpScore] = useState('8');
@@ -59,7 +57,7 @@ function EndMatchModalComponent({ visible, match, onConfirm, onCancel, submittin
 
   const options = useMemo(() => toOptions(mvpTeam === 'home' ? match?.homePlayers : match?.awayPlayers), [mvpTeam, match]);
   const parsedScore = Number(String(mvpScore).replace(',', '.'));
-  const canConfirm = Number(mvpId) > 0 && Number.isFinite(parsedScore) && parsedScore >= 0 && parsedScore <= 10;
+  const canConfirm = Number(mvpId) > 0 && Number.isFinite(parsedScore) && parsedScore >= 1 && parsedScore <= 10 && !submitting;
 
   return (
     <Modal transparent visible={visible} animationType="slide" statusBarTranslucent onRequestClose={submitting ? () => undefined : onCancel}>
@@ -83,14 +81,14 @@ function EndMatchModalComponent({ visible, match, onConfirm, onCancel, submittin
             </View>
 
             <Text style={{ color: Colors.text.secondary, marginTop: 18, marginBottom: 8, fontWeight: '700' }}>Puntuación MVP</Text>
-            <TextInput value={mvpScore} onChangeText={setMvpScore} keyboardType="decimal-pad" placeholder="0 - 10" placeholderTextColor={Colors.text.disabled} style={{ height: 52, borderRadius: 16, backgroundColor: Colors.bg.base, color: Colors.text.primary, paddingHorizontal: 16, borderWidth: 1, borderColor: Colors.bg.surface2, fontSize: 16 }} />
+            <TextInput value={mvpScore} editable={!submitting} onChangeText={setMvpScore} keyboardType="decimal-pad" placeholder="1 - 10" placeholderTextColor={Colors.text.disabled} style={{ height: 52, borderRadius: 16, backgroundColor: Colors.bg.base, color: Colors.text.primary, paddingHorizontal: 16, borderWidth: 1, borderColor: Colors.bg.surface2, fontSize: 16 }} />
 
             <Text style={{ color: Colors.text.secondary, marginTop: 18, marginBottom: 8, fontWeight: '700' }}>Incidencias</Text>
-            <TextInput value={observations} onChangeText={setObservations} multiline placeholder="Observaciones opcionales" placeholderTextColor={Colors.text.disabled} style={{ minHeight: 88, borderRadius: 16, backgroundColor: Colors.bg.base, color: Colors.text.primary, paddingHorizontal: 16, paddingVertical: 14, borderWidth: 1, borderColor: Colors.bg.surface2, fontSize: 15, textAlignVertical: 'top' }} />
+            <TextInput value={observations} editable={!submitting} onChangeText={setObservations} multiline placeholder="Observaciones opcionales" placeholderTextColor={Colors.text.disabled} style={{ minHeight: 88, borderRadius: 16, backgroundColor: Colors.bg.base, color: Colors.text.primary, paddingHorizontal: 16, paddingVertical: 14, borderWidth: 1, borderColor: Colors.bg.surface2, fontSize: 15, textAlignVertical: 'top' }} />
 
             <View style={{ flexDirection: 'row', gap: 12, marginTop: 24 }}>
               <TouchableOpacity disabled={submitting} onPress={onCancel} style={{ flex: 1, height: 54, borderRadius: 16, alignItems: 'center', justifyContent: 'center', backgroundColor: Colors.bg.surface2 }}><Text style={{ color: Colors.text.primary, fontWeight: '700' }}>Cancelar</Text></TouchableOpacity>
-              <TouchableOpacity disabled={!canConfirm || submitting} onPress={() => onConfirm({ mvpId: Number(mvpId), mvpTeam, mvpScore: parsedScore, observations: observations.trim() || undefined })} style={{ flex: 1, height: 54, borderRadius: 16, alignItems: 'center', justifyContent: 'center', backgroundColor: canConfirm && !submitting ? Colors.semantic.error : Colors.bg.surface2 }}><Text style={{ color: Colors.text.primary, fontWeight: '800' }}>{submitting ? 'Finalizando...' : 'Finalizar'}</Text></TouchableOpacity>
+              <TouchableOpacity disabled={!canConfirm} onPress={() => onConfirm({ mvpId: Number(mvpId), mvpTeam, mvpScore: parsedScore, observations: observations.trim() || undefined })} style={{ flex: 1, height: 54, borderRadius: 16, alignItems: 'center', justifyContent: 'center', backgroundColor: canConfirm ? Colors.semantic.error : Colors.bg.surface2 }}><Text style={{ color: Colors.text.primary, fontWeight: '800' }}>{submitting ? 'Finalizando...' : 'Finalizar'}</Text></TouchableOpacity>
             </View>
           </ScrollView>
         </View>

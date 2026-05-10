@@ -42,7 +42,10 @@ import { calendarService } from '../services/calendarService';
 import { useTeamsByLeague } from '@/src/features/teams/hooks/useTeams';
 
 // Service de partidos — crear partido manual
-import { createManualMatchService } from '@/src/features/matches/services/matchesService';
+import {
+  createManualMatchService,
+  updateScheduledMatchService,
+} from '@/src/features/matches/services/matchesService';
 
 // Componentes propios del módulo
 import { CalendarHeader } from './CalendarHeader';
@@ -60,8 +63,10 @@ import { GoalEventModal } from '@/src/features/matches/components/modals/GoalEve
 import { YellowCardModal } from '@/src/features/matches/components/modals/YellowCardModal';
 import { RedCardModal } from '@/src/features/matches/components/modals/RedCardModal';
 import { SubstitutionModal } from '@/src/features/matches/components/modals/SubstitutionModal';
+import { EditScheduledMatchModal, type EditScheduledMatchData } from '@/src/features/matches/components/modals/EditScheduledMatchModal';
 // Hook centralizado de estado/control de modales de partido
 import { useMatchActionModals } from '@/src/features/matches/hooks/useMatchActionModals';
+import { emitMatchDataChanged } from '@/src/features/matches/services/matchSync';
 
 // Tipos y utilidades
 import type {
@@ -79,6 +84,7 @@ import {
 import type { CalendarConfigData } from './modals/CalendarConfigModal';
 import type { CreateCalendarInput } from '../services/calendarService';
 import type { CreateManualMatchFormData } from './modals/CreateManualMatchModal';
+import type { PartidoApi } from '@/src/features/matches/types/matches.types';
 
 
 // ---------------------------------------------------------------------------
@@ -122,6 +128,8 @@ function toProgrammedData(m: CalendarMatch) {
     venue: m.venue,
     homeColor: m.homeColor,
     awayColor: m.awayColor,
+    startsAt: m.startedAt ?? null,
+    rawDate: m.startedAt ?? null,
   };
 }
 
@@ -407,6 +415,8 @@ export function CalendarScreen() {
   const [newMatchError, setNewMatchError] = useState<string | undefined>(undefined);
   const [newMatchSubmitting, setNewMatchSubmitting] = useState(false);
   const [createTeamVisible, setCreateTeamVisible] = useState(false);
+  const [editingMatch, setEditingMatch] = useState<PartidoApi | null>(null);
+  const [editMatchSubmitting, setEditMatchSubmitting] = useState(false);
 
   // Modales de acción sobre partidos — estado centralizado en el hook
   const {
@@ -684,6 +694,52 @@ export function CalendarScreen() {
     });
   };
 
+  const handleEditMatch = (matchId: string) => {
+    const match = findMatch(matchId);
+    if (!match || match.status !== 'programmed') return;
+
+    setEditingMatch({
+      id_partido: Number(match.id),
+      id_liga: ligaId,
+      id_equipo_local: match.homeTeamId ?? undefined,
+      id_equipo_visitante: match.awayTeamId ?? undefined,
+      fecha_hora: match.startedAt ?? null,
+      estadio: match.venue,
+      estado: 'programado',
+      goles_local: match.homeScore ?? 0,
+      goles_visitante: match.awayScore ?? 0,
+      equipo_local: {
+        id_equipo: match.homeTeamId ?? undefined,
+        nombre: match.homeTeam,
+        color_primario: match.homeColor ?? null,
+      },
+      equipo_visitante: {
+        id_equipo: match.awayTeamId ?? undefined,
+        nombre: match.awayTeam,
+        color_primario: match.awayColor ?? null,
+      },
+    } as PartidoApi);
+  };
+
+  const handleEditMatchConfirm = async (payload: EditScheduledMatchData) => {
+    if (!editingMatch || editMatchSubmitting) return;
+
+    setEditMatchSubmitting(true);
+    const result = await updateScheduledMatchService(editingMatch.id_partido, payload);
+    setEditMatchSubmitting(false);
+
+    if (!result.success) {
+      Alert.alert('No se pudo editar el partido', result.error ?? 'Inténtalo de nuevo.');
+      return;
+    }
+
+    setEditingMatch(null);
+    setActiveTab('journey');
+    setStatusFilter('programmed');
+    emitMatchDataChanged();
+    refetchJourneys();
+  };
+
   // ── Render: contenido de la tab Jornada ──
   const renderJourneyContent = () => {
     if (isLoadingJourneys) {
@@ -757,6 +813,8 @@ export function CalendarScreen() {
                       permissions={dashPerms}
                       onPress={() => handleMatchPress(match.id, match.status)}
                       onStartMatch={() => handleStartMatch(match.id)}
+                      onEditMatch={dashPerms.canEditMatch ? () => handleEditMatch(match.id) : undefined}
+                      actionsDisabled={modalProps.pending || editMatchSubmitting}
                     />
                     {match.source === 'manual' && <ManualMatchBadge />}
                   </View>
@@ -883,6 +941,14 @@ export function CalendarScreen() {
         isSubmitting={newMatchSubmitting}
         onSubmit={handleNewMatchConfirm}
         onClose={() => { setNewMatchModalVisible(false); setNewMatchError(undefined); }}
+      />
+
+      <EditScheduledMatchModal
+        visible={Boolean(editingMatch)}
+        match={editingMatch}
+        saving={editMatchSubmitting}
+        onConfirm={handleEditMatchConfirm}
+        onCancel={() => { if (!editMatchSubmitting) setEditingMatch(null); }}
       />
 
       {/* ── Modales operativos de partido — estado gestionado por useMatchActionModals ── */}

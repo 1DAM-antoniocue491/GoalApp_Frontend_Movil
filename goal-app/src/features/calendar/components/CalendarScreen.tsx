@@ -814,8 +814,8 @@ export function CalendarScreen() {
                     <LiveMatchCard
                       match={toLiveData(match)}
                       permissions={dashPerms}
-                      onRegisterEvent={handleRegisterEvent}
-                      onEndMatch={handleEndMatch}
+                      onRegisterEvent={dashPerms.canRegisterEvent ? handleRegisterEvent : undefined}
+                      onEndMatch={dashPerms.canEndMatch ? handleEndMatch : undefined}
                     />
                     {match.source === 'manual' && <ManualMatchBadge />}
                   </View>

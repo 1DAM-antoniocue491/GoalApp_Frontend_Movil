@@ -32,7 +32,7 @@ import { ScrollEdgeButton } from '@/src/shared/components/navigation/ScrollEdgeB
 import { Colors } from '@/src/shared/constants/colors';
 import { theme } from '@/src/shared/styles/theme';
 
-import { useLeagueUsers } from '../hooks/UseLeagueUsers';
+import { useLeagueUsers } from '../hooks/useLeagueUsers';
 import { UsersSummary } from './UsersSummary';
 import { UserRowCard } from './UserRowCard';
 import { InviteUserModal } from './modals/InviteUserModal';

@@ -335,13 +335,25 @@ export function LiveMatchCard({
                     </View>
                 </View>
 
+                {/* Banner "finaliza el partido" — solo para roles con canEndMatch */}
+                {permissions.canEndMatch && (
+                    <View
+                        style={{
+                            marginTop: 14,
+                            borderRadius: 12,
+                            padding: 10,
+                            backgroundColor: 'rgba(196, 241, 53, 0.08)',
+                            borderWidth: 1,
+                            borderColor: 'rgba(196, 241, 53, 0.25)',
+                        }}
+                    >
+                        <Text style={{ color: '#C4F135', fontSize: 12, fontWeight: '700', textAlign: 'center' }}>
+                            Finaliza el partido y escoge el MVP
+                        </Text>
+                    </View>
+                )}
+
                 {/* ── Botones de acción por rol ── */}
-                {/*
-         * Solo se renderizan si el rol tiene permisos (canRegisterEvent, etc.).
-         * La prop `permissions` viene de getDashboardPermissions(role)
-         * en el componente padre.
-         * De esta forma, la lógica de permisos NO está hardcodeada aquí.
-         */}
                 {(permissions.canRegisterEvent || permissions.canViewLineups) && (
                     <View
                         style={{

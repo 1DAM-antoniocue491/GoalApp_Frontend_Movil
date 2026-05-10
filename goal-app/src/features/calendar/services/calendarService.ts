@@ -457,9 +457,9 @@ function fromApiDays(apiDays: number[]): number[] {
 // ---------------------------------------------------------------------------
 
 /** Resultado estándar para operaciones de escritura del servicio */
-export interface ServiceResult {
+export interface ServiceResult<T = unknown> {
   success: boolean;
-  data?: unknown;
+  data?: T;
   error?: string;
 }
 

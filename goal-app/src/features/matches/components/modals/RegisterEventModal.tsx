@@ -9,7 +9,7 @@ import type { MatchPlayerOption } from '../../types/matches.types';
 import { MatchModalShell } from './MatchModalShell';
 
 export type MatchEventType = 'goal' | 'yellow_card' | 'red_card' | 'substitution';
-export interface LiveMatchPlayer extends MatchPlayerOption {}
+export type LiveMatchPlayer = MatchPlayerOption
 
 export interface LiveMatchContext {
   id: string;
@@ -35,7 +35,7 @@ interface RegisterEventModalProps {
   isSubmitting?: boolean;
 }
 
-const OPTIONS: Array<{ type: MatchEventType; label: string; icon: keyof typeof Ionicons.glyphMap; color: string }> = [
+const OPTIONS: { type: MatchEventType; label: string; icon: keyof typeof Ionicons.glyphMap; color: string }[] = [
   { type: 'goal', label: 'Gol', icon: 'football-outline', color: Colors.brand.primary },
   { type: 'yellow_card', label: 'Amarilla', icon: 'square-outline', color: Colors.semantic.warning },
   { type: 'red_card', label: 'Roja', icon: 'square-outline', color: Colors.semantic.error },

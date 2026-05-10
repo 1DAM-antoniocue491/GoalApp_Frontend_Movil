@@ -3,7 +3,8 @@
  * Tipos reales del dominio de partidos/eventos.
  */
 
-export type MatchStatus = 'programado' | 'en_juego' | 'en_vivo' | 'finalizado' | 'cancelado' | string;
+export type MatchStatus = 'programado' | 'en_juego' | 'en_vivo' | 'finalizado' | 'cancelado' | 'suspendido';
+export type EditableScheduledMatchStatus = 'programado' | 'cancelado' | 'suspendido';
 export type BackendEventType = 'gol' | 'tarjeta_amarilla' | 'tarjeta_roja' | 'cambio';
 
 export interface EquipoPartidoApi {
@@ -31,7 +32,7 @@ export interface PartidoApi {
   fecha_hora?: string | null;
   hora?: string | null;
   estadio?: string | null;
-  estado?: MatchStatus;
+  estado?: MatchStatus | string;
   goles_local?: number | null;
   goles_visitante?: number | null;
   minuto_actual?: number | null;
@@ -58,6 +59,16 @@ export interface UpdateMatchRequest {
   estado?: MatchStatus;
 }
 
+/**
+ * Edición segura de partido programado.
+ * Regla de negocio: desde este flujo solo se puede mantener programado,
+ * cancelar o suspender. Nunca iniciar/finalizar desde edición.
+ */
+export interface UpdateScheduledMatchRequest {
+  fecha?: string;
+  estado?: EditableScheduledMatchStatus;
+}
+
 export interface CreateMatchEventRequest {
   id_partido: number;
   id_jugador: number;
@@ -65,6 +76,22 @@ export interface CreateMatchEventRequest {
   minuto: number;
   id_jugador_sale?: number;
   incidencias?: string;
+}
+
+export interface MatchEventApi {
+  id_evento: number;
+  id_partido: number;
+  id_jugador: number;
+  tipo_evento: BackendEventType | 'mvp' | string;
+  minuto: number;
+  puntuacion_mvp?: number | null;
+  incidencias?: string | null;
+  created_at?: string;
+  updated_at?: string;
+  nombre_jugador?: string;
+  id_equipo?: number;
+  nombre_equipo?: string;
+  id_jugador_sale?: number | null;
 }
 
 export interface FinishMatchRequest {

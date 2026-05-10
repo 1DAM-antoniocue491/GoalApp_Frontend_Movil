@@ -4,7 +4,7 @@
  */
 
 import React, { memo } from 'react';
-import { Modal, Pressable, Text, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, Modal, Pressable, Text, TouchableOpacity, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { Colors } from '@/src/shared/constants/colors';
 import { theme } from '@/src/shared/styles/theme';
@@ -20,6 +20,8 @@ export interface LiveMatchContext {
   awayTeam: string;
   homeScore: number;
   awayScore: number;
+  homeTeamId?: number | null;
+  awayTeamId?: number | null;
   minute: number;
   duration?: number;
   homePlayers?: LiveMatchPlayer[];
@@ -31,6 +33,9 @@ interface RegisterEventModalProps {
   match: LiveMatchContext | null;
   onSelectEvent: (type: MatchEventType) => void;
   onCancel: () => void;
+  /** Bloquea selección/cierre mientras se hidratan jugadores o se ejecuta una petición. */
+  disabled?: boolean;
+  loading?: boolean;
 }
 
 const OPTIONS: Array<{ type: MatchEventType; label: string; icon: keyof typeof Ionicons.glyphMap; color: string }> = [
@@ -40,11 +45,11 @@ const OPTIONS: Array<{ type: MatchEventType; label: string; icon: keyof typeof I
   { type: 'substitution', label: 'Cambio', icon: 'swap-horizontal-outline', color: Colors.brand.secondary },
 ];
 
-function RegisterEventModalComponent({ visible, match, onSelectEvent, onCancel }: RegisterEventModalProps) {
+function RegisterEventModalComponent({ visible, match, onSelectEvent, onCancel, disabled = false, loading = false }: RegisterEventModalProps) {
   return (
-    <Modal transparent visible={visible} animationType="fade" statusBarTranslucent onRequestClose={onCancel}>
+    <Modal transparent visible={visible} animationType="fade" statusBarTranslucent onRequestClose={disabled ? () => undefined : onCancel}>
       <View style={{ flex: 1, justifyContent: 'flex-end', backgroundColor: 'rgba(0,0,0,0.65)' }}>
-        <Pressable style={{ flex: 1 }} onPress={onCancel} />
+        <Pressable style={{ flex: 1 }} onPress={disabled ? undefined : onCancel} />
         <View style={{ backgroundColor: Colors.bg.surface1, borderTopLeftRadius: 30, borderTopRightRadius: 30, padding: 22, paddingBottom: 40, borderWidth: 1, borderColor: Colors.bg.surface2 }}>
           <View style={{ width: 42, height: 4, borderRadius: 2, backgroundColor: Colors.bg.surface2, alignSelf: 'center', marginBottom: 18 }} />
           <Text style={{ color: Colors.text.primary, fontSize: 24, fontWeight: '800' }}>Añadir evento</Text>
@@ -53,14 +58,21 @@ function RegisterEventModalComponent({ visible, match, onSelectEvent, onCancel }
               {match.homeTeam} {match.homeScore}–{match.awayScore} {match.awayTeam} · {match.minute}'
             </Text>
           ) : null}
+          {loading ? (
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 12 }}>
+              <ActivityIndicator size="small" color={Colors.brand.primary} />
+              <Text style={{ color: Colors.text.secondary, fontSize: 13 }}>Cargando jugadores...</Text>
+            </View>
+          ) : null}
 
           <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 10, marginTop: 22 }}>
             {OPTIONS.map(option => (
               <TouchableOpacity
                 key={option.type}
                 activeOpacity={0.9}
+                disabled={disabled || loading}
                 onPress={() => onSelectEvent(option.type)}
-                style={{ width: '48%', minHeight: 92, borderRadius: theme.borderRadius.xl, backgroundColor: Colors.bg.surface2, borderWidth: 1, borderColor: option.color + '55', padding: 14, justifyContent: 'space-between' }}
+                style={{ width: '48%', minHeight: 92, borderRadius: theme.borderRadius.xl, backgroundColor: Colors.bg.surface2, borderWidth: 1, borderColor: option.color + '55', padding: 14, justifyContent: 'space-between', opacity: disabled || loading ? 0.45 : 1 }}
               >
                 <Ionicons name={option.icon} size={24} color={option.color} />
                 <Text style={{ color: Colors.text.primary, fontSize: 16, fontWeight: '700' }}>{option.label}</Text>

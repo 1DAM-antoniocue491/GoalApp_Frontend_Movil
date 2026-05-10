@@ -51,6 +51,8 @@ interface StartMatchModalProps {
   match: ProgrammedMatchContext | null;
   onConfirm: () => void;
   onCancel: () => void;
+  /** Evita dobles toques y bloquea cierre mientras se inicia el partido. */
+  submitting?: boolean;
 }
 
 // ---------------------------------------------------------------------------
@@ -94,6 +96,7 @@ function StartMatchModalComponent({
   match,
   onConfirm,
   onCancel,
+  submitting = false,
 }: StartMatchModalProps) {
   const slideAnim = useRef(new Animated.Value(350)).current;
   const opacityAnim = useRef(new Animated.Value(0)).current;
@@ -131,8 +134,7 @@ function StartMatchModalComponent({
   }, [visible, opacityAnim, slideAnim]);
 
   const handleConfirm = () => {
-    // TODO: llamar a PATCH /matches/:id/start
-    // El backend cambia el estado a 'live' y registra la hora de inicio real.
+    if (submitting) return;
     onConfirm();
   };
 
@@ -142,7 +144,7 @@ function StartMatchModalComponent({
       visible={visible}
       animationType="none"
       statusBarTranslucent
-      onRequestClose={onCancel}
+      onRequestClose={submitting ? () => undefined : onCancel}
     >
       <Animated.View
         style={{
@@ -152,7 +154,7 @@ function StartMatchModalComponent({
           opacity: opacityAnim,
         }}
       >
-        <Pressable style={{ flex: 1 }} onPress={onCancel} />
+        <Pressable style={{ flex: 1 }} onPress={submitting ? undefined : onCancel} />
 
         <Animated.View
           style={{
@@ -309,6 +311,7 @@ function StartMatchModalComponent({
           {/* Botones */}
           <View style={{ gap: 10 }}>
             <TouchableOpacity
+              disabled={submitting}
               onPress={handleConfirm}
               activeOpacity={0.88}
               style={{
@@ -316,27 +319,28 @@ function StartMatchModalComponent({
                 borderRadius: 18,
                 alignItems: 'center',
                 justifyContent: 'center',
-                backgroundColor: Colors.brand.primary,
+                backgroundColor: submitting ? Colors.bg.surface2 : Colors.brand.primary,
                 flexDirection: 'row',
                 gap: 8,
               }}
             >
-              <Ionicons name="play-circle-outline" size={20} color={Colors.bg.base} />
+              <Ionicons name={submitting ? 'hourglass-outline' : 'play-circle-outline'} size={20} color={submitting ? Colors.text.disabled : Colors.bg.base} />
               <Text
                 style={{
-                  color: Colors.bg.base,
+                  color: submitting ? Colors.text.disabled : Colors.bg.base,
                   fontSize: 16,
                   fontWeight: '700',
                 }}
               >
-                Iniciar partido
+                {submitting ? 'Iniciando...' : 'Iniciar partido'}
               </Text>
             </TouchableOpacity>
 
             <TouchableOpacity
+              disabled={submitting}
               onPress={onCancel}
               activeOpacity={0.7}
-              style={{ paddingVertical: 12, alignItems: 'center' }}
+              style={{ paddingVertical: 12, alignItems: 'center', opacity: submitting ? 0.45 : 1 }}
             >
               <Text
                 style={{

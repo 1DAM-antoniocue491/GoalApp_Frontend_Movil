@@ -1,6 +1,6 @@
 /**
  * matchesService.ts
- * Servicios reales para partidos, eventos y jugadores de partido.
+ * Servicios reales para partidos, eventos, finalización y edición segura.
  */
 
 import { ApiError } from '@/src/shared/api/client';
@@ -10,8 +10,10 @@ import type { JugadorEquipoApi } from '@/src/features/convocatorias/types/convoc
 import type {
   PartidoApi,
   CreateManualMatchRequest,
+  UpdateScheduledMatchRequest,
   CreateMatchEventRequest,
   FinishMatchRequest,
+  MatchEventApi,
   MatchPlayerOption,
   MatchPlayersBySide,
   ServiceResult,
@@ -23,11 +25,15 @@ import {
   getLiveMatches,
   getMatchById,
   createManualMatch,
+  updateScheduledMatch,
   getJornadasByLeague,
   startMatch,
   finishMatch,
+  getMatchEvents,
   createMatchEvent,
 } from '../api/matches.api';
+
+const SCHEDULED_EDIT_STATUSES = new Set(['programado', 'cancelado', 'suspendido']);
 
 function getApiErrorMessage(error: unknown): string {
   if (error instanceof ApiError) return error.message || `Error ${error.status}`;
@@ -35,11 +41,12 @@ function getApiErrorMessage(error: unknown): string {
   return 'Error desconocido';
 }
 
-export function normalizeMatchStatus(status: string | undefined | null): 'programado' | 'en_juego' | 'finalizado' | 'cancelado' {
+export function normalizeMatchStatus(status: string | undefined | null): 'programado' | 'en_juego' | 'finalizado' | 'cancelado' | 'suspendido' {
   const s = String(status ?? '').toLowerCase().trim();
-  if (s === 'en_juego' || s === 'en_vivo') return 'en_juego';
-  if (s === 'finalizado') return 'finalizado';
-  if (s === 'cancelado' || s === 'cancelled') return 'cancelado';
+  if (s === 'en_juego' || s === 'en_vivo' || s === 'live') return 'en_juego';
+  if (s === 'finalizado' || s === 'finished') return 'finalizado';
+  if (s === 'cancelado' || s === 'cancelled' || s === 'canceled') return 'cancelado';
+  if (s === 'suspendido' || s === 'suspended') return 'suspendido';
   return 'programado';
 }
 
@@ -109,6 +116,11 @@ export async function getLiveMatchesService(ligaId: number): Promise<PartidoApi[
   return getLiveMatches(ligaId);
 }
 
+export async function getFinishedMatchesService(ligaId: number): Promise<PartidoApi[]> {
+  const matches = await getMatchesByLeagueService(ligaId);
+  return matches.filter(match => normalizeMatchStatus(match.estado) === 'finalizado');
+}
+
 export async function getJornadasByLeagueService(ligaId: number): Promise<unknown> {
   return getJornadasByLeague(ligaId);
 }
@@ -125,6 +137,22 @@ export async function getMatchByIdService(matchId: number): Promise<ServiceResul
 export async function createManualMatchService(data: CreateManualMatchRequest): Promise<ServiceResult<PartidoApi>> {
   try {
     const result = await createManualMatch(data);
+    return { success: true, data: result };
+  } catch (error) {
+    return { success: false, error: getApiErrorMessage(error) };
+  }
+}
+
+export async function updateScheduledMatchService(matchId: number, data: UpdateScheduledMatchRequest): Promise<ServiceResult<PartidoApi>> {
+  try {
+    if (data.estado && !SCHEDULED_EDIT_STATUSES.has(data.estado)) {
+      return {
+        success: false,
+        error: 'Desde la edición de un partido programado solo se permite mantenerlo programado, cancelarlo o suspenderlo.',
+      };
+    }
+
+    const result = await updateScheduledMatch(matchId, data);
     return { success: true, data: result };
   } catch (error) {
     return { success: false, error: getApiErrorMessage(error) };
@@ -149,7 +177,16 @@ export async function finishMatchService(matchId: number, data: FinishMatchReque
   }
 }
 
-export async function createMatchEventService(data: CreateMatchEventRequest): Promise<ServiceResult<unknown>> {
+export async function getMatchEventsService(matchId: number): Promise<ServiceResult<MatchEventApi[]>> {
+  try {
+    const result = await getMatchEvents(matchId);
+    return { success: true, data: result };
+  } catch (error) {
+    return { success: false, error: getApiErrorMessage(error) };
+  }
+}
+
+export async function createMatchEventService(data: CreateMatchEventRequest): Promise<ServiceResult<MatchEventApi>> {
   try {
     const result = await createMatchEvent(data);
     return { success: true, data: result };
@@ -174,6 +211,27 @@ export async function getMatchPlayersBySideService(matchId: number): Promise<Ser
       data: {
         home: home.filter(j => j.activo !== false).map(j => mapJugadorToOption(j, 'home')),
         away: away.filter(j => j.activo !== false).map(j => mapJugadorToOption(j, 'away')),
+      },
+    };
+  } catch (error) {
+    return { success: false, error: getApiErrorMessage(error) };
+  }
+}
+
+export async function getMatchScoreFromEventsService(
+  matchId: number,
+  homeTeamId?: number | null,
+  awayTeamId?: number | null,
+): Promise<ServiceResult<{ homeScore: number; awayScore: number }>> {
+  try {
+    const events = await getMatchEvents(matchId);
+    const goals = events.filter(event => event.tipo_evento === 'gol');
+
+    return {
+      success: true,
+      data: {
+        homeScore: homeTeamId ? goals.filter(event => Number(event.id_equipo) === Number(homeTeamId)).length : 0,
+        awayScore: awayTeamId ? goals.filter(event => Number(event.id_equipo) === Number(awayTeamId)).length : 0,
       },
     };
   } catch (error) {

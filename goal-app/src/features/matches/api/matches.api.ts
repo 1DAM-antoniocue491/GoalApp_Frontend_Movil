@@ -8,8 +8,10 @@ import type {
   PartidoApi,
   CreateManualMatchRequest,
   UpdateMatchRequest,
+  UpdateScheduledMatchRequest,
   CreateMatchEventRequest,
   FinishMatchRequest,
+  MatchEventApi,
 } from '../types/matches.types';
 
 export async function getMatchesByLeague(ligaId: number): Promise<PartidoApi[]> {
@@ -47,6 +49,11 @@ export async function updateMatch(matchId: number, data: UpdateMatchRequest): Pr
   return res.data;
 }
 
+export async function updateScheduledMatch(matchId: number, data: UpdateScheduledMatchRequest): Promise<PartidoApi> {
+  const res = await apiClient.put<PartidoApi>(`/partidos/${matchId}`, data);
+  return res.data;
+}
+
 export async function getJornadasByLeague(ligaId: number): Promise<unknown> {
   const res = await apiClient.get<unknown>(`/partidos/ligas/${ligaId}/jornadas`);
   return res.data;
@@ -62,12 +69,12 @@ export async function finishMatch(matchId: number, data: FinishMatchRequest): Pr
   return res.data;
 }
 
-export async function getMatchEvents(matchId: number): Promise<unknown[]> {
-  const res = await apiClient.get<unknown[]>(`/eventos/partido/${matchId}`);
+export async function getMatchEvents(matchId: number): Promise<MatchEventApi[]> {
+  const res = await apiClient.get<MatchEventApi[]>(`/eventos/partido/${matchId}`);
   return Array.isArray(res.data) ? res.data : [];
 }
 
-export async function createMatchEvent(data: CreateMatchEventRequest): Promise<unknown> {
-  const res = await apiClient.post<unknown>('/eventos/', data);
+export async function createMatchEvent(data: CreateMatchEventRequest): Promise<MatchEventApi> {
+  const res = await apiClient.post<MatchEventApi>('/eventos/', data);
   return res.data;
 }

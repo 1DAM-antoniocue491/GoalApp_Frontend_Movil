@@ -121,7 +121,9 @@ export async function getConvocatoriaEquipoService(partidoId: number, equipoId: 
       const posOrder = ['POR', 'DEF', 'MED', 'DEL', 'OTR'];
       const byPos = posOrder.indexOf(a.posicion) - posOrder.indexOf(b.posicion);
       if (byPos !== 0) return byPos;
-      return Number(a.dorsal) - Number(b.dorsal);
+      const dorsalA = Number.isFinite(Number(a.dorsal)) ? Number(a.dorsal) : 999;
+      const dorsalB = Number.isFinite(Number(b.dorsal)) ? Number(b.dorsal) : 999;
+      return dorsalA - dorsalB;
     });
 
   const limits = await getLimitsFromLeague(match?.id_liga);
@@ -138,18 +140,27 @@ export async function getConvocatoriaEquipoService(partidoId: number, equipoId: 
   };
 }
 
-export function validateConvocatoriaPlayers(jugadores: ConvocatoriaPlayer[], limits: ConvocatoriaLimits): string | null {
+export function validateConvocatoriaPlayers(
+  jugadores: ConvocatoriaPlayer[],
+  limits: ConvocatoriaLimits,
+  options?: { allowUnderMin?: boolean },
+): string | null {
   const total = jugadores.filter(j => j.estado !== 'no_convocado').length;
   const titulares = jugadores.filter(j => j.estado === 'titular').length;
-  if (total < limits.minConvocados) return `Debes convocar al menos ${limits.minConvocados} jugadores.`;
+  if (!options?.allowUnderMin && total < limits.minConvocados) return `Debes convocar al menos ${limits.minConvocados} jugadores.`;
   if (total > limits.maxConvocados) return `No puedes convocar más de ${limits.maxConvocados} jugadores.`;
   if (titulares > limits.maxTitulares) return `No puedes seleccionar más de ${limits.maxTitulares} titulares.`;
   return null;
 }
 
-export async function saveConvocatoriaEquipoService(partidoId: number, jugadores: ConvocatoriaPlayer[], limits: ConvocatoriaLimits): Promise<ServiceResult> {
+export async function saveConvocatoriaEquipoService(
+  partidoId: number,
+  jugadores: ConvocatoriaPlayer[],
+  limits: ConvocatoriaLimits,
+  options?: { allowUnderMin?: boolean },
+): Promise<ServiceResult> {
   try {
-    const validation = validateConvocatoriaPlayers(jugadores, limits);
+    const validation = validateConvocatoriaPlayers(jugadores, limits, options);
     if (validation) return { success: false, error: validation };
     await saveConvocatoria({
       id_partido: partidoId,

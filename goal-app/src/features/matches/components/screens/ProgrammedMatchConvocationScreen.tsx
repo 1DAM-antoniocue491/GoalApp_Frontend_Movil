@@ -63,6 +63,7 @@ export function ProgrammedMatchConvocationScreen() {
   const selectedTeamId = Number(teamId) || (selectedSide === 'home' ? homeTeamId : awayTeamId) || null;
 
   const { players, counts, limits, locked, lockReason, canEdit, loading, saving, error, setPlayerState, save } = useConvocatoriaEquipo({ partidoId, equipoId: selectedTeamId });
+  const actionsLocked = loading || saving;
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -71,21 +72,39 @@ export function ProgrammedMatchConvocationScreen() {
 
   const grouped = POSITION_ORDER.map(position => ({ position, players: filtered.filter(p => p.posicion === position) })).filter(g => g.players.length > 0);
 
-  const handleSave = async () => {
-    const ok = await save();
+  const persist = async (allowUnderMin = false) => {
+    if (actionsLocked) return;
+    const ok = await save({ allowUnderMin });
     if (ok) {
       Alert.alert('Convocatoria guardada', 'La convocatoria se actualizó correctamente.', [{ text: 'Aceptar', onPress: () => router.back() }]);
     }
   };
 
+  const handleSave = async () => {
+    if (actionsLocked) return;
+    // Regla migrada desde Web: si hay menos del mínimo, se avisa y se permite guardar solo con confirmación explícita.
+    if (limits && counts.total < limits.minConvocados) {
+      Alert.alert(
+        'Convocatoria por debajo del mínimo',
+        `Tienes menos de ${limits.minConvocados} jugadores convocados. ¿Quieres guardar igualmente?`,
+        [
+          { text: 'Cancelar', style: 'cancel' },
+          { text: 'Guardar igualmente', style: 'destructive', onPress: () => { void persist(true); } },
+        ],
+      );
+      return;
+    }
+    await persist(false);
+  };
+
   return <SafeAreaView style={{ flex: 1, backgroundColor: Colors.bg.base }}><StatusBar barStyle="light-content" />
     <View style={{ flexDirection: 'row', alignItems: 'center', padding: 16, borderBottomWidth: 1, borderBottomColor: Colors.bg.surface2 }}>
-      <TouchableOpacity onPress={() => router.back()} style={{ marginRight: 12 }}><Ionicons name="arrow-back" size={24} color={Colors.text.primary} /></TouchableOpacity>
+      <TouchableOpacity disabled={saving} onPress={() => router.back()} style={{ marginRight: 12, opacity: saving ? 0.45 : 1 }}><Ionicons name="arrow-back" size={24} color={Colors.text.primary} /></TouchableOpacity>
       <View style={{ flex: 1 }}><Text style={{ color: Colors.text.primary, fontSize: 20, fontWeight: '800' }}>Convocatoria</Text><Text style={{ color: Colors.text.secondary, marginTop: 2 }}>{selectedSide === 'home' ? getHomeTeamName(match ?? {} as PartidoApi) : getAwayTeamName(match ?? {} as PartidoApi)}</Text></View>
     </View>
 
     <ScrollView contentContainerStyle={{ padding: 16, paddingBottom: 120 }} showsVerticalScrollIndicator={false}>
-      {!teamId && match ? <View style={{ flexDirection: 'row', gap: 10, marginBottom: 16 }}>{(['home','away'] as const).map(side => <TouchableOpacity key={side} onPress={() => setSelectedSide(side)} style={{ flex: 1, minHeight: 54, borderRadius: 16, alignItems: 'center', justifyContent: 'center', backgroundColor: selectedSide === side ? Colors.brand.primary + '22' : Colors.bg.surface1, borderWidth: 1, borderColor: selectedSide === side ? Colors.brand.primary : Colors.bg.surface2 }}><Text numberOfLines={1} style={{ color: selectedSide === side ? Colors.brand.primary : Colors.text.secondary, fontWeight: '800' }}>{side === 'home' ? getHomeTeamName(match) : getAwayTeamName(match)}</Text></TouchableOpacity>)}</View> : null}
+      {!teamId && match ? <View style={{ flexDirection: 'row', gap: 10, marginBottom: 16 }}>{(['home','away'] as const).map(side => <TouchableOpacity key={side} disabled={actionsLocked} onPress={() => setSelectedSide(side)} style={{ flex: 1, minHeight: 54, borderRadius: 16, alignItems: 'center', justifyContent: 'center', backgroundColor: selectedSide === side ? Colors.brand.primary + '22' : Colors.bg.surface1, borderWidth: 1, borderColor: selectedSide === side ? Colors.brand.primary : Colors.bg.surface2, opacity: actionsLocked ? 0.55 : 1 }}><Text numberOfLines={1} style={{ color: selectedSide === side ? Colors.brand.primary : Colors.text.secondary, fontWeight: '800' }}>{side === 'home' ? getHomeTeamName(match) : getAwayTeamName(match)}</Text></TouchableOpacity>)}</View> : null}
 
       <View style={{ backgroundColor: Colors.bg.surface1, borderRadius: 22, padding: 16, borderWidth: 1, borderColor: Colors.bg.surface2, marginBottom: 16 }}>
         <Text style={{ color: Colors.text.primary, fontSize: 28, fontWeight: '900' }}>{counts.total}</Text>
@@ -95,14 +114,14 @@ export function ProgrammedMatchConvocationScreen() {
         {error ? <Text style={{ color: Colors.semantic.error, marginTop: 10 }}>{error}</Text> : null}
       </View>
 
-      <SearchInput value={query} onChangeText={setQuery} placeholder="Buscar jugador..." />
+      <SearchInput value={query} onChangeText={actionsLocked ? () => undefined : setQuery} placeholder="Buscar jugador..." />
 
       {loading ? <ActivityIndicator color={Colors.brand.primary} style={{ marginTop: 40 }} /> : grouped.map(group => <View key={group.position} style={{ marginTop: 18 }}>
         <Text style={{ color: POSITION_COLOR[group.position], fontWeight: '800', marginBottom: 10 }}>{POSITION_LABEL[group.position].toUpperCase()} · {group.players.length}</Text>
-        {group.players.map(player => <PlayerRow key={player.id} player={player} disabled={!canEdit} onChange={(state) => setPlayerState(player.id_jugador, state)} />)}
+        {group.players.map(player => <PlayerRow key={player.id} player={player} disabled={!canEdit || actionsLocked} onChange={(state) => setPlayerState(player.id_jugador, state)} />)}
       </View>)}
     </ScrollView>
 
-    {canEdit ? <View style={{ position: 'absolute', left: 16, right: 16, bottom: 24 }}><TouchableOpacity disabled={saving} onPress={handleSave} style={{ height: 58, borderRadius: 18, backgroundColor: Colors.brand.primary, alignItems: 'center', justifyContent: 'center' }}><Text style={{ color: Colors.bg.base, fontSize: 17, fontWeight: '900' }}>{saving ? 'Guardando...' : 'Guardar convocatoria'}</Text></TouchableOpacity></View> : null}
+    {canEdit ? <View style={{ position: 'absolute', left: 16, right: 16, bottom: 24 }}><TouchableOpacity disabled={actionsLocked} onPress={handleSave} style={{ height: 58, borderRadius: 18, backgroundColor: actionsLocked ? Colors.bg.surface2 : Colors.brand.primary, alignItems: 'center', justifyContent: 'center', opacity: actionsLocked ? 0.65 : 1 }}><Text style={{ color: actionsLocked ? Colors.text.disabled : Colors.bg.base, fontSize: 17, fontWeight: '900' }}>{saving ? 'Guardando...' : 'Guardar convocatoria'}</Text></TouchableOpacity></View> : null}
   </SafeAreaView>;
 }

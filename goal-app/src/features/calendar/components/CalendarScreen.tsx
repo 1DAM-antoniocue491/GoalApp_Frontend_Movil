@@ -796,8 +796,8 @@ export function CalendarScreen() {
                       match={toLiveData(match)}
                       permissions={dashPerms}
                       actionsDisabled={modalProps.pending.any}
-                      onRegisterEvent={handleRegisterEvent}
-                      onEndMatch={handleEndMatch}
+                      onRegisterEvent={dashPerms.canRegisterEvent ? handleRegisterEvent : undefined}
+                      onEndMatch={dashPerms.canEndMatch ? handleEndMatch : undefined}
                     />
                     {match.source === 'manual' && <ManualMatchBadge />}
                   </View>
@@ -811,7 +811,7 @@ export function CalendarScreen() {
                       match={toProgrammedData(match)}
                       permissions={dashPerms}
                       onPress={() => handleMatchPress(match.id, match.status)}
-                      onStartMatch={() => handleStartMatch(match.id)}
+                      onStartMatch={dashPerms.canStartMatch ? () => handleStartMatch(match.id) : undefined}
                       onEditMatch={dashPerms.canEditMatch ? () => handleEditMatch(match.id) : undefined}
                       actionsDisabled={modalProps.pending.any || editMatchSubmitting}
                     />
@@ -950,63 +950,67 @@ export function CalendarScreen() {
         onCancel={() => { if (!editMatchSubmitting) setEditingMatch(null); }}
       />
 
-      {/* ── Modales operativos de partido — estado gestionado por useMatchActionModals ── */}
+      {/* ── Modales operativos: solo se montan para roles con acceso ── */}
 
-      <RegisterEventModal
-        visible={modals.registerEvent}
-        match={activeEventMatch}
-        onSelectEvent={modalProps.onSelectEvent}
-        onCancel={modalProps.onCloseRegisterEvent}
-        disabled={modalProps.pending.any}
-      />
+      {dashPerms.canRegisterEvent && (
+        <>
+          <RegisterEventModal
+            visible={modals.registerEvent}
+            match={activeEventMatch}
+            onSelectEvent={modalProps.onSelectEvent}
+            onCancel={modalProps.onCloseRegisterEvent}
+            disabled={modalProps.pending.any}
+          />
+          <GoalEventModal
+            visible={modals.goal}
+            match={activeEventMatch}
+            onConfirm={modalProps.onGoalConfirm}
+            onCancel={modalProps.onCloseGoal}
+            submitting={modalProps.pending.any}
+          />
+          <YellowCardModal
+            visible={modals.yellowCard}
+            match={activeEventMatch}
+            onConfirm={modalProps.onYellowCardConfirm}
+            onCancel={modalProps.onCloseYellowCard}
+            submitting={modalProps.pending.any}
+          />
+          <RedCardModal
+            visible={modals.redCard}
+            match={activeEventMatch}
+            onConfirm={modalProps.onRedCardConfirm}
+            onCancel={modalProps.onCloseRedCard}
+            submitting={modalProps.pending.any}
+          />
+          <SubstitutionModal
+            visible={modals.substitution}
+            match={activeEventMatch}
+            onConfirm={modalProps.onSubstitutionConfirm}
+            onCancel={modalProps.onCloseSubstitution}
+            submitting={modalProps.pending.any}
+          />
+        </>
+      )}
 
-      <GoalEventModal
-        visible={modals.goal}
-        match={activeEventMatch}
-        onConfirm={modalProps.onGoalConfirm}
-        onCancel={modalProps.onCloseGoal}
-        submitting={modalProps.pending.any}
-      />
+      {dashPerms.canEndMatch && (
+        <EndMatchModal
+          visible={modals.endMatch}
+          match={activeEndMatch}
+          onConfirm={modalProps.onEndMatchConfirm}
+          onCancel={modalProps.onCloseEndMatch}
+          submitting={modalProps.pending.any}
+        />
+      )}
 
-      <YellowCardModal
-        visible={modals.yellowCard}
-        match={activeEventMatch}
-        onConfirm={modalProps.onYellowCardConfirm}
-        onCancel={modalProps.onCloseYellowCard}
-        submitting={modalProps.pending.any}
-      />
-
-      <RedCardModal
-        visible={modals.redCard}
-        match={activeEventMatch}
-        onConfirm={modalProps.onRedCardConfirm}
-        onCancel={modalProps.onCloseRedCard}
-        submitting={modalProps.pending.any}
-      />
-
-      <SubstitutionModal
-        visible={modals.substitution}
-        match={activeEventMatch}
-        onConfirm={modalProps.onSubstitutionConfirm}
-        onCancel={modalProps.onCloseSubstitution}
-        submitting={modalProps.pending.any}
-      />
-
-      <EndMatchModal
-        visible={modals.endMatch}
-        match={activeEndMatch}
-        onConfirm={modalProps.onEndMatchConfirm}
-        onCancel={modalProps.onCloseEndMatch}
-        submitting={modalProps.pending.any}
-      />
-
-      <StartMatchModal
-        visible={modals.startMatch}
-        match={activeStartMatch}
-        onConfirm={modalProps.onStartMatchConfirm}
-        onCancel={modalProps.onCloseStartMatch}
-        isSubmitting={modalProps.pending.any}
-      />
+      {dashPerms.canStartMatch && (
+        <StartMatchModal
+          visible={modals.startMatch}
+          match={activeStartMatch}
+          onConfirm={modalProps.onStartMatchConfirm}
+          onCancel={modalProps.onCloseStartMatch}
+          isSubmitting={modalProps.pending.any}
+        />
+      )}
     </View>
   );
 }

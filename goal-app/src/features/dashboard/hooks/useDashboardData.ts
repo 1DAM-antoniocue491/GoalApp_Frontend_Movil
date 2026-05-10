@@ -24,6 +24,7 @@ import { useFocusEffect } from "@react-navigation/native";
 import type { DashboardData } from "@/src/shared/types/dashboard.types";
 import { fetchDashboardData } from "@/src/features/dashboard/api/dashboard.api";
 import { logger } from "@/src/shared/utils/logger";
+import { subscribeMatchDataChanged } from '@/src/features/matches/services/matchSync';
 
 // ---------------------------------------------------------------------------
 // Contrato del hook
@@ -205,15 +206,18 @@ export function useDashboardData(leagueId: string): DashboardHookResult {
     loadData();
   }, [loadData]);
 
-  // Refetch discreto cada vez que el usuario vuelve a esta pantalla.
-  // Solo si ya se cargaron datos al menos una vez para no duplicar la carga inicial.
   useFocusEffect(
     useCallback(() => {
-      if (hasLoadedOnce.current) {
-        void loadData();
-      }
+      loadData();
+      const unsubscribe = subscribeMatchDataChanged(loadData);
+      return unsubscribe;
     }, [loadData]),
   );
+
+  useEffect(() => {
+    const intervalId = setInterval(loadData, 30000);
+    return () => clearInterval(intervalId);
+  }, [loadData]);
 
   return {
     data,

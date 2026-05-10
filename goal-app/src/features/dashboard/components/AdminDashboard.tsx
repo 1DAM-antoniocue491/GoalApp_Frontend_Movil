@@ -21,7 +21,7 @@
  * en DashboardLayout. AdminDashboard solo se preocupa de sus secciones.
  */
 
-import React, { useCallback, useState } from 'react';
+import React, { useState } from 'react';
 import { Alert, View } from 'react-native';
 
 import { useDashboardData } from '@/src/features/dashboard/hooks';
@@ -39,9 +39,9 @@ import { RedCardModal } from '@/src/features/matches/components/modals/RedCardMo
 import { SubstitutionModal } from '@/src/features/matches/components/modals/SubstitutionModal';
 import { EndMatchModal } from '@/src/features/matches/components/modals/EndMatchModal';
 import { StartMatchModal } from '@/src/features/matches/components/modals/StartMatchModal';
-import { EditScheduledMatchModal } from '@/src/features/matches/components/modals/EditScheduledMatchModal';
-import type { EditScheduledMatchData } from '@/src/features/matches/components/modals/EditScheduledMatchModal';
-import { getMatchByIdService, updateScheduledMatchService } from '@/src/features/matches/services/matchesService';
+import { EditScheduledMatchModal, type EditScheduledMatchData } from '@/src/features/matches/components/modals/EditScheduledMatchModal';
+import { updateScheduledMatchService } from '@/src/features/matches/services/matchesService';
+import { emitMatchDataChanged } from '@/src/features/matches/services/matchSync';
 import type { PartidoApi } from '@/src/features/matches/types/matches.types';
 
 // ---------------------------------------------------------------------------
@@ -68,6 +68,9 @@ export function AdminDashboard({
   userName,
   notificationCount = 0,
 }: AdminDashboardProps) {
+  const [editingMatch, setEditingMatch] = useState<PartidoApi | null>(null);
+  const [savingEdit, setSavingEdit] = useState(false);
+
   // Datos del dashboard desde el hook — API real vía fetchDashboardData
   const { data, isLoading, isRefetching, isError, refetch } = useDashboardData(leagueId);
 
@@ -78,40 +81,6 @@ export function AdminDashboard({
     openRegisterEvent, openEndMatch, openStartMatch,
     modals, activeEventMatch, activeEndMatch, activeStartMatch, modalProps,
   } = useMatchActionModals(refetch);
-
-  // ── Editar partido ──
-  const [matchToEdit, setMatchToEdit] = useState<PartidoApi | null>(null);
-  const [editMatchVisible, setEditMatchVisible] = useState(false);
-  const [savingEditMatch, setSavingEditMatch] = useState(false);
-
-  const handleEditMatch = useCallback((matchId: string) => {
-    void (async () => {
-      const result = await getMatchByIdService(Number(matchId));
-      if (result.success && result.data) {
-        setMatchToEdit(result.data);
-        setEditMatchVisible(true);
-      } else {
-        Alert.alert('Error', 'No se pudo cargar el partido para editar.');
-      }
-    })();
-  }, []);
-
-  const handleEditMatchConfirm = useCallback(async (data: EditScheduledMatchData) => {
-    if (!matchToEdit) return;
-    setSavingEditMatch(true);
-    const result = await updateScheduledMatchService(Number(matchToEdit.id_partido), {
-      fecha: data.fecha,
-      estado: data.estado,
-    });
-    setSavingEditMatch(false);
-    if (!result.success) {
-      Alert.alert('Error', result.error || 'No se pudo guardar el partido.');
-      return;
-    }
-    setEditMatchVisible(false);
-    setMatchToEdit(null);
-    void refetch();
-  }, [matchToEdit, refetch]);
 
   // ── Handlers de acciones — delegan al flujo centralizado de modales ──
 
@@ -124,10 +93,10 @@ export function AdminDashboard({
       homeScore: data.liveMatch.homeScore,
       awayScore: data.liveMatch.awayScore,
       minute: data.liveMatch.minute,
-      duration: data.liveMatch.duration,
-      homeTeamId: data.liveMatch.homeTeamId,
-      awayTeamId: data.liveMatch.awayTeamId,
-      startedAt: data.liveMatch.startedAt,
+      duration: (data.liveMatch as any).duration ?? 90,
+      startedAt: (data.liveMatch as any).startedAt ?? null,
+      homeTeamId: (data.liveMatch as any).homeTeamId,
+      awayTeamId: (data.liveMatch as any).awayTeamId,
     });
   };
 
@@ -139,6 +108,8 @@ export function AdminDashboard({
       awayTeam: data.liveMatch.awayTeam,
       homeScore: data.liveMatch.homeScore,
       awayScore: data.liveMatch.awayScore,
+      homeTeamId: (data.liveMatch as any).homeTeamId,
+      awayTeamId: (data.liveMatch as any).awayTeamId,
     });
   };
 
@@ -152,8 +123,34 @@ export function AdminDashboard({
       date: `${match.day} ${match.month}`,
       time: match.time,
       venue: match.venue,
-      rawDateTime: match.rawDateTime,
     });
+  };
+
+  const handleEditMatch = (matchId: string) => {
+    const match = data?.upcomingMatches.find((m) => m.id === matchId);
+    if (!match) return;
+    setEditingMatch({
+      id_partido: Number(match.id),
+      fecha_hora: (match as any).startsAt ?? (match as any).rawDate ?? null,
+      estado: 'programado',
+      estadio: match.venue,
+      equipo_local: { nombre: match.homeTeam },
+      equipo_visitante: { nombre: match.awayTeam },
+    } as PartidoApi);
+  };
+
+  const handleEditMatchConfirm = async (payload: EditScheduledMatchData) => {
+    if (!editingMatch) return;
+    setSavingEdit(true);
+    const result = await updateScheduledMatchService(editingMatch.id_partido, payload);
+    setSavingEdit(false);
+    if (!result.success) {
+      Alert.alert('No se pudo editar el partido', result.error ?? 'Inténtalo de nuevo.');
+      return;
+    }
+    setEditingMatch(null);
+    emitMatchDataChanged();
+    refetch();
   };
 
   // ── Render ──
@@ -189,7 +186,7 @@ export function AdminDashboard({
                 permissions={permissions}
                 onRegisterEvent={handleRegisterEvent}
                 onEndMatch={handleEndMatch}
-                actionsDisabled={modalProps.pending.any}
+                actionsDisabled={modalProps.pending}
               />
             </View>
           )}
@@ -199,8 +196,7 @@ export function AdminDashboard({
             matches={data.upcomingMatches}
             permissions={permissions}
             onStartMatch={handleStartMatch}
-            onEditMatch={permissions.canEditMatch ? handleEditMatch : undefined}
-            actionsDisabled={modalProps.pending.any}
+            onEditMatch={handleEditMatch}
           />
 
           {/* ── Progreso: equipos activos + jornadas (solo admin) ── */}
@@ -214,59 +210,58 @@ export function AdminDashboard({
       <RegisterEventModal
         visible={modals.registerEvent}
         match={activeEventMatch}
-        disabled={modalProps.pending.any}
-        loading={modalProps.pending.hydratingEventPlayers}
         onSelectEvent={modalProps.onSelectEvent}
         onCancel={modalProps.onCloseRegisterEvent}
+        isSubmitting={modalProps.pending}
       />
       <GoalEventModal
         visible={modals.goal}
         match={activeEventMatch}
-        submitting={modalProps.pending.submittingEvent}
         onConfirm={modalProps.onGoalConfirm}
         onCancel={modalProps.onCloseGoal}
+        isSubmitting={modalProps.pending}
       />
       <YellowCardModal
         visible={modals.yellowCard}
         match={activeEventMatch}
-        submitting={modalProps.pending.submittingEvent}
         onConfirm={modalProps.onYellowCardConfirm}
         onCancel={modalProps.onCloseYellowCard}
+        isSubmitting={modalProps.pending}
       />
       <RedCardModal
         visible={modals.redCard}
         match={activeEventMatch}
-        submitting={modalProps.pending.submittingEvent}
         onConfirm={modalProps.onRedCardConfirm}
         onCancel={modalProps.onCloseRedCard}
+        isSubmitting={modalProps.pending}
       />
       <SubstitutionModal
         visible={modals.substitution}
         match={activeEventMatch}
-        submitting={modalProps.pending.submittingEvent}
         onConfirm={modalProps.onSubstitutionConfirm}
         onCancel={modalProps.onCloseSubstitution}
+        isSubmitting={modalProps.pending}
       />
       <EndMatchModal
         visible={modals.endMatch}
         match={activeEndMatch}
-        submitting={modalProps.pending.endingMatch || modalProps.pending.hydratingEndMatch}
         onConfirm={modalProps.onEndMatchConfirm}
         onCancel={modalProps.onCloseEndMatch}
+        isSubmitting={modalProps.pending}
       />
       <StartMatchModal
         visible={modals.startMatch}
         match={activeStartMatch}
-        submitting={modalProps.pending.startingMatch}
         onConfirm={modalProps.onStartMatchConfirm}
         onCancel={modalProps.onCloseStartMatch}
+        isSubmitting={modalProps.pending}
       />
       <EditScheduledMatchModal
-        visible={editMatchVisible}
-        match={matchToEdit}
-        saving={savingEditMatch}
+        visible={Boolean(editingMatch)}
+        match={editingMatch}
+        saving={savingEdit}
         onConfirm={handleEditMatchConfirm}
-        onCancel={() => { if (!savingEditMatch) { setEditMatchVisible(false); setMatchToEdit(null); } }}
+        onCancel={() => { if (!savingEdit) setEditingMatch(null); }}
       />
     </DashboardLayout>
   );

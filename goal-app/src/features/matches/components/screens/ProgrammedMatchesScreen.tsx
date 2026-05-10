@@ -1,14 +1,13 @@
 /**
  * ProgrammedMatchesScreen
- * Lista real de partidos programados. Iniciar, convocar y editar con API real.
+ * Lista real de partidos programados con tarjeta unificada.
  */
 
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { ActivityIndicator, Alert, RefreshControl, ScrollView, StatusBar, Text, TouchableOpacity, View } from 'react-native';
-import { useRouter } from 'expo-router';
-import { Ionicons } from '@expo/vector-icons';
+import { ActivityIndicator, Alert, RefreshControl, ScrollView, StatusBar, Text, View } from 'react-native';
 import { Colors } from '@/src/shared/constants/colors';
 import { useActiveLeague } from '@/src/state/activeLeague/activeLeagueStore';
+import { getDashboardPermissions } from '@/src/features/dashboard/services/dashboardService';
 import { useMatchActionModals } from '../../hooks/useMatchActionModals';
 import {
   getAwayTeamName,
@@ -16,28 +15,26 @@ import {
   getMatchDate,
   getUpcomingMatchesService,
   normalizeMatchStatus,
-  formatBackendCivilDateTime,
+  parseBackendDateTimeLiteral,
   updateScheduledMatchService,
 } from '../../services/matchesService';
+import { subscribeMatchDataChanged, emitMatchDataChanged } from '../../services/matchSync';
 import type { PartidoApi } from '../../types/matches.types';
+import { ProgrammedMatchCard } from '../cards/ProgrammedMatchCard';
 import { StartMatchModal } from '../modals/StartMatchModal';
-import { EditScheduledMatchModal } from '../modals/EditScheduledMatchModal';
-import type { EditScheduledMatchData } from '../modals/EditScheduledMatchModal';
-
-function formatDate(raw?: string | null): string {
-  return formatBackendCivilDateTime(raw);
-}
+import { EditScheduledMatchModal, type EditScheduledMatchData } from '../modals/EditScheduledMatchModal';
 
 export function ProgrammedMatchesScreen() {
-  const router = useRouter();
   const { session } = useActiveLeague();
   const leagueId = Number(session?.leagueId ?? 0);
+  const role = (session?.role ?? 'observer') as Parameters<typeof getDashboardPermissions>[0];
+  const permissions = getDashboardPermissions(role);
+
   const [matches, setMatches] = useState<PartidoApi[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [editVisible, setEditVisible] = useState(false);
-  const [editSaving, setEditSaving] = useState(false);
-  const [activeEditMatch, setActiveEditMatch] = useState<PartidoApi | null>(null);
+  const [editingMatch, setEditingMatch] = useState<PartidoApi | null>(null);
+  const [savingEdit, setSavingEdit] = useState(false);
 
   const load = useCallback(async () => {
     if (!leagueId) return;
@@ -52,92 +49,76 @@ export function ProgrammedMatchesScreen() {
     }
   }, [leagueId]);
 
-  useEffect(() => { void load(); }, [load]);
+  useEffect(() => { load(); }, [load]);
+  useEffect(() => subscribeMatchDataChanged(load), [load]);
+  useEffect(() => {
+    const intervalId = setInterval(load, 30000);
+    return () => clearInterval(intervalId);
+  }, [load]);
 
   const { modals, activeStartMatch, openStartMatch, modalProps } = useMatchActionModals(load);
-  const interactionLocked = loading || editSaving || modalProps.pending.any;
-
-  const programmed = useMemo(
-    () => matches.filter(match => normalizeMatchStatus(match.estado) === 'programado'),
-    [matches],
-  );
-
-  const openEdit = (match: PartidoApi) => {
-    if (interactionLocked) return;
-    setActiveEditMatch(match);
-    setEditVisible(true);
-  };
-
-  const closeEdit = () => {
-    if (editSaving) return;
-    setEditVisible(false);
-    setActiveEditMatch(null);
-  };
+  const programmed = useMemo(() => matches.filter((m) => normalizeMatchStatus(m.estado) === 'programado'), [matches]);
 
   const handleEditConfirm = async (data: EditScheduledMatchData) => {
-    if (!activeEditMatch || editSaving) return;
-    setEditSaving(true);
-    const result = await updateScheduledMatchService(activeEditMatch.id_partido, data);
-    setEditSaving(false);
+    if (!editingMatch) return;
+    setSavingEdit(true);
+    const result = await updateScheduledMatchService(editingMatch.id_partido, data);
+    setSavingEdit(false);
 
     if (!result.success) {
-      Alert.alert('No se pudo actualizar el partido', result.error || 'Inténtalo de nuevo.');
+      Alert.alert('No se pudo editar el partido', result.error ?? 'Inténtalo de nuevo.');
       return;
     }
 
-    setEditVisible(false);
-    setActiveEditMatch(null);
+    setEditingMatch(null);
+    emitMatchDataChanged();
     await load();
   };
 
   return (
     <View style={{ flex: 1, backgroundColor: Colors.bg.base }}>
       <StatusBar barStyle="light-content" />
-      <ScrollView refreshControl={<RefreshControl refreshing={loading} onRefresh={load} tintColor={Colors.brand.primary} />} contentContainerStyle={{ padding: 16, paddingBottom: 120 }}>
+      <ScrollView
+        refreshControl={<RefreshControl refreshing={loading} onRefresh={load} tintColor={Colors.brand.primary} />}
+        contentContainerStyle={{ padding: 16, paddingBottom: 120 }}
+      >
         <Text style={{ color: Colors.text.primary, fontSize: 24, fontWeight: '900', marginBottom: 16 }}>Programados</Text>
         {loading && programmed.length === 0 ? <ActivityIndicator color={Colors.brand.primary} style={{ marginTop: 40 }} /> : null}
         {error ? <Text style={{ color: Colors.semantic.error, marginBottom: 16 }}>{error}</Text> : null}
         {programmed.length === 0 && !loading ? <Text style={{ color: Colors.text.disabled, textAlign: 'center', marginTop: 80 }}>No hay partidos programados.</Text> : null}
 
-        {programmed.map(match => {
-          const context = {
+        {programmed.map((match) => {
+          const parts = parseBackendDateTimeLiteral(getMatchDate(match));
+          const cardMatch = {
             id: String(match.id_partido),
             homeTeam: getHomeTeamName(match),
             awayTeam: getAwayTeamName(match),
-            date: formatDate(getMatchDate(match)),
-            venue: match.estadio ?? undefined,
+            day: parts.day,
+            month: parts.month,
+            time: parts.time,
+            round: `Jornada ${match.jornada ?? match.numero_jornada ?? match.num_jornada ?? '–'}`,
+            venue: match.estadio ?? '',
+            startsAt: getMatchDate(match),
+            rawDate: getMatchDate(match),
+            homeColor: match.equipo_local?.color_primario ?? match.equipo_local?.colores ?? undefined,
+            awayColor: match.equipo_visitante?.color_primario ?? match.equipo_visitante?.colores ?? undefined,
           };
 
           return (
-            <View key={match.id_partido} style={{ backgroundColor: Colors.bg.surface1, borderRadius: 24, padding: 18, marginBottom: 16, borderWidth: 1, borderColor: Colors.bg.surface2 }}>
-              <Text style={{ color: Colors.text.secondary, fontWeight: '800' }}>{formatDate(getMatchDate(match))}</Text>
-
-              <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: 18 }}>
-                <Text style={{ color: Colors.text.primary, fontSize: 16, fontWeight: '800', flex: 1 }}>{context.homeTeam}</Text>
-                <Text style={{ color: Colors.text.disabled, fontWeight: '800' }}>vs</Text>
-                <Text style={{ color: Colors.text.primary, fontSize: 16, fontWeight: '800', flex: 1, textAlign: 'right' }}>{context.awayTeam}</Text>
-              </View>
-
-              <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 10, marginTop: 20 }}>
-                <TouchableOpacity disabled={interactionLocked} onPress={() => openStartMatch(context)} style={{ flexGrow: 1, height: 44, borderRadius: 14, backgroundColor: interactionLocked ? Colors.bg.surface2 : Colors.brand.primary, alignItems: 'center', justifyContent: 'center', opacity: interactionLocked ? 0.55 : 1 }}>
-                  <Text style={{ color: interactionLocked ? Colors.text.disabled : Colors.bg.base, fontWeight: '900' }}>{modalProps.pending.startingMatch ? 'Iniciando...' : 'Iniciar'}</Text>
-                </TouchableOpacity>
-                <TouchableOpacity disabled={interactionLocked} onPress={() => openEdit(match)} style={{ flexGrow: 1, height: 44, borderRadius: 14, backgroundColor: Colors.bg.surface2, alignItems: 'center', justifyContent: 'center', flexDirection: 'row', gap: 8, opacity: interactionLocked ? 0.45 : 1 }}>
-                  <Ionicons name="create-outline" size={18} color={Colors.text.primary} />
-                  <Text style={{ color: Colors.text.primary, fontWeight: '800' }}>Editar partido</Text>
-                </TouchableOpacity>
-                <TouchableOpacity disabled={interactionLocked} onPress={() => router.push(`/matches/programmed/${match.id_partido}/convocation`)} style={{ flexGrow: 1, height: 44, borderRadius: 14, backgroundColor: Colors.bg.surface2, alignItems: 'center', justifyContent: 'center', flexDirection: 'row', gap: 8, opacity: interactionLocked ? 0.45 : 1 }}>
-                  <Ionicons name="people-outline" size={18} color={Colors.text.primary} />
-                  <Text style={{ color: Colors.text.primary, fontWeight: '800' }}>Convocatoria</Text>
-                </TouchableOpacity>
-              </View>
-            </View>
+            <ProgrammedMatchCard
+              key={match.id_partido}
+              match={cardMatch}
+              permissions={permissions}
+              actionsDisabled={modalProps.pending || savingEdit}
+              onStartMatch={() => openStartMatch({ id: cardMatch.id, homeTeam: cardMatch.homeTeam, awayTeam: cardMatch.awayTeam, date: `${cardMatch.day} ${cardMatch.month}`, time: cardMatch.time, venue: cardMatch.venue })}
+              onEditMatch={permissions.canEditMatch ? () => setEditingMatch(match) : undefined}
+            />
           );
         })}
       </ScrollView>
 
-      <StartMatchModal visible={modals.startMatch} match={activeStartMatch} submitting={modalProps.pending.startingMatch} onConfirm={modalProps.onStartMatchConfirm} onCancel={modalProps.onCloseStartMatch} />
-      <EditScheduledMatchModal visible={editVisible} match={activeEditMatch} saving={editSaving} onConfirm={handleEditConfirm} onCancel={closeEdit} />
+      <StartMatchModal visible={modals.startMatch} match={activeStartMatch} onConfirm={modalProps.onStartMatchConfirm} onCancel={modalProps.onCloseStartMatch} isSubmitting={modalProps.pending} />
+      <EditScheduledMatchModal visible={Boolean(editingMatch)} match={editingMatch} saving={savingEdit} onConfirm={handleEditConfirm} onCancel={() => { if (!savingEdit) setEditingMatch(null); }} />
     </View>
   );
 }

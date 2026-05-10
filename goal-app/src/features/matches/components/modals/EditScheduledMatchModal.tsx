@@ -1,23 +1,17 @@
 /**
- * EditScheduledMatchModal.tsx
- * Modal RN + NativeWind para editar partidos programados.
- * Usa el mismo DateTimePickerField que la creación de partido.
+ * EditScheduledMatchModal
+ * Usa el mismo DateTimePickerField que creación de partido.
  */
 
 import React, { memo, useEffect, useMemo, useState } from 'react';
-import { Modal, Pressable, ScrollView, Text, TouchableOpacity, View } from 'react-native';
+import { Text, TouchableOpacity, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { Colors } from '@/src/shared/constants/colors';
-import { theme } from '@/src/shared/styles/theme';
 import { DateTimePickerField } from '@/src/shared/components/ui/DateTimePickerField';
 import type { EditableScheduledMatchStatus, PartidoApi } from '../../types/matches.types';
-import {
-  buildBackendCivilDateTime,
-  getAwayTeamName,
-  getHomeTeamName,
-  getMatchDate,
-  normalizeMatchStatus,
-} from '../../services/matchesService';
+import { getAwayTeamName, getHomeTeamName, getMatchDate, normalizeMatchStatus, parseBackendDateTimeLiteral } from '../../services/matchesService';
+import { MatchModalActions, MatchModalButton, MatchModalShell } from './MatchModalShell';
+import { FieldTitle } from './matchEventModalHelpers';
 
 export interface EditScheduledMatchData {
   fecha: string;
@@ -32,193 +26,126 @@ interface EditScheduledMatchModalProps {
   onCancel: () => void;
 }
 
-const STATUS_OPTIONS: { value: EditableScheduledMatchStatus; label: string; description: string }[] = [
-  { value: 'programado', label: 'Programado', description: 'Mantener el partido activo en calendario' },
-  { value: 'cancelado', label: 'Cancelado', description: 'No se jugará este partido' },
-  { value: 'suspendido', label: 'Suspendido', description: 'Partido aplazado o detenido por incidencia' },
+const STATUS_OPTIONS: Array<{ value: EditableScheduledMatchStatus; label: string; description: string; icon: keyof typeof Ionicons.glyphMap }> = [
+  { value: 'programado', label: 'Programado', description: 'Mantener el partido activo en calendario', icon: 'calendar-outline' },
+  { value: 'cancelado', label: 'Cancelado', description: 'No se jugará este partido', icon: 'close-circle-outline' },
+  { value: 'suspendido', label: 'Suspendido', description: 'Queda detenido o aplazado por incidencia', icon: 'pause-circle-outline' },
 ];
 
-function formatDateForPicker(date: Date): string {
-  const day = String(date.getDate()).padStart(2, '0');
-  const month = String(date.getMonth() + 1).padStart(2, '0');
-  return `${day}/${month}/${date.getFullYear()}`;
+function isoToPickerDate(raw?: string | null): string {
+  const parts = parseBackendDateTimeLiteral(raw);
+  if (!parts.date) return '';
+  const [year, month, day] = parts.date.split('-');
+  return `${day}/${month}/${year}`;
 }
 
-function formatTimeForPicker(date: Date): string {
-  return `${String(date.getHours()).padStart(2, '0')}:${String(date.getMinutes()).padStart(2, '0')}`;
-}
-
-function toPickerDateTime(raw?: string | null): { date: string; time: string } {
-  if (!raw) return { date: '', time: '' };
-  const parsed = new Date(raw);
-  if (!Number.isNaN(parsed.getTime())) {
-    return { date: formatDateForPicker(parsed), time: formatTimeForPicker(parsed) };
+function pickerDateToIso(value: string): string | null {
+  const clean = value.trim();
+  const spanish = clean.match(/^(\d{1,2})[/-](\d{1,2})[/-](\d{4})$/);
+  if (spanish) {
+    const [, day, month, year] = spanish;
+    return `${year}-${month.padStart(2, '0')}-${day.padStart(2, '0')}`;
   }
-
-  const fallback = String(raw).match(/^(\d{4})-(\d{2})-(\d{2})(?:[T\s](\d{2}):(\d{2}))?/);
-  if (fallback) {
-    const [, year, month, day, hour = '00', minute = '00'] = fallback;
-    return { date: `${day}/${month}/${year}`, time: `${hour}:${minute}` };
+  const iso = clean.match(/^(\d{4})-(\d{1,2})-(\d{1,2})$/);
+  if (iso) {
+    const [, year, month, day] = iso;
+    return `${year}-${month.padStart(2, '0')}-${day.padStart(2, '0')}`;
   }
-
-  return { date: '', time: '' };
-}
-
-function isValidPickerDate(value: string): boolean {
-  return /^\d{2}\/\d{2}\/\d{4}$/.test(value) || /^\d{4}-\d{2}-\d{2}$/.test(value);
+  return null;
 }
 
 function isValidTime(value: string): boolean {
-  return /^\d{2}:\d{2}$/.test(value);
+  const match = value.match(/^(\d{2}):(\d{2})$/);
+  if (!match) return false;
+  const hours = Number(match[1]);
+  const minutes = Number(match[2]);
+  return hours >= 0 && hours <= 23 && minutes >= 0 && minutes <= 59;
 }
 
-function EditScheduledMatchModalComponent({
-  visible,
-  match,
-  saving = false,
-  onConfirm,
-  onCancel,
-}: EditScheduledMatchModalProps) {
+function EditScheduledMatchModalComponent({ visible, match, saving = false, onConfirm, onCancel }: EditScheduledMatchModalProps) {
   const [date, setDate] = useState('');
   const [time, setTime] = useState('');
   const [status, setStatus] = useState<EditableScheduledMatchStatus>('programado');
 
   useEffect(() => {
     if (!visible || !match) return;
-    const next = toPickerDateTime(getMatchDate(match));
-    setDate(next.date);
-    setTime(next.time);
+    const raw = getMatchDate(match);
+    const parts = parseBackendDateTimeLiteral(raw);
+    setDate(isoToPickerDate(raw));
+    setTime(parts.time || '');
 
-    const currentStatus = normalizeMatchStatus(match.estado);
-    setStatus(currentStatus === 'cancelado' || currentStatus === 'suspendido' ? currentStatus : 'programado');
+    const current = normalizeMatchStatus(match.estado);
+    setStatus(current === 'cancelado' || current === 'suspendido' ? current : 'programado');
   }, [visible, match]);
 
   const error = useMemo(() => {
     if (!date || !time) return 'La fecha y la hora son obligatorias.';
-    if (!isValidPickerDate(date)) return 'Selecciona una fecha válida.';
+    if (!pickerDateToIso(date)) return 'Selecciona una fecha válida.';
     if (!isValidTime(time)) return 'Selecciona una hora válida.';
     return null;
   }, [date, time]);
 
   const handleConfirm = () => {
-    if (error || saving) return;
-    onConfirm({
-      // Regla del proyecto: se restan 2h antes de enviar al backend.
-      fecha: buildBackendCivilDateTime(date, time, { subtractHours: 2, appendZ: true }),
-      estado: status,
-    });
+    const isoDate = pickerDateToIso(date);
+    if (!isoDate || error || saving) return;
+    onConfirm({ fecha: `${isoDate}T${time}:00`, estado: status });
   };
 
   return (
-    <Modal
-      transparent
+    <MatchModalShell
       visible={visible}
-      animationType="slide"
-      statusBarTranslucent
-      onRequestClose={saving ? () => undefined : onCancel}
+      title="Editar partido"
+      subtitle={match ? `${getHomeTeamName(match)} vs ${getAwayTeamName(match)}` : null}
+      icon="create-outline"
+      pending={saving}
+      onClose={onCancel}
+      footer={
+        <MatchModalActions>
+          <MatchModalButton label="Cancelar" variant="secondary" disabled={saving} onPress={onCancel} />
+          <MatchModalButton label="Guardar" variant="primary" loading={saving} disabled={Boolean(error) || saving} onPress={handleConfirm} />
+        </MatchModalActions>
+      }
     >
-      <View className="flex-1 justify-end" style={{ backgroundColor: 'rgba(0,0,0,0.65)' }}>
-        <Pressable className="flex-1" onPress={saving ? undefined : onCancel} />
-        <View
-          className="px-6 pt-4"
-          style={{
-            backgroundColor: Colors.bg.surface1,
-            borderTopLeftRadius: 30,
-            borderTopRightRadius: 30,
-            paddingBottom: 40,
-            maxHeight: '90%',
-          }}
-        >
-          <View style={{ width: 42, height: 4, borderRadius: 2, backgroundColor: Colors.bg.surface2, alignSelf: 'center', marginBottom: 18 }} />
+      <View className="flex-row" style={{ gap: 12 }}>
+        <DateTimePickerField label="Fecha" value={date} mode="date" icon="calendar-outline" onChange={setDate} />
+        <DateTimePickerField label="Hora" value={time} mode="time" icon="time-outline" onChange={setTime} />
+      </View>
 
-          <ScrollView keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
-            <View className="flex-row items-center" style={{ gap: 12 }}>
-              <View style={{ width: 42, height: 42, borderRadius: 21, backgroundColor: Colors.brand.primary + '20', alignItems: 'center', justifyContent: 'center' }}>
-                <Ionicons name="create-outline" size={21} color={Colors.brand.primary} />
-              </View>
-              <View className="flex-1">
-                <Text style={{ color: Colors.text.primary, fontSize: 22, fontWeight: '900' }}>Editar partido</Text>
-                {match ? (
-                  <Text numberOfLines={1} style={{ color: Colors.text.secondary, marginTop: 2 }}>
-                    {getHomeTeamName(match)} vs {getAwayTeamName(match)}
-                  </Text>
-                ) : null}
-              </View>
-            </View>
-
-            <View className="flex-row" style={{ gap: 12, marginTop: 22 }}>
-              <DateTimePickerField
-                label="Fecha"
-                value={date}
-                mode="date"
-                icon="calendar-outline"
-                onChange={setDate}
-              />
-              <DateTimePickerField
-                label="Hora"
-                value={time}
-                mode="time"
-                icon="time-outline"
-                onChange={setTime}
-              />
-            </View>
-
-            <Text style={{ color: Colors.text.secondary, marginTop: 18, marginBottom: 10, fontWeight: '800' }}>
-              Estado permitido
-            </Text>
-            <View style={{ gap: 10 }}>
-              {STATUS_OPTIONS.map(option => {
-                const active = status === option.value;
-                return (
-                  <TouchableOpacity
-                    key={option.value}
-                    disabled={saving}
-                    onPress={() => setStatus(option.value)}
-                    activeOpacity={0.9}
-                    style={{
-                      borderRadius: theme.borderRadius.lg,
-                      backgroundColor: active ? Colors.brand.primary + '20' : Colors.bg.surface2,
-                      borderWidth: 1,
-                      borderColor: active ? Colors.brand.primary : 'transparent',
-                      padding: 14,
-                      opacity: saving ? 0.55 : 1,
-                    }}
-                  >
-                    <Text style={{ color: active ? Colors.brand.primary : Colors.text.primary, fontWeight: '900' }}>
-                      {option.label}
-                    </Text>
-                    <Text style={{ color: Colors.text.secondary, marginTop: 3, fontSize: 12 }}>
-                      {option.description}
-                    </Text>
-                  </TouchableOpacity>
-                );
-              })}
-            </View>
-
-            {error ? <Text style={{ color: Colors.semantic.warning, marginTop: 14 }}>{error}</Text> : null}
-
-            <View className="flex-row" style={{ gap: 12, marginTop: 24 }}>
+      <View style={{ marginTop: 20 }}>
+        <FieldTitle>Estado permitido</FieldTitle>
+        <View style={{ gap: 10 }}>
+          {STATUS_OPTIONS.map((option) => {
+            const active = status === option.value;
+            return (
               <TouchableOpacity
+                key={option.value}
                 disabled={saving}
-                onPress={onCancel}
-                style={{ flex: 1, height: 54, borderRadius: 16, alignItems: 'center', justifyContent: 'center', backgroundColor: Colors.bg.surface2, opacity: saving ? 0.6 : 1 }}
+                onPress={() => setStatus(option.value)}
+                activeOpacity={0.9}
+                className="flex-row items-center"
+                style={{
+                  borderRadius: 16,
+                  backgroundColor: active ? `${Colors.brand.primary}20` : Colors.bg.surface2,
+                  borderWidth: 1,
+                  borderColor: active ? Colors.brand.primary : 'transparent',
+                  padding: 14,
+                  gap: 12,
+                  opacity: saving ? 0.55 : 1,
+                }}
               >
-                <Text style={{ color: Colors.text.primary, fontWeight: '700' }}>Cancelar</Text>
+                <Ionicons name={option.icon} size={22} color={active ? Colors.brand.primary : Colors.text.secondary} />
+                <View style={{ flex: 1 }}>
+                  <Text style={{ color: active ? Colors.brand.primary : Colors.text.primary, fontWeight: '900' }}>{option.label}</Text>
+                  <Text style={{ color: Colors.text.secondary, marginTop: 3, fontSize: 12 }}>{option.description}</Text>
+                </View>
               </TouchableOpacity>
-              <TouchableOpacity
-                disabled={Boolean(error) || saving}
-                onPress={handleConfirm}
-                style={{ flex: 1, height: 54, borderRadius: 16, alignItems: 'center', justifyContent: 'center', backgroundColor: !error && !saving ? Colors.brand.primary : Colors.bg.surface2 }}
-              >
-                <Text style={{ color: !error && !saving ? Colors.bg.base : Colors.text.disabled, fontWeight: '900' }}>
-                  {saving ? 'Guardando...' : 'Guardar'}
-                </Text>
-              </TouchableOpacity>
-            </View>
-          </ScrollView>
+            );
+          })}
         </View>
       </View>
-    </Modal>
+
+      {error ? <Text style={{ color: Colors.semantic.warning, marginTop: 14, fontWeight: '700' }}>{error}</Text> : null}
+    </MatchModalShell>
   );
 }
 

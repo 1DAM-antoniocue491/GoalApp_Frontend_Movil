@@ -1,453 +1,286 @@
 /**
- * LiveMatchCard.tsx
+ * LiveMatchCard
  *
- * Tarjeta hero "EN VIVO" con efecto de estadio mediante gradientes.
- * Fuente de verdad visual para partidos en vivo en toda la app.
- *
- * TEMPORIZADOR:
- * - Si `match.startedAt` está disponible, se usa como ancla autoritativa.
- * - Sin startedAt, se deriva una ancla virtual desde `match.minute` al primer render.
- *   Esta ancla virtual avanza localmente sin depender del backend.
- * - La ancla se restablece solo al cambiar de partido o al recibir startedAt.
- * - El minuto se limita a `match.duration` (o 90 si no llega).
- *
- * ESTADO "TIEMPO AGOTADO":
- * - Cuando displayedMinute >= duration se activa `isTimeUp`.
- * - Se bloquea "Añadir evento" y se muestra el banner de finalización.
- * - "Finalizar" pasa a ser el botón primario visible.
- *
- * POR QUÉ `StyleSheet.absoluteFill` EN VEZ DE `className`:
- * - LinearGradient necesita un estilo de posición absoluta con fill completo.
- * - `StyleSheet.absoluteFill` es el patrón canónico de React Native para eso.
- * - No existe equivalente en NativeWind que sea fiable en todas las versiones.
+ * Tarjeta única para partidos en vivo en dashboard, calendario y pantalla /matches/live.
+ * Se basa en la tarjeta que funcionaba correctamente en LiveMatchesScreen:
+ * marcador claro, minuto actual y minuto máximo configurado de liga.
  */
 
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import {
-    View,
-    Text,
-    TouchableOpacity,
-    Animated,
-    StyleSheet,
-    Pressable,
-} from 'react-native';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
+import { Animated, Pressable, Text, TouchableOpacity, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter } from 'expo-router';
-
 import { routes } from '@/src/shared/config/routes';
+import { Colors } from '@/src/shared/constants/colors';
 import type { LiveMatchData } from '@/src/shared/types/dashboard.types';
 import type { DashboardPermissions } from '@/src/features/dashboard/services/dashboardService';
 
-// ---------------------------------------------------------------------------
-// Helpers
-// ---------------------------------------------------------------------------
-
-/** Calcula el minuto transcurrido desde una ancla ISO. Devuelve un valor entre 1 y limit. */
-function computeLiveMinute(anchorIso: string, limit: number): number {
-    const started = new Date(anchorIso).getTime();
-    if (Number.isNaN(started)) return 1;
-    const elapsed = Math.floor((Date.now() - started) / 60_000) + 1;
-    return Math.max(1, Math.min(limit, elapsed));
-}
-
-/**
- * Deriva una ancla ISO virtual desde el minuto actual del partido.
- * Permite que el timer avance localmente cuando el backend no devuelve startedAt.
- */
-function deriveVirtualAnchor(minute: number): string {
-    return new Date(Date.now() - Math.max(0, minute - 1) * 60_000).toISOString();
-}
-
-// ---------------------------------------------------------------------------
-// Props
-// ---------------------------------------------------------------------------
+type LiveCardMatch = LiveMatchData & {
+  duration?: number | null;
+  startedAt?: string | null;
+  homeTeamId?: number | null;
+  awayTeamId?: number | null;
+  eventsLocked?: boolean;
+};
 
 interface LiveMatchCardProps {
-    match: LiveMatchData;
-    /** Permisos del usuario actual — vienen de getDashboardPermissions(role) */
-    permissions: DashboardPermissions;
-    /** Callback cuando el usuario pulsa "Registrar evento" */
-    onRegisterEvent?: (matchId: string) => void;
-    /** Callback cuando el usuario pulsa "Finalizar partido" */
-    onEndMatch?: (matchId: string) => void;
-    actionsDisabled?: boolean;
+  match: LiveCardMatch;
+  permissions: DashboardPermissions;
+  onRegisterEvent?: (matchId: string) => void;
+  onEndMatch?: (matchId: string) => void;
+  actionsDisabled?: boolean;
 }
 
-// ---------------------------------------------------------------------------
-// Sub-componente: escudo de equipo con inicial y color corporativo
-// ---------------------------------------------------------------------------
-
-interface TeamShieldProps {
-    letter: string;
-    primaryColor: string;
+function parseLiteralTimestamp(raw?: string | null): number | null {
+  if (!raw) return null;
+  const clean = String(raw).trim();
+  const match = clean.match(/^(\d{4})-(\d{2})-(\d{2})(?:[T\s](\d{2}):(\d{2}))?/);
+  if (!match) return null;
+  const [, year, month, day, hour = '00', minute = '00'] = match;
+  const ts = new Date(Number(year), Number(month) - 1, Number(day), Number(hour), Number(minute), 0, 0).getTime();
+  return Number.isFinite(ts) ? ts : null;
 }
 
-function TeamShield({ letter, primaryColor }: TeamShieldProps) {
-    return (
-        <View
-            style={{
-                width: 60,
-                height: 60,
-                borderRadius: 30,
-                borderWidth: 2,
-                borderColor: primaryColor,
-                backgroundColor: 'rgba(28, 28, 34, 0.8)',
-                alignItems: 'center',
-                justifyContent: 'center',
-            }}
-        >
-            <Text style={{ color: primaryColor, fontSize: 24, fontWeight: 'bold' }}>
-                {letter}
-            </Text>
-        </View>
-    );
+function sanitizeDuration(value?: number | null): number {
+  const parsed = Number(value ?? 90);
+  return Number.isFinite(parsed) && parsed > 0 ? Math.floor(parsed) : 90;
 }
 
-// ---------------------------------------------------------------------------
-// Sub-componente: botón de acción
-// ---------------------------------------------------------------------------
+function getVisualMinute(match: LiveCardMatch, tick: number) {
+  const duration = sanitizeDuration(match.duration);
+  const started = parseLiteralTimestamp(match.startedAt);
 
-interface ActionButtonProps {
-    label: string;
-    icon: keyof typeof Ionicons.glyphMap;
-    onPress: () => void;
-    primary?: boolean;
-    disabled?: boolean;
+  if (started != null) {
+    const rawElapsed = Math.floor((Date.now() - started) / 60000) + 1 + tick * 0;
+    const minute = Math.max(1, Math.min(duration, rawElapsed));
+    return { minute, duration, expired: rawElapsed >= duration };
+  }
+
+  const explicit = Number(match.minute ?? 1);
+  const safeExplicit = Number.isFinite(explicit) ? Math.floor(explicit) : 1;
+  const minute = Math.max(1, Math.min(duration, safeExplicit));
+  return { minute, duration, expired: safeExplicit >= duration || Boolean(match.eventsLocked) };
 }
 
-function ActionButton({ label, icon, onPress, primary = false, disabled = false }: ActionButtonProps) {
-    return (
-        <TouchableOpacity
-            onPress={onPress}
-            disabled={disabled}
-            style={{
-                flexDirection: 'row',
-                alignItems: 'center',
-                gap: 6,
-                paddingHorizontal: 14,
-                paddingVertical: 8,
-                borderRadius: 999,
-                backgroundColor: disabled ? 'rgba(255,255,255,0.06)' : primary ? '#C4F135' : 'rgba(255,255,255,0.1)',
-                borderWidth: primary ? 0 : 1,
-                borderColor: 'rgba(255,255,255,0.2)',
-                opacity: disabled ? 0.45 : 1,
-            }}
-        >
-            <Ionicons
-                name={icon}
-                size={14}
-                color={primary ? '#0F0F13' : '#FFFFFF'}
-            />
-            <Text
-                style={{
-                    fontSize: 12,
-                    fontWeight: '600',
-                    color: primary ? '#0F0F13' : '#FFFFFF',
-                }}
-            >
-                {label}
-            </Text>
-        </TouchableOpacity>
-    );
+function TeamName({ children, align = 'left' }: { children: string; align?: 'left' | 'right' }) {
+  return (
+    <Text
+      numberOfLines={2}
+      style={{
+        color: Colors.text.primary,
+        fontSize: 16,
+        lineHeight: 20,
+        fontWeight: '800',
+        textAlign: align,
+      }}
+    >
+      {children}
+    </Text>
+  );
 }
 
-// ---------------------------------------------------------------------------
-// Componente principal
-// ---------------------------------------------------------------------------
+function ActionButton({
+  label,
+  icon,
+  onPress,
+  disabled,
+  primary,
+  danger,
+}: {
+  label: string;
+  icon: keyof typeof Ionicons.glyphMap;
+  onPress: () => void;
+  disabled?: boolean;
+  primary?: boolean;
+  danger?: boolean;
+}) {
+  const backgroundColor = disabled
+    ? Colors.bg.surface2
+    : danger
+      ? `${Colors.semantic.error}22`
+      : primary
+        ? Colors.brand.primary
+        : Colors.bg.surface2;
+  const textColor = disabled
+    ? Colors.text.disabled
+    : danger
+      ? Colors.semantic.error
+      : primary
+        ? Colors.bg.base
+        : Colors.text.primary;
+
+  return (
+    <TouchableOpacity
+      disabled={disabled}
+      onPress={onPress}
+      activeOpacity={0.86}
+      style={{
+        flexGrow: 1,
+        minWidth: '30%',
+        height: 44,
+        borderRadius: 14,
+        backgroundColor,
+        alignItems: 'center',
+        justifyContent: 'center',
+        flexDirection: 'row',
+        gap: 8,
+        opacity: disabled ? 0.58 : 1,
+      }}
+    >
+      <Ionicons name={icon} size={18} color={textColor} />
+      <Text style={{ color: textColor, fontWeight: '900', fontSize: 13 }}>{label}</Text>
+    </TouchableOpacity>
+  );
+}
 
 export function LiveMatchCard({
-    match,
-    permissions,
-    onRegisterEvent,
-    onEndMatch,
-    actionsDisabled = false,
+  match,
+  permissions,
+  onRegisterEvent,
+  onEndMatch,
+  actionsDisabled = false,
 }: LiveMatchCardProps) {
-    const router = useRouter();
+  const router = useRouter();
+  const [tick, setTick] = useState(0);
+  const pulse = useRef(new Animated.Value(1)).current;
 
-    const homeColor = match.homeColor ?? '#FFFFFF';
-    const awayColor = match.awayColor ?? '#C4F135';
-    const homeLetter = match.homeShieldLetter ?? match.homeTeam.charAt(0);
-    const awayLetter = match.awayShieldLetter ?? match.awayTeam.charAt(0);
+  useEffect(() => {
+    const interval = setInterval(() => setTick((value) => value + 1), 30000);
+    return () => clearInterval(interval);
+  }, []);
 
-    const safeDuration = useMemo(() => {
-        const d = Number(match.duration ?? 90);
-        return Number.isFinite(d) && d > 0 ? d : 90;
-    }, [match.duration]);
-
-    // ── Temporizador ──
-    // timerAnchorRef: ISO timestamp desde el que calculamos el minuto actual.
-    // Si el backend devuelve startedAt: se usa directamente (autoritativo).
-    // Si no: se deriva una ancla virtual desde match.minute (avanza localmente).
-    // La ancla virtual nunca retrocede — solo se recalcula al cambiar de partido.
-    const timerAnchorRef = useRef(
-        match.startedAt ?? deriveVirtualAnchor(match.minute ?? 1),
+  useEffect(() => {
+    const animation = Animated.loop(
+      Animated.sequence([
+        Animated.timing(pulse, { toValue: 0.25, duration: 650, useNativeDriver: true }),
+        Animated.timing(pulse, { toValue: 1, duration: 650, useNativeDriver: true }),
+      ]),
     );
-    const timerMatchIdRef = useRef(String(match.id));
+    animation.start();
+    return () => animation.stop();
+  }, [pulse]);
 
-    const [localMinute, setLocalMinute] = useState(() =>
-        computeLiveMinute(timerAnchorRef.current, safeDuration),
-    );
+  const { minute, duration, expired } = useMemo(() => getVisualMinute(match, tick), [match, tick]);
+  const eventLocked = actionsDisabled || expired || Boolean(match.eventsLocked);
 
-    // Sincronizar ancla cuando cambia el partido o llega startedAt autoritativo.
-    useEffect(() => {
-        const matchId = String(match.id);
-        if (matchId !== timerMatchIdRef.current) {
-            // Partido nuevo: reiniciar ancla
-            timerMatchIdRef.current = matchId;
-            timerAnchorRef.current = match.startedAt ?? deriveVirtualAnchor(match.minute ?? 1);
-        } else if (match.startedAt) {
-            // Llegó timestamp autoritativo: adoptar
-            timerAnchorRef.current = match.startedAt;
-        }
-        // Mismo partido sin startedAt → mantener ancla virtual (el timer sigue avanzando)
-        setLocalMinute(computeLiveMinute(timerAnchorRef.current, safeDuration));
-    }, [match.id, match.startedAt, match.minute, safeDuration]);
-
-    // Tick cada 60 s — granularidad de minuto, sin depender del backend.
-    useEffect(() => {
-        const id = setInterval(
-            () => setLocalMinute(computeLiveMinute(timerAnchorRef.current, safeDuration)),
-            60_000,
-        );
-        return () => clearInterval(id);
-    }, [match.id, safeDuration]);
-
-    const displayedMinute = useMemo(
-        () => Math.max(1, Math.min(safeDuration, localMinute)),
-        [safeDuration, localMinute],
-    );
-
-    /** true cuando el partido ha llegado a la duración configurada */
-    const isTimeUp = displayedMinute >= safeDuration;
-
-    // ── Pulso EN VIVO ──
-    const pulse = useRef(new Animated.Value(1)).current;
-    useEffect(() => {
-        Animated.loop(
-            Animated.sequence([
-                Animated.timing(pulse, { toValue: 0.2, duration: 600, useNativeDriver: true }),
-                Animated.timing(pulse, { toValue: 1, duration: 600, useNativeDriver: true }),
-            ])
-        ).start();
-    }, []);
-
-    const handleCardPress = useCallback(() => {
-        // router.push(routes.private.matches.detail(match.id) as never);
-    }, []);
-
-    return (
-        <Pressable
-            onPress={handleCardPress}
-            style={{ marginHorizontal: 10, marginTop: 8, borderRadius: 20, overflow: 'hidden' }}
+  return (
+    <Pressable
+      style={{
+        backgroundColor: Colors.bg.surface1,
+        borderRadius: 24,
+        padding: 18,
+        marginBottom: 16,
+        borderWidth: 1,
+        borderColor: expired ? `${Colors.semantic.warning}88` : `${Colors.brand.primary}45`,
+      }}
+    >
+      <View className="flex-row items-center justify-between">
+        <View className="flex-row items-center" style={{ gap: 8 }}>
+          <Animated.View
+            style={{
+              width: 8,
+              height: 8,
+              borderRadius: 4,
+              backgroundColor: Colors.brand.primary,
+              opacity: pulse,
+            }}
+          />
+          <Text style={{ color: Colors.brand.primary, fontWeight: '900', letterSpacing: 0.8 }}>EN VIVO</Text>
+        </View>
+        <View
+          style={{
+            borderRadius: 999,
+            paddingHorizontal: 12,
+            paddingVertical: 5,
+            backgroundColor: expired ? `${Colors.semantic.warning}22` : Colors.brand.primary,
+          }}
         >
-            {/* Gradiente verde oscuro: efecto césped/estadio */}
-            <LinearGradient
-                colors={['#0A1A0A', '#111F0E', '#162B12', '#0D1A0A']}
-                start={{ x: 0, y: 0 }}
-                end={{ x: 1, y: 1 }}
-                style={StyleSheet.absoluteFill}
+          <Text style={{ color: expired ? Colors.semantic.warning : Colors.bg.base, fontWeight: '900' }}>
+            {minute}' / {duration}'
+          </Text>
+        </View>
+      </View>
+
+      <View className="flex-row items-center justify-between" style={{ marginTop: 22, gap: 10 }}>
+        <View className="flex-1">
+          <TeamName>{match.homeTeam}</TeamName>
+        </View>
+
+        <View style={{ minWidth: 112, alignItems: 'center' }}>
+          <Text
+            style={{
+              color: Colors.text.primary,
+              fontSize: 34,
+              lineHeight: 40,
+              fontWeight: '900',
+              letterSpacing: -1,
+            }}
+          >
+            {match.homeScore ?? 0} - {match.awayScore ?? 0}
+          </Text>
+        </View>
+
+        <View className="flex-1">
+          <TeamName align="right">{match.awayTeam}</TeamName>
+        </View>
+      </View>
+
+      {match.venue ? (
+        <View className="flex-row items-center justify-center" style={{ gap: 5, marginTop: 14 }}>
+          <Ionicons name="location-outline" size={13} color={Colors.text.disabled} />
+          <Text numberOfLines={1} style={{ color: Colors.text.disabled, fontSize: 12 }}>{match.venue}</Text>
+        </View>
+      ) : null}
+
+      {expired ? (
+        <View
+          style={{
+            marginTop: 16,
+            borderRadius: 16,
+            padding: 12,
+            backgroundColor: `${Colors.semantic.warning}16`,
+            borderWidth: 1,
+            borderColor: `${Colors.semantic.warning}55`,
+          }}
+        >
+          <Text style={{ color: Colors.semantic.warning, fontSize: 13, lineHeight: 18, fontWeight: '900', textAlign: 'center' }}>
+            Finaliza el partido y escoge el MVP
+          </Text>
+        </View>
+      ) : null}
+
+      {(permissions.canViewLineups || permissions.canRegisterEvent || permissions.canEndMatch) ? (
+        <View className="flex-row flex-wrap" style={{ gap: 10, marginTop: 18 }}>
+          {permissions.canViewLineups ? (
+            <ActionButton
+              label="Plantillas"
+              icon="people-outline"
+              disabled={actionsDisabled}
+              onPress={() => router.push(routes.private.matchRoutes.live.squad(match.id) as never)}
             />
+          ) : null}
 
-            {/* Borde sutil con el brand color */}
-            <View
-                style={[
-                    StyleSheet.absoluteFill,
-                    {
-                        borderRadius: 20,
-                        borderWidth: 1,
-                        borderColor: isTimeUp
-                            ? 'rgba(255, 180, 0, 0.35)'
-                            : 'rgba(196, 241, 53, 0.2)',
-                    },
-                ]}
+          {permissions.canRegisterEvent ? (
+            <ActionButton
+              label="Evento"
+              icon="add-circle-outline"
+              primary
+              disabled={eventLocked}
+              onPress={() => onRegisterEvent?.(match.id)}
             />
+          ) : null}
 
-            {/* Halo central */}
-            <View
-                style={{
-                    position: 'absolute',
-                    top: '15%',
-                    left: '20%',
-                    right: '20%',
-                    height: 100,
-                    backgroundColor: 'rgba(196, 241, 53, 0.04)',
-                    borderRadius: 50,
-                }}
+          {permissions.canEndMatch ? (
+            <ActionButton
+              label="Finalizar"
+              icon="checkmark-circle-outline"
+              danger
+              disabled={actionsDisabled}
+              onPress={() => onEndMatch?.(match.id)}
             />
-
-            {/* Contenido */}
-            <View style={{ padding: 18 }}>
-
-                {/* Indicador EN VIVO */}
-                <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 18 }}>
-                    <Animated.View
-                        style={{
-                            width: 8,
-                            height: 8,
-                            borderRadius: 4,
-                            backgroundColor: isTimeUp ? '#FFB400' : '#C4F135',
-                            marginRight: 7,
-                            opacity: pulse,
-                        }}
-                    />
-                    <Text
-                        style={{
-                            color: isTimeUp ? '#FFB400' : '#C4F135',
-                            fontSize: 11,
-                            fontWeight: '700',
-                            letterSpacing: 1.5,
-                        }}
-                    >
-                        EN VIVO
-                    </Text>
-                </View>
-
-                {/* Marcador: escudo local — resultado — escudo visitante */}
-                <View
-                    style={{
-                        flexDirection: 'row',
-                        alignItems: 'center',
-                        justifyContent: 'space-between',
-                    }}
-                >
-                    {/* Equipo local */}
-                    <View style={{ alignItems: 'center', flex: 1 }}>
-                        <TeamShield letter={homeLetter} primaryColor={homeColor} />
-                        <Text
-                            style={{
-                                color: '#FFFFFF',
-                                fontWeight: '600',
-                                fontSize: 13,
-                                marginTop: 8,
-                                textAlign: 'center',
-                            }}
-                            numberOfLines={2}
-                        >
-                            {match.homeTeam}
-                        </Text>
-                    </View>
-
-                    {/* Centro: minuto + marcador */}
-                    <View style={{ alignItems: 'center', flex: 1.4 }}>
-                        {/* Badge de minuto */}
-                        <View
-                            style={{
-                                backgroundColor: isTimeUp ? '#FFB400' : '#C4F135',
-                                paddingHorizontal: 12,
-                                paddingVertical: 4,
-                                borderRadius: 999,
-                                marginBottom: 8,
-                            }}
-                        >
-                            <Text style={{ color: '#0F0F13', fontSize: 12, fontWeight: '800' }}>
-                                {displayedMinute}'
-                            </Text>
-                        </View>
-
-                        {/* Marcador */}
-                        <Text
-                            style={{
-                                color: '#FFFFFF',
-                                fontSize: 44,
-                                fontWeight: 'bold',
-                                lineHeight: 50,
-                                letterSpacing: -1,
-                            }}
-                        >
-                            {match.homeScore} - {match.awayScore}
-                        </Text>
-                    </View>
-
-                    {/* Equipo visitante */}
-                    <View style={{ alignItems: 'center', flex: 1 }}>
-                        <TeamShield letter={awayLetter} primaryColor={awayColor} />
-                        <Text
-                            style={{
-                                color: '#FFFFFF',
-                                fontWeight: '600',
-                                fontSize: 13,
-                                marginTop: 8,
-                                textAlign: 'center',
-                            }}
-                            numberOfLines={2}
-                        >
-                            {match.awayTeam}
-                        </Text>
-                    </View>
-                </View>
-
-
-{/* Banner de tiempo agotado */}
-                {isTimeUp && (
-                    <View
-                        style={{
-                            flexDirection: 'row',
-                            alignItems: 'center',
-                            gap: 8,
-                            marginTop: 14,
-                            paddingHorizontal: 14,
-                            paddingVertical: 10,
-                            borderRadius: 12,
-                            backgroundColor: 'rgba(255, 180, 0, 0.12)',
-                            borderWidth: 1,
-                            borderColor: 'rgba(255, 180, 0, 0.35)',
-                        }}
-                    >
-                        <Ionicons name="timer-outline" size={16} color="#FFB400" />
-                        <Text style={{ color: '#FFB400', fontSize: 13, fontWeight: '700', flex: 1 }}>
-                            Finaliza el partido y elige el MVP
-                        </Text>
-                    </View>
-                )}
-
-                {/* Botones de acción por rol */}
-                {(permissions.canRegisterEvent || permissions.canViewLineups || permissions.canEndMatch) && (
-                    <View
-                        style={{
-                            flexDirection: 'row',
-                            flexWrap: 'wrap',
-                            gap: 8,
-                            marginTop: 14,
-                        }}
-                    >
-                        {permissions.canViewLineups && (
-                            <ActionButton
-                                label="Ver plantillas"
-                                icon="people-outline"
-                                disabled={actionsDisabled}
-                                onPress={() => {
-                                    if (!actionsDisabled) router.push(routes.private.matchRoutes.live.squad(match.id) as never);
-                                }}
-                            />
-                        )}
-                        {permissions.canRegisterEvent && (
-                            <ActionButton
-                                label="Añadir evento"
-                                icon="add-circle-outline"
-                                primary={!isTimeUp}
-                                // Bloqueado cuando el tiempo se ha agotado
-                                disabled={actionsDisabled || isTimeUp}
-                                onPress={() => {
-                                    if (!actionsDisabled && !isTimeUp) onRegisterEvent?.(match.id);
-                                }}
-                            />
-                        )}
-                        {permissions.canEndMatch && (
-                            <ActionButton
-                                label="Finalizar"
-                                icon="checkmark-circle-outline"
-                                // Pasa a ser primario cuando el tiempo se agota
-                                primary={isTimeUp}
-                                disabled={actionsDisabled}
-                                onPress={() => {
-                                    if (!actionsDisabled) onEndMatch?.(match.id);
-                                }}
-                            />
-                        )}
-                    </View>
-                )}
-            </View>
-        </Pressable>
-    );
+          ) : null}
+        </View>
+      ) : null}
+    </Pressable>
+  );
 }

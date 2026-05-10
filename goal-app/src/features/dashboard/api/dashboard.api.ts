@@ -62,6 +62,8 @@ interface PartidoConEquiposResponse {
   goles_visitante: number;
   /** Minuto actual — solo presente si estado === 'en_juego' */
   minuto_actual?: number | null;
+  inicio_en?: string | null;
+  started_at?: string | null;
   equipo_local: EquipoResumen;
   equipo_visitante: EquipoResumen;
   jornada?: JornadaResumen | null;
@@ -118,8 +120,8 @@ const MESES = ['ENE', 'FEB', 'MAR', 'ABR', 'MAY', 'JUN', 'JUL', 'AGO', 'SEP', 'O
  * Normaliza el estado del partido a un valor canónico.
  * El backend puede devolver 'en_juego' o 'en_vivo' según versión.
  */
-function normalizarEstado(estado: string | null | undefined): 'en_juego' | 'programado' | 'finalizado' | 'otro' {
-  const s = String(estado ?? '').toLowerCase().trim();
+function normalizarEstado(estado: string): 'en_juego' | 'programado' | 'finalizado' | 'otro' {
+  const s = estado.toLowerCase().trim();
   if (s === 'en_juego' || s === 'en_vivo') return 'en_juego';
   if (s === 'programado') return 'programado';
   if (s === 'finalizado') return 'finalizado';
@@ -130,18 +132,20 @@ function normalizarEstado(estado: string | null | undefined): 'en_juego' | 'prog
  * Parsea una fecha ISO y extrae día, mes abreviado y hora para UpcomingMatchData.
  * Si la fecha es inválida devuelve valores vacíos en vez de romper.
  */
-function parseFechaHora(fechaHora: string | null | undefined): { day: string; month: string; time: string } {
-  if (!fechaHora) return { day: '–', month: '–', time: '–' };
-  try {
-    const d = new Date(fechaHora);
-    if (isNaN(d.getTime())) return { day: '–', month: '–', time: '–' };
-    const day = String(d.getDate());
-    const month = MESES[d.getMonth()] ?? '–';
-    const time = `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
-    return { day, month, time };
-  } catch {
-    return { day: '–', month: '–', time: '–' };
-  }
+function parseFechaHora(fechaHora: string | null | undefined): { day: string; month: string; time: string; raw: string | null } {
+  if (!fechaHora) return { day: '–', month: '–', time: '–', raw: null };
+
+  const clean = String(fechaHora).trim();
+  const match = clean.match(/^(\d{4})-(\d{2})-(\d{2})(?:[T\s](\d{2}):(\d{2}))?/);
+  if (!match) return { day: '–', month: '–', time: '–', raw: clean };
+
+  // Extraer hora literal: no usar new Date() porque aplica zona horaria y desplaza +2h.
+  const [, , rawMonth, rawDay, rawHour = '00', rawMinute = '00'] = match;
+  const monthIndex = Math.max(0, Math.min(11, Number(rawMonth) - 1));
+  const day = String(Number(rawDay));
+  const month = MESES[monthIndex] ?? '–';
+  const time = `${rawHour}:${rawMinute}`;
+  return { day, month, time, raw: clean };
 }
 
 // ---------------------------------------------------------------------------
@@ -185,16 +189,8 @@ interface PartidoJornadaRaw {
   fecha?: string | null;
   hora?: string | null;
   estadio?: string | null;
-  goles_local?: number | null;
-  goles_visitante?: number | null;
-  minuto_actual?: number | null;
-  /** Timestamp de inicio — para calcular el minuto real transcurrido. */
   inicio_en?: string | null;
   started_at?: string | null;
-  fecha_inicio?: string | null;
-  /** Duración configurada del partido en minutos. */
-  duracion_partido?: number | null;
-  minutos_partido?: number | null;
   equipo_local?: {
     id_equipo?: number;
     id?: number;
@@ -217,108 +213,6 @@ interface PartidoJornadaRaw {
   numero?: number | null;
 }
 
-interface JornadaProgressResult {
-  totalRounds: number;
-  completedRounds: number;
-}
-
-function toSafeNumber(value: unknown): number | null {
-  const n = Number(value);
-  return Number.isFinite(n) ? n : null;
-}
-
-function getJornadaNumberFromGroup(group: Record<string, unknown>, fallbackIndex: number): number | null {
-  return (
-    toSafeNumber(group.jornada) ??
-    toSafeNumber(group.numero_jornada) ??
-    toSafeNumber(group.num_jornada) ??
-    toSafeNumber(group.numero) ??
-    toSafeNumber(group.id_jornada) ??
-    fallbackIndex + 1
-  );
-}
-
-function getPartidoJornadaKey(partido: PartidoConEquiposResponse | PartidoJornadaRaw): string | null {
-  const p = partido as unknown as Record<string, unknown>;
-  const jornada = p.jornada;
-
-  if (jornada && typeof jornada === 'object') {
-    const j = jornada as Record<string, unknown>;
-    const fromObject =
-      toSafeNumber(j.id_jornada) ??
-      toSafeNumber(j.numero) ??
-      toSafeNumber(j.jornada) ??
-      toSafeNumber(j.numero_jornada) ??
-      toSafeNumber(j.num_jornada);
-    return fromObject != null ? String(fromObject) : null;
-  }
-
-  const fromFlat =
-    toSafeNumber(p.id_jornada) ??
-    toSafeNumber(p.jornada) ??
-    toSafeNumber(p.numero_jornada) ??
-    toSafeNumber(p.num_jornada) ??
-    toSafeNumber(p.numero);
-
-  return fromFlat != null ? String(fromFlat) : null;
-}
-
-function getJornadaGroups(raw: unknown): Array<{ key: string; partidos: PartidoJornadaRaw[] }> {
-  if (!raw || typeof raw !== 'object') return [];
-
-  const source = Array.isArray(raw)
-    ? raw
-    : Array.isArray((raw as Record<string, unknown>).jornadas)
-      ? ((raw as Record<string, unknown>).jornadas as unknown[])
-      : [];
-
-  if (source.length === 0) return [];
-
-  const first = source[0] as Record<string, unknown>;
-
-  // Forma agrupada: [{ jornada: N, partidos: [...] }].
-  // Esta es la fuente más fiable para saber si una jornada está COMPLETA:
-  // solo cuenta como completada si todos sus partidos están finalizados.
-  if (Array.isArray(first?.partidos)) {
-    return (source as Record<string, unknown>[]).map((group, index) => {
-      const jornadaNumber = getJornadaNumberFromGroup(group, index);
-      return {
-        key: String(jornadaNumber ?? index + 1),
-        partidos: Array.isArray(group.partidos) ? (group.partidos as PartidoJornadaRaw[]) : [],
-      };
-    });
-  }
-
-  // Forma plana: [{ id_partido, jornada, ... }]. Agrupamos manualmente.
-  const grouped = new Map<string, PartidoJornadaRaw[]>();
-  (source as PartidoJornadaRaw[]).forEach((partido, index) => {
-    const key = getPartidoJornadaKey(partido) ?? `sin-jornada-${index}`;
-    const current = grouped.get(key) ?? [];
-    current.push(partido);
-    grouped.set(key, current);
-  });
-
-  return Array.from(grouped, ([key, partidos]) => ({ key, partidos }));
-}
-
-function deriveRoundProgressFromJornadas(raw: unknown): JornadaProgressResult | null {
-  const groups = getJornadaGroups(raw);
-  if (groups.length === 0) return null;
-
-  const completedRounds = groups.filter((group) => {
-    // Una jornada vacía no se considera completada: necesita partidos y todos finalizados.
-    return (
-      group.partidos.length > 0 &&
-      group.partidos.every((partido) => normalizarEstado(partido.estado) === 'finalizado')
-    );
-  }).length;
-
-  return {
-    totalRounds: groups.length,
-    completedRounds,
-  };
-}
-
 /**
  * Extrae un array plano de partidos desde la respuesta cruda de /jornadas.
  * Maneja las 3 formas posibles que devuelve el backend:
@@ -334,17 +228,9 @@ function extractPartidosFromJornadas(raw: unknown): PartidoJornadaRaw[] {
     const first = raw[0] as Record<string, unknown>;
     // Case A: array de jornadas agrupadas
     if (Array.isArray(first?.partidos)) {
-      return (raw as Record<string, unknown>[]).flatMap((j, index) => {
-        const jornadaNumber = getJornadaNumberFromGroup(j, index);
-        const partidos = Array.isArray(j.partidos) ? (j.partidos as PartidoJornadaRaw[]) : [];
-
-        // Conservamos el número de jornada en cada partido para que el dashboard
-        // no tenga que mostrar siempre el fallback "Jornada 1".
-        return partidos.map((partido) => ({
-          ...partido,
-          jornada: partido.jornada ?? jornadaNumber,
-        }));
-      });
+      return (raw as Record<string, unknown>[]).flatMap(
+        (j) => (Array.isArray(j.partidos) ? (j.partidos as PartidoJornadaRaw[]) : []),
+      );
     }
     // Case C: array plano de partidos
     if ('id_partido' in first) {
@@ -356,15 +242,9 @@ function extractPartidosFromJornadas(raw: unknown): PartidoJornadaRaw[] {
   // Case B: { jornadas: [...] }
   const obj = raw as Record<string, unknown>;
   if (Array.isArray(obj.jornadas)) {
-    return (obj.jornadas as Record<string, unknown>[]).flatMap((j, index) => {
-      const jornadaNumber = getJornadaNumberFromGroup(j, index);
-      const partidos = Array.isArray(j.partidos) ? (j.partidos as PartidoJornadaRaw[]) : [];
-
-      return partidos.map((partido) => ({
-        ...partido,
-        jornada: partido.jornada ?? jornadaNumber,
-      }));
-    });
+    return (obj.jornadas as Record<string, unknown>[]).flatMap(
+      (j) => (Array.isArray(j.partidos) ? (j.partidos as PartidoJornadaRaw[]) : []),
+    );
   }
 
   return [];
@@ -428,8 +308,9 @@ function mapJornadaPartidoToUpcoming(
     venue: partido.estadio ?? '',
     homeColor: homeColor ?? undefined,
     awayColor: awayColor ?? undefined,
-    rawDateTime: fechaStr ?? null,
-  };
+    startsAt: fechaStr,
+    rawDate: fechaStr,
+  } as UpcomingMatchData;
 }
 
 /**
@@ -440,7 +321,7 @@ function mapJornadaPartidoToLive(
   partido: PartidoJornadaRaw,
   leagueName: string,
   teamsById: Map<number, EquipoListResponse>,
-  matchDuration: number,
+  duration: number,
 ): LiveMatchData | null {
   if (normalizarEstado(partido.estado) !== 'en_juego') return null;
 
@@ -455,16 +336,17 @@ function mapJornadaPartidoToLive(
   const homeTeam = partido.equipo_local?.nombre ?? homeTeamObj?.nombre ?? `Equipo ${homeId ?? '?'}`;
   const awayTeam = partido.equipo_visitante?.nombre ?? awayTeamObj?.nombre ?? `Equipo ${awayId ?? '?'}`;
 
-  const startedAt = partido.inicio_en ?? partido.started_at ?? partido.fecha_inicio ?? null;
-  const duration = partido.minutos_partido ?? partido.duracion_partido ?? matchDuration;
-
   return {
     id: String(partido.id_partido),
     homeTeam,
     awayTeam,
-    homeScore: partido.goles_local ?? 0,
-    awayScore: partido.goles_visitante ?? 0,
-    minute: partido.minuto_actual ?? 0,
+    homeScore: 0,
+    awayScore: 0,
+    minute: 1,
+    homeTeamId: homeId,
+    awayTeamId: awayId,
+    startedAt: partido.inicio_en ?? partido.started_at ?? partido.fecha_hora ?? partido.fecha ?? null,
+    duration,
     leagueName,
     venue: partido.estadio ?? '',
     homeShieldLetter: homeTeam.charAt(0).toUpperCase(),
@@ -479,11 +361,7 @@ function mapJornadaPartidoToLive(
       partido.equipo_visitante?.colores ??
       awayTeamObj?.color_primario ??
       undefined,
-    homeTeamId: homeId,
-    awayTeamId: awayId,
-    startedAt,
-    duration,
-  };
+  } as LiveMatchData;
 }
 
 // ---------------------------------------------------------------------------
@@ -493,7 +371,7 @@ function mapJornadaPartidoToLive(
 function mapPartidoToLiveMatch(
   partido: PartidoConEquiposResponse,
   leagueName: string,
-  matchDuration: number,
+  duration: number,
 ): LiveMatchData {
   const homeTeam = getTeamName(partido.equipo_local, `Equipo ${partido.equipo_local?.id_equipo ?? 'local'}`);
   const awayTeam = getTeamName(partido.equipo_visitante, `Equipo ${partido.equipo_visitante?.id_equipo ?? 'visitante'}`);
@@ -506,32 +384,24 @@ function mapPartidoToLiveMatch(
     });
   }
 
-  const raw = partido as unknown as Record<string, unknown>;
-  const startedAt =
-    (raw.inicio_en as string | null | undefined) ??
-    (raw.started_at as string | null | undefined) ??
-    (raw.fecha_inicio as string | null | undefined) ??
-    null;
-  const duration = Number(raw.minutos_partido ?? raw.duracion_partido ?? matchDuration) || matchDuration;
-
   return {
     id: String(partido.id_partido),
     homeTeam,
     awayTeam,
     homeScore: partido.goles_local ?? 0,
     awayScore: partido.goles_visitante ?? 0,
-    minute: partido.minuto_actual ?? 0,
+    minute: partido.minuto_actual ?? 1,
+    homeTeamId: partido.equipo_local?.id_equipo,
+    awayTeamId: partido.equipo_visitante?.id_equipo,
+    startedAt: partido.inicio_en ?? partido.started_at ?? partido.fecha_hora ?? null,
+    duration,
     leagueName,
     venue: partido.estadio ?? '',
     homeShieldLetter: homeTeam.charAt(0).toUpperCase(),
     awayShieldLetter: awayTeam.charAt(0).toUpperCase(),
     homeColor: partido.equipo_local?.color_primario ?? undefined,
     awayColor: partido.equipo_visitante?.color_primario ?? undefined,
-    homeTeamId: partido.equipo_local?.id_equipo,
-    awayTeamId: partido.equipo_visitante?.id_equipo,
-    startedAt,
-    duration,
-  };
+  } as LiveMatchData;
 }
 
 function mapPartidoToUpcoming(partido: PartidoConEquiposResponse): UpcomingMatchData {
@@ -558,36 +428,29 @@ function mapPartidoToUpcoming(partido: PartidoConEquiposResponse): UpcomingMatch
     venue: partido.estadio ?? '',
     homeColor: partido.equipo_local?.color_primario ?? undefined,
     awayColor: partido.equipo_visitante?.color_primario ?? undefined,
-    rawDateTime: partido.fecha_hora ?? null,
-  };
+    startsAt: partido.fecha_hora,
+    rawDate: partido.fecha_hora,
+  } as UpcomingMatchData;
 }
 
 function buildMetrics(
   liga: LigaResponse,
   equipos: EquipoListResponse[],
-  partidos: Array<PartidoConEquiposResponse | PartidoJornadaRaw>,
+  partidos: PartidoConEquiposResponse[],
   clasificacion: ClasificacionResumen[],
   stats: EstadisticasTemporadaResponse | null,
   usuarios: UsuarioLigaApi[],
   /** ID del usuario autenticado — para incluirlo si no aparece en /usuarios */
   currentUserId: number | null,
-  /** max_equipos de la configuración de la liga — el progreso llega al 100% al alcanzar el máximo permitido */
-  maxEquipos: number | null,
-  /** Progreso real de jornadas calculado desde /jornadas: una jornada solo cuenta si todos sus partidos finalizaron */
-  roundProgress: JornadaProgressResult | null,
+  /** min_equipos de la configuración de la liga — el progreso llega al 100% cuando se alcanza */
+  minEquipos: number | null,
 ): LeagueMetricsData {
   // registeredTeams: equipos realmente inscritos (fuente: array del endpoint).
-  // configuredMaxTeams: máximo de equipos permitido por la configuración de la liga.
-  //   REGLA DE PRODUCTO: la barra de "Equipos activos" se completa contra el máximo,
-  //   no contra el mínimo. El mínimo sirve para validar la liga, no para completar el progreso.
-  //   Fallback: liga.equipos_total → conteo real.
+  // configuredMinTeams: mínimo de equipos requerido por la configuración de la liga.
+  //   Es el denominador en ProgressMetrics: la barra se llena cuando se alcanzan los equipos mínimos.
+  //   Fallback: liga.equipos_total (max configurado) → conteo real.
   const registeredTeams = equipos.length;
-  const configuredMaxTeams =
-    maxEquipos != null && maxEquipos > 0
-      ? maxEquipos
-      : liga.equipos_total != null && liga.equipos_total > 0
-        ? liga.equipos_total
-        : registeredTeams;
+  const configuredMaxTeams = minEquipos ?? liga.equipos_total ?? registeredTeams;
 
   // activeTeams: equipos con activo !== false. Si el campo no existe en ninguno, todos se consideran activos.
   const activeTeams = equipos.some(e => e.activo !== undefined)
@@ -620,24 +483,22 @@ function buildMetrics(
   // Líder actual (primer elemento de clasificación, ya viene ordenada por el backend)
   const leader = clasificacion[0] ?? null;
 
-  // Progreso de jornadas:
-  // - Fuente preferente: /jornadas, porque permite verificar TODOS los partidos de cada jornada.
-  // - Una jornada solo se marca como completada si todos sus partidos están finalizados.
-  // - stats se mantiene como fallback para no dejar la métrica vacía si /jornadas falla.
+  // Derivar jornadas únicas desde partidos cuando stats no está disponible.
+  // Se usan id_jornada si existe, sino numero, para no contarlas doble.
   const allJornadas = new Set(
     partidos
-      .map(getPartidoJornadaKey)
-      .filter((v): v is string => v != null),
+      .map(p => p.jornada?.id_jornada ?? p.jornada?.numero)
+      .filter((v): v is number => v != null),
   );
   const finishedJornadas = new Set(
     partidos
       .filter(p => normalizarEstado(p.estado) === 'finalizado')
-      .map(getPartidoJornadaKey)
-      .filter((v): v is string => v != null),
+      .map(p => p.jornada?.id_jornada ?? p.jornada?.numero)
+      .filter((v): v is number => v != null),
   );
 
-  const totalRounds = roundProgress?.totalRounds ?? stats?.total_jornadas ?? allJornadas.size;
-  const completedRounds = roundProgress?.completedRounds ?? stats?.jornadas_completadas ?? finishedJornadas.size;
+  const totalRounds = stats?.total_jornadas ?? allJornadas.size;
+  const completedRounds = stats?.jornadas_completadas ?? finishedJornadas.size;
 
   const metrics: LeagueMetricsData = {
     // LeagueMetrics (grid 2×2): conteos reales
@@ -860,13 +721,12 @@ export async function fetchDashboardData(ligaId: number): Promise<DashboardData>
     logger.info('dashboard.api', '[usuarios] OK', { ligaId, count: usuarios.length });
   }
 
-  // Duración del partido desde configuración de liga — necesaria para los mapeos que siguen.
-  // Se extrae aquí para evitar usar matchDuration antes de su declaración (TDZ).
-  const ligaConfigRaw = (ligaConfigResult.status === 'fulfilled' ? ligaConfigResult.value : null) as Record<string, unknown> | null;
-  const matchDuration: number =
-    Number(ligaConfigRaw?.minutos_partido ?? ligaConfigRaw?.duracion_partido ?? 90) || 90;
-
   // ── Mapeos ─────────────────────────────────────────────────────────────────
+
+  const leagueConfig = ligaConfigResult.status === 'fulfilled' ? ligaConfigResult.value : null;
+  const matchDuration = Number.isFinite(Number(leagueConfig?.minutos_partido))
+    ? Math.max(1, Math.floor(Number(leagueConfig?.minutos_partido)))
+    : 90;
 
   // Mapa de equipos para resolución de nombres cuando /jornadas no embebe los objetos
   const teamsById = new Map<number, EquipoListResponse>(
@@ -879,25 +739,20 @@ export async function fetchDashboardData(ligaId: number): Promise<DashboardData>
   const liveFromJornadas = partidosDeJornadas.find(
     (p) => normalizarEstado(p.estado) === 'en_juego',
   );
-  const liveFromConEquipos = partidos.find((p) => normalizarEstado(p.estado) === 'en_juego');
   const liveMatch: LiveMatchData | null = liveFromJornadas
     ? (mapJornadaPartidoToLive(liveFromJornadas, liga.nombre, teamsById, matchDuration) ?? null)
-    : (liveFromConEquipos
-        ? mapPartidoToLiveMatch(liveFromConEquipos, liga.nombre, matchDuration)
+    : (partidos.find((p) => normalizarEstado(p.estado) === 'en_juego')
+        ? mapPartidoToLiveMatch(
+            partidos.find((p) => normalizarEstado(p.estado) === 'en_juego')!,
+            liga.nombre,
+            matchDuration,
+          )
         : null);
 
   // ── Próximos partidos ──
-  // Solo se muestran partidos futuros (o dentro de las últimas 2 horas).
-  const nowMs = Date.now();
-  const isFutureOrRecent = (dateStr: string | null | undefined): boolean => {
-    if (!dateStr) return true;
-    const ms = new Date(dateStr).getTime();
-    return Number.isNaN(ms) || ms > nowMs - 2 * 60 * 60 * 1000;
-  };
-
   // Fuente 1: /jornadas filtrados por 'programado', ordenados por fecha
   const upcomingFromJornadas = partidosDeJornadas
-    .filter((p) => normalizarEstado(p.estado) === 'programado' && isFutureOrRecent(p.fecha_hora ?? p.fecha))
+    .filter((p) => normalizarEstado(p.estado) === 'programado')
     .sort((a, b) => {
       const fa = new Date(a.fecha_hora ?? a.fecha ?? '').getTime();
       const fb = new Date(b.fecha_hora ?? b.fecha ?? '').getTime();
@@ -907,7 +762,7 @@ export async function fetchDashboardData(ligaId: number): Promise<DashboardData>
 
   // Fuente 2: /con-equipos (fallback si /jornadas no devolvió programados)
   const upcomingFromConEquipos = partidos
-    .filter((p) => normalizarEstado(p.estado) === 'programado' && isFutureOrRecent(p.fecha_hora))
+    .filter((p) => normalizarEstado(p.estado) === 'programado')
     .map(mapPartidoToUpcoming);
 
   // Máximo 3 partidos programados en el dashboard; el resto se ve en Calendario
@@ -921,36 +776,17 @@ export async function fetchDashboardData(ligaId: number): Promise<DashboardData>
   const currentUser = await getUser().catch(() => null);
   const currentUserId = currentUser?.id_usuario ?? null;
 
-  // max_equipos desde configuración de liga — determina cuándo se completa la barra de progreso.
-  const maxEquipos: number | null = ligaConfigRaw?.max_equipos != null
-    ? (Number(ligaConfigRaw.max_equipos) || null)
-    : null;
+  // min_equipos desde configuración de liga — determina cuándo se completa la barra de progreso
+  const minEquipos: number | null = leagueConfig?.min_equipos ?? null;
 
   if (ligaConfigResult.status === 'rejected') {
-    logger.warn('dashboard.api', '[ligaConfig] FALLÓ — se usará fallback para progress bar y duración', {
+    logger.warn('dashboard.api', '[ligaConfig] FALLÓ — se usará fallback para progress bar', {
       ligaId,
       error: ligaConfigResult.reason instanceof Error ? ligaConfigResult.reason.message : String(ligaConfigResult.reason),
     });
   }
 
-  const roundProgress = jornadasRaw != null ? deriveRoundProgressFromJornadas(jornadasRaw) : null;
-
-  // Para métricas usamos /jornadas como fuente principal cuando /con-equipos no trae datos.
-  // Así las barras de progreso siguen funcionando aunque /con-equipos falle o tarde.
-  const partidosParaMetricas: Array<PartidoConEquiposResponse | PartidoJornadaRaw> =
-    partidos.length > 0 ? partidos : partidosDeJornadas;
-
-  const metrics = buildMetrics(
-    liga,
-    equipos,
-    partidosParaMetricas,
-    clasificacion,
-    stats,
-    usuarios,
-    currentUserId,
-    maxEquipos,
-    roundProgress,
-  );
+  const metrics = buildMetrics(liga, equipos, partidos, clasificacion, stats, usuarios, currentUserId, minEquipos);
 
   logger.info('dashboard.api', 'Dashboard cargado', {
     ligaId,

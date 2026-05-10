@@ -9,35 +9,27 @@
  */
 
 import { useState, useEffect, useCallback, useRef } from 'react';
+import { useFocusEffect } from '@react-navigation/native';
 import { calendarService } from '../services/calendarService';
 import type { CalendarJourney, CalendarViewState } from '../types/calendar.types';
+import { subscribeMatchDataChanged } from '@/src/features/matches/services/matchSync';
 
 export interface CalendarDataState {
   journeys: CalendarJourney[];
   viewState: CalendarViewState;
   /** true solo en la carga inicial (pantalla vacía → skeleton/spinner) */
   isLoading: boolean;
-  /** true durante un refetch cuando ya hay datos visibles (pull-to-refresh o autoRefresh) */
+  /** true durante un refetch cuando ya hay datos visibles (pull-to-refresh) */
   isRefetching: boolean;
   isError: boolean;
-  refetch: () => Promise<void>;
-}
-
-export interface CalendarDataOptions {
-  /** Refresco automático para partidos en vivo/minuto. 0 o undefined lo desactiva. */
-  autoRefreshMs?: number;
+  refetch: () => void;
 }
 
 /**
  * @param ligaId     ID numérico de la liga activa (0 = sin liga, no carga)
  * @param leagueName Nombre de la liga para inyectar en cada CalendarMatch
- * @param options    autoRefreshMs permite mantener vivo el contador y cambios de estado
  */
-export function useCalendarData(
-  ligaId: number,
-  leagueName: string,
-  options: CalendarDataOptions = {},
-): CalendarDataState {
+export function useCalendarData(ligaId: number, leagueName: string): CalendarDataState {
   const [journeys, setJourneys] = useState<CalendarJourney[]>([]);
   const [viewState, setViewState] = useState<CalendarViewState>('no_calendar');
   const [isLoading, setIsLoading] = useState(true);
@@ -46,23 +38,17 @@ export function useCalendarData(
 
   // true cuando ya se recibió al menos una respuesta; determina si es carga inicial o refetch
   const hasLoadedOnce = useRef(false);
-  // evita llamadas solapadas cuando coinciden pull-to-refresh, autoRefresh y acciones de partido
-  const isRequestInFlight = useRef(false);
 
   const load = useCallback(async () => {
-    if (ligaId <= 0 || isRequestInFlight.current) {
+    if (ligaId <= 0) {
       setIsLoading(false);
       return;
     }
-
-    isRequestInFlight.current = true;
-
     if (hasLoadedOnce.current) {
       setIsRefetching(true);
     } else {
       setIsLoading(true);
     }
-
     setIsError(false);
     try {
       // El hook recibe datos ya normalizados; no debe conocer detalles de endpoints.
@@ -75,27 +61,27 @@ export function useCalendarData(
       // dejamos marcado el error para que la pantalla pueda mostrar estado visual.
       setIsError(true);
     } finally {
-      isRequestInFlight.current = false;
       setIsLoading(false);
       setIsRefetching(false);
     }
   }, [ligaId, leagueName]);
 
   useEffect(() => {
-    hasLoadedOnce.current = false;
-    void load();
+    load();
   }, [load]);
 
+  useFocusEffect(
+    useCallback(() => {
+      load();
+      const unsubscribe = subscribeMatchDataChanged(load);
+      return unsubscribe;
+    }, [load]),
+  );
+
   useEffect(() => {
-    const ms = options.autoRefreshMs ?? 0;
-    if (ms <= 0 || ligaId <= 0) return undefined;
-
-    const id = setInterval(() => {
-      void load();
-    }, ms);
-
-    return () => clearInterval(id);
-  }, [ligaId, load, options.autoRefreshMs]);
+    const intervalId = setInterval(load, 30000);
+    return () => clearInterval(intervalId);
+  }, [load]);
 
   return { journeys, viewState, isLoading, isRefetching, isError, refetch: load };
 }

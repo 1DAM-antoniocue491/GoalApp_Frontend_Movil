@@ -1,17 +1,14 @@
-/**
- * RegisterEventModal.tsx
- * Selector móvil de eventos de partido en vivo.
- */
+/** Selector de evento en vivo. Bottom sheet seguro para móvil. */
 
 import React, { memo } from 'react';
-import { Modal, Pressable, Text, TouchableOpacity, View } from 'react-native';
+import { Text, TouchableOpacity, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { Colors } from '@/src/shared/constants/colors';
 import { theme } from '@/src/shared/styles/theme';
 import type { MatchPlayerOption } from '../../types/matches.types';
+import { MatchModalShell } from './MatchModalShell';
 
 export type MatchEventType = 'goal' | 'yellow_card' | 'red_card' | 'substitution';
-
 export interface LiveMatchPlayer extends MatchPlayerOption {}
 
 export interface LiveMatchContext {
@@ -20,16 +17,12 @@ export interface LiveMatchContext {
   awayTeam: string;
   homeScore: number;
   awayScore: number;
-  homeTeamId?: number;
-  awayTeamId?: number;
   minute: number;
   duration?: number;
-  /**
-   * Timestamp ISO de cuando se inició el partido.
-   * Permite calcular el minuto real en el momento de confirmar el evento,
-   * de forma que coincida exactamente con el minuto mostrado en LiveMatchCard.
-   */
   startedAt?: string | null;
+  homeTeamId?: number;
+  awayTeamId?: number;
+  eventsLocked?: boolean;
   homePlayers?: LiveMatchPlayer[];
   awayPlayers?: LiveMatchPlayer[];
 }
@@ -37,50 +30,66 @@ export interface LiveMatchContext {
 interface RegisterEventModalProps {
   visible: boolean;
   match: LiveMatchContext | null;
-  disabled?: boolean;
-  loading?: boolean;
   onSelectEvent: (type: MatchEventType) => void;
   onCancel: () => void;
+  isSubmitting?: boolean;
 }
 
 const OPTIONS: Array<{ type: MatchEventType; label: string; icon: keyof typeof Ionicons.glyphMap; color: string }> = [
   { type: 'goal', label: 'Gol', icon: 'football-outline', color: Colors.brand.primary },
   { type: 'yellow_card', label: 'Amarilla', icon: 'square-outline', color: Colors.semantic.warning },
   { type: 'red_card', label: 'Roja', icon: 'square-outline', color: Colors.semantic.error },
-  { type: 'substitution', label: 'Cambio', icon: 'swap-horizontal-outline', color: Colors.brand.secondary },
+  { type: 'substitution', label: 'Sustitución', icon: 'swap-horizontal-outline', color: Colors.brand.secondary },
 ];
 
-function RegisterEventModalComponent({ visible, match, disabled = false, loading = false, onSelectEvent, onCancel }: RegisterEventModalProps) {
-  return (
-    <Modal transparent visible={visible} animationType="fade" statusBarTranslucent onRequestClose={disabled || loading ? () => undefined : onCancel}>
-      <View style={{ flex: 1, justifyContent: 'flex-end', backgroundColor: 'rgba(0,0,0,0.65)' }}>
-        <Pressable style={{ flex: 1 }} onPress={disabled || loading ? undefined : onCancel} />
-        <View style={{ backgroundColor: Colors.bg.surface1, borderTopLeftRadius: 30, borderTopRightRadius: 30, padding: 22, paddingBottom: 40, borderWidth: 1, borderColor: Colors.bg.surface2 }}>
-          <View style={{ width: 42, height: 4, borderRadius: 2, backgroundColor: Colors.bg.surface2, alignSelf: 'center', marginBottom: 18 }} />
-          <Text style={{ color: Colors.text.primary, fontSize: 24, fontWeight: '800' }}>Añadir evento</Text>
-          {match ? (
-            <Text style={{ color: Colors.text.secondary, marginTop: 6, fontSize: 14 }}>
-              {match.homeTeam} {match.homeScore}–{match.awayScore} {match.awayTeam} · {match.minute}'{loading ? ' · cargando jugadores...' : ''}
-            </Text>
-          ) : null}
+function RegisterEventModalComponent({ visible, match, onSelectEvent, onCancel, isSubmitting = false }: RegisterEventModalProps) {
+  const locked = Boolean(match?.eventsLocked);
 
-          <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 10, marginTop: 22 }}>
-            {OPTIONS.map(option => (
-              <TouchableOpacity
-                key={option.type}
-                activeOpacity={0.9}
-                disabled={disabled || loading}
-                onPress={() => { if (!disabled && !loading) onSelectEvent(option.type); }}
-                style={{ width: '48%', minHeight: 92, borderRadius: theme.borderRadius.xl, backgroundColor: Colors.bg.surface2, borderWidth: 1, borderColor: option.color + '55', padding: 14, justifyContent: 'space-between', opacity: disabled || loading ? 0.5 : 1 }}
-              >
-                <Ionicons name={option.icon} size={24} color={option.color} />
-                <Text style={{ color: Colors.text.primary, fontSize: 16, fontWeight: '700' }}>{option.label}</Text>
-              </TouchableOpacity>
-            ))}
-          </View>
+  return (
+    <MatchModalShell
+      visible={visible}
+      title="Añadir evento"
+      subtitle={match ? `${match.homeTeam} ${match.homeScore}–${match.awayScore} ${match.awayTeam} · ${match.minute}' / ${match.duration ?? 90}'` : null}
+      icon="add-circle-outline"
+      pending={isSubmitting}
+      onClose={onCancel}
+    >
+      {locked ? (
+        <View style={{ borderRadius: 16, padding: 13, backgroundColor: `${Colors.semantic.warning}16`, borderWidth: 1, borderColor: `${Colors.semantic.warning}55`, marginBottom: 14 }}>
+          <Text style={{ color: Colors.semantic.warning, fontWeight: '900', textAlign: 'center' }}>
+            El tiempo del partido ha finalizado. Finaliza el partido y escoge el MVP.
+          </Text>
         </View>
+      ) : null}
+
+      <View className="flex-row flex-wrap" style={{ gap: 10 }}>
+        {OPTIONS.map((option) => {
+          const disabled = isSubmitting || locked;
+          return (
+            <TouchableOpacity
+              key={option.type}
+              activeOpacity={0.88}
+              disabled={disabled}
+              onPress={() => onSelectEvent(option.type)}
+              style={{
+                width: '48%',
+                minHeight: 92,
+                borderRadius: theme.borderRadius.xl,
+                backgroundColor: Colors.bg.surface2,
+                borderWidth: 1,
+                borderColor: `${option.color}55`,
+                padding: 14,
+                justifyContent: 'space-between',
+                opacity: disabled ? 0.5 : 1,
+              }}
+            >
+              <Ionicons name={option.icon} size={24} color={option.color} />
+              <Text style={{ color: Colors.text.primary, fontSize: 16, fontWeight: '900' }}>{option.label}</Text>
+            </TouchableOpacity>
+          );
+        })}
       </View>
-    </Modal>
+    </MatchModalShell>
   );
 }
 

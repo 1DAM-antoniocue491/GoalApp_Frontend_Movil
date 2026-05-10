@@ -1,6 +1,6 @@
 /**
  * matches.api.ts
- * Capa HTTP del módulo de partidos/eventos.
+ * Endpoints reales del módulo de partidos/eventos.
  */
 
 import { apiClient } from '@/src/shared/api/client';
@@ -10,7 +10,6 @@ import type {
   UpdateMatchRequest,
   CreateMatchEventRequest,
   FinishMatchRequest,
-  MatchEventApi,
 } from '../types/matches.types';
 
 export async function getMatchesByLeague(ligaId: number): Promise<PartidoApi[]> {
@@ -23,7 +22,7 @@ export async function getPlainMatchesByLeague(ligaId: number): Promise<PartidoAp
   return Array.isArray(res.data) ? res.data : [];
 }
 
-export async function getUpcomingMatches(ligaId: number, limit = 3): Promise<PartidoApi[]> {
+export async function getUpcomingMatches(ligaId: number, limit = 20): Promise<PartidoApi[]> {
   const res = await apiClient.get<PartidoApi[]>(`/partidos/proximos?limit=${limit}&liga_id=${ligaId}`);
   return Array.isArray(res.data) ? res.data : [];
 }
@@ -63,8 +62,8 @@ export async function finishMatch(matchId: number, data: FinishMatchRequest): Pr
   return res.data;
 }
 
-export async function getMatchEvents(matchId: number): Promise<MatchEventApi[]> {
-  const res = await apiClient.get<MatchEventApi[]>(`/eventos/partido/${matchId}`);
+export async function getMatchEvents(matchId: number): Promise<unknown[]> {
+  const res = await apiClient.get<unknown[]>(`/eventos/partido/${matchId}`);
   return Array.isArray(res.data) ? res.data : [];
 }
 

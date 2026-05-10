@@ -75,29 +75,22 @@ export interface CalendarMatch {
   month?: string;
   /** "18:00" — ProgrammedMatchCard */
   time?: string;
-  /** Fecha/hora cruda del backend para editar sin perder año ni hora civil. */
-  rawDateTime?: string;
-  homeTeamId?: number;
-  awayTeamId?: number;
-  duration?: number;
-  /** Estado original del backend; útil para ordenar cancelados/suspendidos al final. */
-  backendStatus?: string | null;
   // Marcador
   homeScore?: number;
   awayScore?: number;
   /** Minuto actual — solo si status === 'live' */
   minute?: number;
+  /** Duración configurada del partido en la liga. */
+  duration?: number;
+  /** Fecha/hora literal usada para calcular el minuto visual en front. */
+  startedAt?: string | null;
+  homeTeamId?: number | null;
+  awayTeamId?: number | null;
   // Visual
   homeColor?: string;
   awayColor?: string;
   homeShieldLetter?: string;
   awayShieldLetter?: string;
-  /**
-   * Timestamp ISO de cuando se inició el partido.
-   * Permite calcular el minuto real transcurrido en LiveMatchCard y en los modales
-   * de eventos, en lugar de depender del snapshot estático de minuto_actual.
-   */
-  startedAt?: string | null;
 }
 
 // ---------------------------------------------------------------------------

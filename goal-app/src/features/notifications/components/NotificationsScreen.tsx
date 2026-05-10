@@ -39,8 +39,9 @@ import { theme } from '@/src/shared/styles/theme';
 import { ScrollEdgeButton } from '@/src/shared/components/navigation/ScrollEdgeButton';
 import { NotificationFilterTabs } from '@/src/features/notifications/components/NotificationFilterTabs';
 import { NotificationCard } from '@/src/features/notifications/components/NotificationCard';
-import { useNotifications } from '@/src/features/notifications/hooks/useNotifications';
+import { useNotifications, type UserRole } from '@/src/features/notifications/hooks/useNotifications';
 import type { AppNotification, NotificationReadFilter } from '@/src/features/notifications/types/notifications.types';
+import { useActiveLeagueRole } from '@/src/state/activeLeague/activeLeagueStore';
 
 // ─── Componente ──────────────────────────────────────────────────────────────
 
@@ -48,7 +49,9 @@ export function NotificationsScreen() {
     const router = useRouter();
     const insets = useSafeAreaInsets();
 
-    // TODO: obtener el rol del estado global de sesión
+    const leagueRole = useActiveLeagueRole() ?? 'player';
+    const notifRole = (leagueRole === 'field_delegate' ? 'delegate' : leagueRole) as UserRole;
+
     const {
         notifications,
         unreadCount,
@@ -66,7 +69,7 @@ export function NotificationsScreen() {
         markAsRead,
         markAllAsRead,
         deleteNotification,
-    } = useNotifications('admin');
+    } = useNotifications(notifRole);
 
     // Notificación objetivo del action sheet (⋮ o long press)
     const [actionTarget, setActionTarget] = useState<AppNotification | null>(null);

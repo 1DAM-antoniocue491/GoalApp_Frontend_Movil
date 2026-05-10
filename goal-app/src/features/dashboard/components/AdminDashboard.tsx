@@ -21,13 +21,11 @@
  * en DashboardLayout. AdminDashboard solo se preocupa de sus secciones.
  */
 
-import React from 'react';
-import { View } from 'react-native';
-import { useRouter } from 'expo-router';
+import React, { useCallback, useState } from 'react';
+import { Alert, View } from 'react-native';
 
 import { useDashboardData } from '@/src/features/dashboard/hooks';
 import { getDashboardPermissions } from '../services/dashboardService';
-import { routes } from '@/src/shared/config/routes';
 import { DashboardLayout } from './DashboardLayout';
 import { LeagueMetrics } from './LeagueMetrics';
 import { LiveMatchCard } from '@/src/features/matches/components/cards/LiveMatchCard';
@@ -41,6 +39,10 @@ import { RedCardModal } from '@/src/features/matches/components/modals/RedCardMo
 import { SubstitutionModal } from '@/src/features/matches/components/modals/SubstitutionModal';
 import { EndMatchModal } from '@/src/features/matches/components/modals/EndMatchModal';
 import { StartMatchModal } from '@/src/features/matches/components/modals/StartMatchModal';
+import { EditScheduledMatchModal } from '@/src/features/matches/components/modals/EditScheduledMatchModal';
+import type { EditScheduledMatchData } from '@/src/features/matches/components/modals/EditScheduledMatchModal';
+import { getMatchByIdService, updateScheduledMatchService } from '@/src/features/matches/services/matchesService';
+import type { PartidoApi } from '@/src/features/matches/types/matches.types';
 
 // ---------------------------------------------------------------------------
 // Props
@@ -66,8 +68,6 @@ export function AdminDashboard({
   userName,
   notificationCount = 0,
 }: AdminDashboardProps) {
-  const router = useRouter();
-
   // Datos del dashboard desde el hook — API real vía fetchDashboardData
   const { data, isLoading, isRefetching, isError, refetch } = useDashboardData(leagueId);
 
@@ -78,6 +78,40 @@ export function AdminDashboard({
     openRegisterEvent, openEndMatch, openStartMatch,
     modals, activeEventMatch, activeEndMatch, activeStartMatch, modalProps,
   } = useMatchActionModals(refetch);
+
+  // ── Editar partido ──
+  const [matchToEdit, setMatchToEdit] = useState<PartidoApi | null>(null);
+  const [editMatchVisible, setEditMatchVisible] = useState(false);
+  const [savingEditMatch, setSavingEditMatch] = useState(false);
+
+  const handleEditMatch = useCallback((matchId: string) => {
+    void (async () => {
+      const result = await getMatchByIdService(Number(matchId));
+      if (result.success && result.data) {
+        setMatchToEdit(result.data);
+        setEditMatchVisible(true);
+      } else {
+        Alert.alert('Error', 'No se pudo cargar el partido para editar.');
+      }
+    })();
+  }, []);
+
+  const handleEditMatchConfirm = useCallback(async (data: EditScheduledMatchData) => {
+    if (!matchToEdit) return;
+    setSavingEditMatch(true);
+    const result = await updateScheduledMatchService(Number(matchToEdit.id_partido), {
+      fecha: data.fecha,
+      estado: data.estado,
+    });
+    setSavingEditMatch(false);
+    if (!result.success) {
+      Alert.alert('Error', result.error || 'No se pudo guardar el partido.');
+      return;
+    }
+    setEditMatchVisible(false);
+    setMatchToEdit(null);
+    void refetch();
+  }, [matchToEdit, refetch]);
 
   // ── Handlers de acciones — delegan al flujo centralizado de modales ──
 
@@ -165,6 +199,7 @@ export function AdminDashboard({
             matches={data.upcomingMatches}
             permissions={permissions}
             onStartMatch={handleStartMatch}
+            onEditMatch={permissions.canEditMatch ? handleEditMatch : undefined}
             actionsDisabled={modalProps.pending.any}
           />
 
@@ -225,6 +260,13 @@ export function AdminDashboard({
         submitting={modalProps.pending.startingMatch}
         onConfirm={modalProps.onStartMatchConfirm}
         onCancel={modalProps.onCloseStartMatch}
+      />
+      <EditScheduledMatchModal
+        visible={editMatchVisible}
+        match={matchToEdit}
+        saving={savingEditMatch}
+        onConfirm={handleEditMatchConfirm}
+        onCancel={() => { if (!savingEditMatch) { setEditMatchVisible(false); setMatchToEdit(null); } }}
       />
     </DashboardLayout>
   );

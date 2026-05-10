@@ -132,9 +132,21 @@ export function useMatchActionModals(onChanged?: () => void | Promise<void>) {
     setActiveEndMatch(match);
     setEndMatchVisible(true);
     setHydratingEndMatch(true);
-    void hydratePlayers(match)
-      .then(setActiveEndMatch)
-      .finally(() => setHydratingEndMatch(false));
+    void (async () => {
+      // Fetch players AND score from events in parallel (same as web FinishMatchModal)
+      const [hydratedMatch, score] = await Promise.all([
+        hydratePlayers(match),
+        getMatchScoreFromEventsService(getMatchIdValue(match.id), {
+          goles_local: match.homeScore,
+          goles_visitante: match.awayScore,
+        }),
+      ]);
+      setActiveEndMatch({
+        ...hydratedMatch,
+        homeScore: score.goles_local,
+        awayScore: score.goles_visitante,
+      });
+    })().finally(() => setHydratingEndMatch(false));
   }, [anyPending, hydratePlayers]);
 
   const closeIfIdle = useCallback((close: () => void) => {
@@ -250,14 +262,11 @@ export function useMatchActionModals(onChanged?: () => void | Promise<void>) {
     if (!activeEndMatch || endingMatch || hydratingEndMatch) return;
     setEndingMatch(true);
 
-    const score = await getMatchScoreFromEventsService(getMatchIdValue(activeEndMatch.id), {
-      goles_local: activeEndMatch.homeScore,
-      goles_visitante: activeEndMatch.awayScore,
-    });
-
+    // Score was already calculated from events when the modal opened (like web).
+    // data.homeScore / data.awayScore may have been manually adjusted by the user.
     const result = await finishMatchService(getMatchIdValue(activeEndMatch.id), {
-      goles_local: score.goles_local,
-      goles_visitante: score.goles_visitante,
+      goles_local: data.homeScore,
+      goles_visitante: data.awayScore,
       id_mvp: data.mvpId,
       puntuacion_mvp: data.mvpScore,
       incidencias: data.observations,

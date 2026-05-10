@@ -82,6 +82,7 @@ import type { CreateCalendarInput } from '../services/calendarService';
 import type { CreateManualMatchFormData } from './modals/CreateManualMatchModal';
 import type { EditScheduledMatchData } from '@/src/features/matches/components/modals/EditScheduledMatchModal';
 import type { PartidoApi } from '@/src/features/matches/types/matches.types';
+import { getLeagueConfigService } from '@/src/features/leagues/services/leagueService';
 
 
 // ---------------------------------------------------------------------------
@@ -378,6 +379,15 @@ export function CalendarScreen() {
     value: String(t.id_equipo),
     label: t.nombre,
   }));
+
+  // ── Configuración de liga: max_equipos para bloquear creación cuando se alcanza el límite ──
+  const [maxTeams, setMaxTeams] = useState<number | undefined>(undefined);
+  useEffect(() => {
+    if (!Number.isFinite(ligaId) || ligaId <= 0) return;
+    getLeagueConfigService(ligaId).then((result) => {
+      if (result.success && result.data) setMaxTeams(result.data.max_equipos);
+    });
+  }, [ligaId]);
 
   // ── Estado de UI ──
   const [activeTab, setActiveTab] = useState<CalendarMainTab>('journey');
@@ -894,6 +904,8 @@ export function CalendarScreen() {
           onDeleteCalendar={handleOpenDeleteCalendar}
           onAddMatch={handleOpenAddMatch}
           onAddTeam={calendarPerms.canAddMatch ? handleOpenAddTeam : undefined}
+          teamsCount={teamsData.length}
+          maxTeams={maxTeams}
         />
       )}
 

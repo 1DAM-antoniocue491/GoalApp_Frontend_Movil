@@ -331,8 +331,8 @@ function CalendarConfigModalComponent({
             opacity: opacityAnim,
           }}
         >
-          {/* Overlay para cerrar */}
-          <Pressable style={{ flex: 1 }} onPress={onCancel} />
+          {/* Overlay para cerrar — bloqueado durante envío */}
+          <Pressable style={{ flex: 1 }} onPress={isSubmitting ? undefined : onCancel} />
 
           <Animated.View
             style={{
@@ -380,7 +380,8 @@ function CalendarConfigModalComponent({
                 </Text>
               </View>
               <Pressable
-                onPress={onCancel}
+                onPress={isSubmitting ? undefined : onCancel}
+                disabled={isSubmitting}
                 hitSlop={8}
                 style={{
                   width: 32,
@@ -389,6 +390,7 @@ function CalendarConfigModalComponent({
                   backgroundColor: Colors.bg.surface2,
                   alignItems: 'center',
                   justifyContent: 'center',
+                  opacity: isSubmitting ? 0.4 : 1,
                 }}
               >
                 <Ionicons name="close" size={16} color={Colors.text.secondary} />

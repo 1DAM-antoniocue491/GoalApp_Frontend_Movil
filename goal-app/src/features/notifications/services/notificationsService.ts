@@ -36,6 +36,7 @@ export function getNotificationCategory(tipo: string): NotificationCategory {
       return 'live';
 
     case 'partido_finalizado':
+    case 'partido_cancelado':
     case 'resultado':
       return 'results';
 
@@ -65,9 +66,15 @@ function getNotificationNavigation(
   const t = (tipoReferencia ?? tipo).toLowerCase();
 
   if (t.includes('partido') || t.includes('resultado') || t.includes('gol') || t.includes('tarjeta')) {
-    if (t.includes('finalizado') || t.includes('resultado')) {
+    if (t.includes('finalizado') || t.includes('cancelado') || t.includes('resultado')) {
       return {
         targetRoute: routes.matches.finished,
+        ...(idReferencia ? { targetParams: { matchId: idReferencia } } : {}),
+      };
+    }
+    if (t.includes('programado')) {
+      return {
+        targetRoute: routes.matches.programmed,
         ...(idReferencia ? { targetParams: { matchId: idReferencia } } : {}),
       };
     }

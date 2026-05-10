@@ -860,6 +860,12 @@ export async function fetchDashboardData(ligaId: number): Promise<DashboardData>
     logger.info('dashboard.api', '[usuarios] OK', { ligaId, count: usuarios.length });
   }
 
+  // Duración del partido desde configuración de liga — necesaria para los mapeos que siguen.
+  // Se extrae aquí para evitar usar matchDuration antes de su declaración (TDZ).
+  const ligaConfigRaw = (ligaConfigResult.status === 'fulfilled' ? ligaConfigResult.value : null) as Record<string, unknown> | null;
+  const matchDuration: number =
+    Number(ligaConfigRaw?.minutos_partido ?? ligaConfigRaw?.duracion_partido ?? 90) || 90;
+
   // ── Mapeos ─────────────────────────────────────────────────────────────────
 
   // Mapa de equipos para resolución de nombres cuando /jornadas no embebe los objetos
@@ -881,9 +887,17 @@ export async function fetchDashboardData(ligaId: number): Promise<DashboardData>
         : null);
 
   // ── Próximos partidos ──
+  // Solo se muestran partidos futuros (o dentro de las últimas 2 horas).
+  const nowMs = Date.now();
+  const isFutureOrRecent = (dateStr: string | null | undefined): boolean => {
+    if (!dateStr) return true;
+    const ms = new Date(dateStr).getTime();
+    return Number.isNaN(ms) || ms > nowMs - 2 * 60 * 60 * 1000;
+  };
+
   // Fuente 1: /jornadas filtrados por 'programado', ordenados por fecha
   const upcomingFromJornadas = partidosDeJornadas
-    .filter((p) => normalizarEstado(p.estado) === 'programado')
+    .filter((p) => normalizarEstado(p.estado) === 'programado' && isFutureOrRecent(p.fecha_hora ?? p.fecha))
     .sort((a, b) => {
       const fa = new Date(a.fecha_hora ?? a.fecha ?? '').getTime();
       const fb = new Date(b.fecha_hora ?? b.fecha ?? '').getTime();
@@ -893,7 +907,7 @@ export async function fetchDashboardData(ligaId: number): Promise<DashboardData>
 
   // Fuente 2: /con-equipos (fallback si /jornadas no devolvió programados)
   const upcomingFromConEquipos = partidos
-    .filter((p) => normalizarEstado(p.estado) === 'programado')
+    .filter((p) => normalizarEstado(p.estado) === 'programado' && isFutureOrRecent(p.fecha_hora))
     .map(mapPartidoToUpcoming);
 
   // Máximo 3 partidos programados en el dashboard; el resto se ve en Calendario
@@ -908,18 +922,9 @@ export async function fetchDashboardData(ligaId: number): Promise<DashboardData>
   const currentUserId = currentUser?.id_usuario ?? null;
 
   // max_equipos desde configuración de liga — determina cuándo se completa la barra de progreso.
-  // No usamos min_equipos aquí: la barra debe llegar al 100% solo cuando se alcanza el máximo configurado.
-  const ligaConfig = ligaConfigResult.status === 'fulfilled' ? ligaConfigResult.value : null;
-  const ligaConfigRaw = ligaConfig as Record<string, unknown> | null;
-
   const maxEquipos: number | null = ligaConfigRaw?.max_equipos != null
     ? (Number(ligaConfigRaw.max_equipos) || null)
     : null;
-
-  // Duración del partido: desde la configuración de liga (minutos_partido o duracion_partido).
-  // Se usa como fallback cuando el partido no trae el campo directamente.
-  const matchDuration: number =
-    Number(ligaConfigRaw?.minutos_partido ?? ligaConfigRaw?.duracion_partido ?? 90) || 90;
 
   if (ligaConfigResult.status === 'rejected') {
     logger.warn('dashboard.api', '[ligaConfig] FALLÓ — se usará fallback para progress bar y duración', {

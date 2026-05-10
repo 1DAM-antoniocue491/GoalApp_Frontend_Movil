@@ -307,6 +307,38 @@ export function buildInvitePayload(form: InviteUserFormData, roles: ApiRole[]): 
   };
 }
 
+/**
+ * Construye un LeagueUser optimista a partir de los datos del formulario de invitación.
+ * Se usa para mostrar al usuario invitado inmediatamente mientras el backend procesa
+ * la invitación y crea los registros de jugador/usuario en su base de datos.
+ */
+export function buildOptimisticLeagueUser(
+  form: InviteUserFormData,
+  roles: ApiRole[],
+  teams: TeamOptionApi[],
+): LeagueUser | null {
+  if (!form.email.trim() || !form.role) return null;
+  const roleId = findRoleId(roles, form.role) ?? 0;
+  const team = form.teamId ? teams.find(t => String(t.id_equipo) === form.teamId) : undefined;
+  const jersey = form.jersey ? Number(form.jersey) : undefined;
+  return {
+    id: `optimistic-${Date.now()}`,
+    userId: -1,
+    name: form.name.trim() || form.email.trim(),
+    email: form.email.trim().toLowerCase(),
+    roleId,
+    role: form.role as UserRole,
+    roleLabel: getRoleLabel(form.role),
+    status: 'pending',
+    active: false,
+    teamId: team ? String(team.id_equipo) : undefined,
+    teamName: team?.nombre,
+    jersey: Number.isFinite(jersey) && jersey !== undefined ? jersey : undefined,
+    position: form.position || undefined,
+    isCaptain: form.playerType === 'capitan',
+  };
+}
+
 export async function inviteUserService(
   ligaId: number,
   form: InviteUserFormData,

@@ -55,6 +55,10 @@ interface CalendarActionsMenuProps {
   onAddMatch: () => void;
   /** Abre CreateTeamModal desde el menú — solo admin */
   onAddTeam?: () => void;
+  /** Número actual de equipos en la liga */
+  teamsCount?: number;
+  /** Máximo de equipos permitido por la configuración de la liga */
+  maxTeams?: number;
 }
 
 interface ActionItemProps {
@@ -66,27 +70,36 @@ interface ActionItemProps {
   divider?: boolean;
   /** Variante visual para acciones destructivas */
   destructive?: boolean;
+  /** Si true, la acción está deshabilitada — se muestra atenuada con la descripción como razón */
+  disabled?: boolean;
 }
 
 // ---------------------------------------------------------------------------
 // Sub-componente: item de acción
 // ---------------------------------------------------------------------------
 
-function ActionItem({ icon, label, description, onPress, divider = false, destructive = false }: ActionItemProps) {
-  const iconColor = destructive ? Colors.semantic.error : Colors.text.primary;
-  const labelColor = destructive ? Colors.semantic.error : Colors.text.primary;
-  const bgColor = destructive ? `${Colors.semantic.error}18` : Colors.bg.surface2;
+function ActionItem({ icon, label, description, onPress, divider = false, destructive = false, disabled = false }: ActionItemProps) {
+  const iconColor = disabled
+    ? Colors.text.disabled
+    : destructive ? Colors.semantic.error : Colors.text.primary;
+  const labelColor = disabled
+    ? Colors.text.disabled
+    : destructive ? Colors.semantic.error : Colors.text.primary;
+  const bgColor = disabled
+    ? Colors.bg.surface2
+    : destructive ? `${Colors.semantic.error}18` : Colors.bg.surface2;
 
   return (
     <>
       <TouchableOpacity
-        onPress={onPress}
-        activeOpacity={0.7}
+        onPress={disabled ? undefined : onPress}
+        activeOpacity={disabled ? 1 : 0.7}
         style={{
           flexDirection: 'row',
           alignItems: 'center',
           gap: 14,
           paddingVertical: 14,
+          opacity: disabled ? 0.5 : 1,
         }}
       >
         {/* Icono con fondo tintado */}
@@ -113,7 +126,7 @@ function ActionItem({ icon, label, description, onPress, divider = false, destru
           </Text>
         </View>
 
-        <Ionicons name="chevron-forward" size={16} color={Colors.text.disabled} />
+        {!disabled && <Ionicons name="chevron-forward" size={16} color={Colors.text.disabled} />}
       </TouchableOpacity>
 
       {divider && (
@@ -138,6 +151,8 @@ function CalendarActionsMenuComponent({
   onDeleteCalendar,
   onAddMatch,
   onAddTeam,
+  teamsCount,
+  maxTeams,
 }: CalendarActionsMenuProps) {
   const slideAnim = useRef(new Animated.Value(300)).current;
   const opacityAnim = useRef(new Animated.Value(0)).current;
@@ -186,6 +201,14 @@ function CalendarActionsMenuComponent({
   const canEdit = permissions.canEditCalendar && hasGeneratedCalendar && calendarMenuState === 'editable';
   const canDelete = permissions.canEditCalendar && hasGeneratedCalendar && calendarMenuState === 'editable';
   const canAddMatch = permissions.canAddMatch;
+
+  // Equipo bloqueado si el calendario ya empezó o se alcanzó el máximo de equipos.
+  const isTeamBlocked = isLocked
+    || (teamsCount != null && maxTeams != null && teamsCount >= maxTeams);
+  const teamBlockReason = isLocked
+    ? 'No se pueden añadir equipos con el calendario iniciado'
+    : `Máximo de equipos alcanzado (${teamsCount ?? 0}/${maxTeams ?? '?'})`;
+
   const hasActions = canCreate || canEdit || canDelete || canAddMatch || !!onAddTeam;
 
   // Si el rol actual no tiene ninguna acción disponible, no montamos el Modal.
@@ -324,8 +347,9 @@ function CalendarActionsMenuComponent({
             <ActionItem
               icon="shield-outline"
               label="Nuevo equipo"
-              description="Crea un equipo en la liga actual"
+              description={isTeamBlocked ? teamBlockReason : 'Crea un equipo en la liga actual'}
               onPress={onAddTeam}
+              disabled={isTeamBlocked}
             />
           )}
 

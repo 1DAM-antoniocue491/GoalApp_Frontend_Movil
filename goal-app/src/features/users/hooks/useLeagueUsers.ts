@@ -12,6 +12,7 @@ import type {
   UnionCodeResponse,
 } from '../types/users.types';
 import {
+  buildOptimisticLeagueUser,
   deleteUnionCodeService,
   fetchLeagueUsersService,
   fetchRolesService,
@@ -62,6 +63,8 @@ function matchesSearch(user: LeagueUser, query: string): boolean {
 
 export function useLeagueUsers(ligaId: number): UseLeagueUsersResult {
   const [users, setUsers] = useState<LeagueUser[]>([]);
+  // Entradas optimistas: jugadores invitados visibles mientras el backend procesa
+  const [pendingInvites, setPendingInvites] = useState<LeagueUser[]>([]);
   const [roles, setRoles] = useState<ApiRole[]>([]);
   const [teams, setTeams] = useState<TeamOptionApi[]>([]);
   const [search, setSearch] = useState('');
@@ -72,8 +75,27 @@ export function useLeagueUsers(ligaId: number): UseLeagueUsersResult {
 
   const roleOptions = useMemo(() => roleOptionsFromApi(roles), [roles]);
   const teamOptions = useMemo(() => teamOptionsFromApi(teams), [teams]);
-  const filteredUsers = useMemo(() => users.filter(user => matchesSearch(user, search)), [users, search]);
-  const adminCount = useMemo(() => users.filter(user => user.role === 'admin' && user.active).length, [users]);
+
+  // Merge usuarios reales + invitaciones pendientes que aún no aparecen en el backend
+  const mergedUsers = useMemo(() => {
+    if (pendingInvites.length === 0) return users;
+    const realEmails = new Set(users.map(u => u.email.toLowerCase()));
+    const stillPending = pendingInvites.filter(p => !realEmails.has(p.email.toLowerCase()));
+    return stillPending.length > 0 ? [...users, ...stillPending] : users;
+  }, [users, pendingInvites]);
+
+  // Limpiar pendientes cuando el backend ya los incluye en la respuesta real
+  useEffect(() => {
+    if (pendingInvites.length === 0) return;
+    const realEmails = new Set(users.map(u => u.email.toLowerCase()));
+    const remaining = pendingInvites.filter(p => !realEmails.has(p.email.toLowerCase()));
+    if (remaining.length !== pendingInvites.length) {
+      setPendingInvites(remaining);
+    }
+  }, [users, pendingInvites]);
+
+  const filteredUsers = useMemo(() => mergedUsers.filter(user => matchesSearch(user, search)), [mergedUsers, search]);
+  const adminCount = useMemo(() => mergedUsers.filter(user => user.role === 'admin' && user.active).length, [mergedUsers]);
 
   const load = useCallback(async () => {
     if (!Number.isFinite(ligaId) || ligaId <= 0) {
@@ -123,10 +145,21 @@ export function useLeagueUsers(ligaId: number): UseLeagueUsersResult {
         return false;
       }
 
+      // Añadir entrada optimista para que el jugador sea visible inmediatamente
+      // mientras el backend procesa la invitación y crea los registros de jugador.
+      const optimistic = buildOptimisticLeagueUser(form, roles, teams);
+      if (optimistic) {
+        setPendingInvites(prev => {
+          const emailLower = form.email.trim().toLowerCase();
+          const exists = prev.some(p => p.email.toLowerCase() === emailLower);
+          return exists ? prev : [...prev, optimistic];
+        });
+      }
+
       await load();
       return true;
     },
-    [ligaId, roles, load],
+    [ligaId, roles, teams, load],
   );
 
   const updateUser = useCallback(
@@ -230,7 +263,7 @@ export function useLeagueUsers(ligaId: number): UseLeagueUsersResult {
   }, [load]);
 
   return {
-    users,
+    users: mergedUsers,
     filteredUsers,
     roles,
     teams,

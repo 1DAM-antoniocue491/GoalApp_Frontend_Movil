@@ -20,29 +20,6 @@ export interface ProgrammedMatchCardProps {
   actionsDisabled?: boolean;
 }
 
-const MONTH_MAP: Record<string, number> = {
-  ENE: 0, FEB: 1, MAR: 2, ABR: 3, MAY: 4, JUN: 5,
-  JUL: 6, AGO: 7, SEP: 8, OCT: 9, NOV: 10, DIC: 11,
-};
-
-function canStartMatchNow(day: string, month: string, time: string): boolean {
-  if (!day || !month || !time || day === '–' || month === '–' || time === '–') return false;
-  const monthIndex = MONTH_MAP[month.toUpperCase()];
-  if (monthIndex === undefined) return false;
-  const [hStr, mStr] = time.split(':');
-  const hours = parseInt(hStr, 10);
-  const minutes = parseInt(mStr, 10);
-  const dayNum = parseInt(day, 10);
-  if ([hours, minutes, dayNum].some(Number.isNaN)) return false;
-
-  const now = new Date();
-  const matchDate = new Date(now.getFullYear(), monthIndex, dayNum, hours, minutes, 0, 0);
-  if (matchDate.getTime() < now.getTime() - 24 * 60 * 60 * 1000) {
-    matchDate.setFullYear(now.getFullYear() + 1);
-  }
-
-  return now.getTime() >= matchDate.getTime() - 60 * 60 * 1000;
-}
 
 function TeamBadge({ letter, color }: { letter: string; color: string }) {
   return (
@@ -74,7 +51,7 @@ export function ProgrammedMatchCard({
   const router = useRouter();
   const homeColor = match.homeColor ?? '#A1A1AA';
   const awayColor = match.awayColor ?? '#C4F135';
-  const startAllowed = permissions.canStartMatch && canStartMatchNow(match.day, match.month, match.time) && !actionsDisabled;
+  const startAllowed = permissions.canStartMatch && !actionsDisabled;
 
   const handleCardPress = () => {
     if (onPress) onPress();
@@ -162,11 +139,6 @@ export function ProgrammedMatchCard({
               </View>
             )}
 
-            {permissions.canStartMatch && !startAllowed && (
-              <Text style={{ color: '#52525B', fontSize: 10, marginTop: 3 }}>
-                Disponible desde 1 hora antes
-              </Text>
-            )}
 
             {permissions.canManageSquad && (
               <TouchableOpacity

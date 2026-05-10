@@ -5,9 +5,10 @@
  * Fuente de verdad visual para partidos en vivo en toda la app.
  *
  * TEMPORIZADOR:
- * - Si `match.startedAt` está disponible, el minuto se calcula en tiempo real
- *   desde ese timestamp (Date.now() - startedAt) cada 30 segundos.
- * - Sin startedAt, usa `match.minute` como snapshot de fallback.
+ * - Si `match.startedAt` está disponible, se usa como ancla autoritativa.
+ * - Sin startedAt, se deriva una ancla virtual desde `match.minute` al primer render.
+ *   Esta ancla virtual avanza localmente sin depender del backend.
+ * - La ancla se restablece solo al cambiar de partido o al recibir startedAt.
  * - El minuto se limita a `match.duration` (o 90 si no llega).
  *
  * ESTADO "TIEMPO AGOTADO":
@@ -42,20 +43,20 @@ import type { DashboardPermissions } from '@/src/features/dashboard/services/das
 // Helpers
 // ---------------------------------------------------------------------------
 
-/** Calcula el minuto transcurrido desde startedAt. Devuelve un valor entre 1 y limit. */
-function computeLiveMinute(
-    startedAt: string | null | undefined,
-    fallback: number,
-    limit: number,
-): number {
-    if (startedAt) {
-        const started = new Date(startedAt).getTime();
-        if (!Number.isNaN(started)) {
-            const elapsed = Math.floor((Date.now() - started) / 60000) + 1;
-            return Math.max(1, Math.min(limit, elapsed));
-        }
-    }
-    return Math.max(1, Math.min(limit, fallback));
+/** Calcula el minuto transcurrido desde una ancla ISO. Devuelve un valor entre 1 y limit. */
+function computeLiveMinute(anchorIso: string, limit: number): number {
+    const started = new Date(anchorIso).getTime();
+    if (Number.isNaN(started)) return 1;
+    const elapsed = Math.floor((Date.now() - started) / 60_000) + 1;
+    return Math.max(1, Math.min(limit, elapsed));
+}
+
+/**
+ * Deriva una ancla ISO virtual desde el minuto actual del partido.
+ * Permite que el timer avance localmente cuando el backend no devuelve startedAt.
+ */
+function deriveVirtualAnchor(minute: number): string {
+    return new Date(Date.now() - Math.max(0, minute - 1) * 60_000).toISOString();
 }
 
 // ---------------------------------------------------------------------------
@@ -175,23 +176,42 @@ export function LiveMatchCard({
     }, [match.duration]);
 
     // ── Temporizador ──
-    // Estado inicial calculado ya desde startedAt para evitar flash con valor 1.
+    // timerAnchorRef: ISO timestamp desde el que calculamos el minuto actual.
+    // Si el backend devuelve startedAt: se usa directamente (autoritativo).
+    // Si no: se deriva una ancla virtual desde match.minute (avanza localmente).
+    // La ancla virtual nunca retrocede — solo se recalcula al cambiar de partido.
+    const timerAnchorRef = useRef(
+        match.startedAt ?? deriveVirtualAnchor(match.minute ?? 1),
+    );
+    const timerMatchIdRef = useRef(String(match.id));
+
     const [localMinute, setLocalMinute] = useState(() =>
-        computeLiveMinute(match.startedAt, match.minute ?? 1, safeDuration),
+        computeLiveMinute(timerAnchorRef.current, safeDuration),
     );
 
-    // Resincronizar si cambia el partido o el timestamp de inicio.
+    // Sincronizar ancla cuando cambia el partido o llega startedAt autoritativo.
     useEffect(() => {
-        setLocalMinute(computeLiveMinute(match.startedAt, match.minute ?? 1, safeDuration));
+        const matchId = String(match.id);
+        if (matchId !== timerMatchIdRef.current) {
+            // Partido nuevo: reiniciar ancla
+            timerMatchIdRef.current = matchId;
+            timerAnchorRef.current = match.startedAt ?? deriveVirtualAnchor(match.minute ?? 1);
+        } else if (match.startedAt) {
+            // Llegó timestamp autoritativo: adoptar
+            timerAnchorRef.current = match.startedAt;
+        }
+        // Mismo partido sin startedAt → mantener ancla virtual (el timer sigue avanzando)
+        setLocalMinute(computeLiveMinute(timerAnchorRef.current, safeDuration));
     }, [match.id, match.startedAt, match.minute, safeDuration]);
 
-    // Recalcular cada 30 s para mantener el minuto actualizado en pantalla.
+    // Tick cada 60 s — granularidad de minuto, sin depender del backend.
     useEffect(() => {
-        const id = setInterval(() => {
-            setLocalMinute(computeLiveMinute(match.startedAt, match.minute ?? 1, safeDuration));
-        }, 30000);
+        const id = setInterval(
+            () => setLocalMinute(computeLiveMinute(timerAnchorRef.current, safeDuration)),
+            60_000,
+        );
         return () => clearInterval(id);
-    }, [match.id, match.startedAt, safeDuration]);
+    }, [match.id, safeDuration]);
 
     const displayedMinute = useMemo(
         () => Math.max(1, Math.min(safeDuration, localMinute)),
@@ -357,24 +377,8 @@ export function LiveMatchCard({
                     </View>
                 </View>
 
-                {/* Footer: estadio */}
-                <View
-                    style={{
-                        flexDirection: 'row',
-                        justifyContent: 'center',
-                        marginTop: 16,
-                        paddingTop: 14,
-                        borderTopWidth: 1,
-                        borderTopColor: '#ffffff12',
-                    }}
-                >
-                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 5, justifyContent: 'center' }}>
-                        <Ionicons name="location-outline" size={12} color="#A1A1AA" />
-                        <Text style={{ color: '#A1A1AA', fontSize: 12 }}>{match.venue}</Text>
-                    </View>
-                </View>
 
-                {/* Banner de tiempo agotado */}
+{/* Banner de tiempo agotado */}
                 {isTimeUp && (
                     <View
                         style={{

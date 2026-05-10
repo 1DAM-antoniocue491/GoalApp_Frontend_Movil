@@ -41,16 +41,14 @@ export interface LiveMatchData {
   minute: number;
   leagueName: string;
   venue: string;
-  /**
-   * Inicial del equipo local para el escudo SVG.
-   * Se usa hasta que la feature Teams entregue logos reales.
-   * Cuando exista `Team.logo`, este campo se vuelve opcional/deprecado.
-   */
   homeShieldLetter?: string;
   awayShieldLetter?: string;
-  /** Color primario del equipo. Procede de Team.primaryColor en data.ts. */
   homeColor?: string;
   awayColor?: string;
+  /** ID del equipo local */
+  homeTeamId?: string;
+  /** ID del equipo visitante */
+  awayTeamId?: string;
 }
 
 // ---------------------------------------------------------------------------
@@ -61,17 +59,17 @@ export interface UpcomingMatchData {
   id: string;
   homeTeam: string;
   awayTeam: string;
-  /** Día del mes como string, ej: "24" */
   day: string;
-  /** Mes abreviado en mayúsculas, ej: "MAY" */
   month: string;
-  /** Hora en formato HH:MM, ej: "18:00" */
   time: string;
   round: string;
   venue: string;
-  /** Color primario del equipo local. Procede de Team.primaryColor. */
   homeColor?: string;
   awayColor?: string;
+  /** ID del equipo local */
+  homeTeamId?: string;
+  /** ID del equipo visitante */
+  awayTeamId?: string;
 }
 
 // ---------------------------------------------------------------------------

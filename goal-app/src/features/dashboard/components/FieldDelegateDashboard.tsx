@@ -5,20 +5,16 @@
  *
  * DIFERENCIAS CON ADMIN:
  * - No ve métricas de liga ni tarjetas de progreso
- * - En partidos en vivo: puede registrar eventos y finalizar (igual que admin)
- *   pero NO gestiona convocatorias ni edita el partido
- * - En próximos: solo puede iniciar el partido (canStartMatch = true)
- *   pero sin convocatoria ni edición (canManageSquad = false, canEditMatch = false)
+ * - En partidos en vivo: puede registrar eventos SOLO si su equipo es LOCAL
+ *   y finalizar el partido
+ * - En próximos: solo puede iniciar el partido SI su equipo es LOCAL
+ * - NO gestiona convocatorias ni edita el partido
  *
- * El field_delegate es el "árbitro/delegado" que controla el partido en campo.
- * Tiene acceso operativo al partido pero no a la gestión administrativa de la liga.
- *
- * SHELL:
- * SafeAreaView, StatusBar, WelcomeBlock, loading y error están centralizados
- * en DashboardLayout. FieldDelegateDashboard solo se preocupa de sus secciones.
+ * El field_delegate es el "delegado" que controla el partido en campo.
+ * Tiene acceso operativo limitado a partidos donde su equipo es local.
  */
 
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { View } from 'react-native';
 
 import { useDashboardData } from '@/src/shared/hooks/usedashboarddata';
@@ -50,6 +46,29 @@ export function FieldDelegateDashboard({
 }: FieldDelegateDashboardProps) {
   const { data, isLoading, isError, refetch } = useDashboardData(leagueId);
   const permissions = getDashboardPermissions('field_delegate');
+  const [delegadoTeamId, setDelegadoTeamId] = useState<string | null>(null);
+
+  // Obtener el equipo del delegado
+  useEffect(() => {
+    async function fetchDelegadoTeam() {
+      try {
+        // TODO: Reemplazar con llamada real a API cuando el backend esté listo
+        // const res = await apiGet<{ id_equipo: string }>('/equipos/usuario/mi-equipo', { liga_id: leagueId });
+        // setDelegadoTeamId(res.id_equipo);
+        // Por ahora usamos un equipo mock para pruebas
+        setDelegadoTeamId('team-1'); // Equipo mock del delegado
+      } catch {
+        setDelegadoTeamId(null);
+      }
+    }
+    fetchDelegadoTeam();
+  }, [leagueId]);
+
+  const isDelegadoHomeTeam = (homeTeamId?: string): boolean => {
+    if (!delegadoTeamId || !homeTeamId) return false;
+    return homeTeamId === delegadoTeamId;
+  };
+
   const {
     openRegisterEvent, openEndMatch, openStartMatch,
     modals, activeEventMatch, activeEndMatch, activeStartMatch, modalProps,
@@ -57,6 +76,8 @@ export function FieldDelegateDashboard({
 
   const handleRegisterEvent = (_matchId: string) => {
     if (!data?.liveMatch) return;
+    // El delegado solo puede registrar eventos si su equipo es local
+    if (!isDelegadoHomeTeam(data.liveMatch.homeTeamId)) return;
     openRegisterEvent({
       id: data.liveMatch.id,
       homeTeam: data.liveMatch.homeTeam,
@@ -81,6 +102,8 @@ export function FieldDelegateDashboard({
   const handleStartMatch = (matchId: string) => {
     const match = data?.upcomingMatches.find(m => m.id === matchId);
     if (!match) return;
+    // El delegado solo puede iniciar partidos donde su equipo es local
+    if (!isDelegadoHomeTeam(match.homeTeamId)) return;
     openStartMatch({
       id: match.id,
       homeTeam: match.homeTeam,
@@ -111,15 +134,17 @@ export function FieldDelegateDashboard({
                 permissions={permissions}
                 onRegisterEvent={handleRegisterEvent}
                 onEndMatch={handleEndMatch}
+                showRegisterEvent={isDelegadoHomeTeam(data.liveMatch.homeTeamId)}
               />
             </View>
           )}
 
-          {/* Próximos: solo puede iniciar, sin convocatoria ni edición */}
+          {/* Próximos: solo puede iniciar si es local, sin convocatoria ni edición */}
           <UpcomingMatchesSection
             matches={data.upcomingMatches}
             permissions={permissions}
             onStartMatch={handleStartMatch}
+            delegateTeamId={delegadoTeamId ?? undefined}
           />
         </>
       )}

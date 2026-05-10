@@ -56,9 +56,10 @@ export const mockLiveMatch: LiveMatchData = {
   venue: "Estadio Benito Villamarín",
   homeShieldLetter: "B",
   awayShieldLetter: "S",
-  // Colores corporativos de los equipos (fuente: mockTeams en data.ts)
-  homeColor: "#00A650", // Real Betis verde
-  awayColor: "#D40E14", // Sevilla FC rojo
+  homeColor: "#00A650",
+  awayColor: "#D40E14",
+  homeTeamId: "team-1",
+  awayTeamId: "team-2",
 };
 
 // ---------------------------------------------------------------------------
@@ -77,8 +78,10 @@ export const mockUpcomingMatches: UpcomingMatchData[] = [
     time: "18:00",
     round: "Jornada 21",
     venue: "Estadio San Mamés",
-    homeColor: "#C8102E", // Athletic rojo
-    awayColor: "#0057A8", // Real Sociedad azul
+    homeColor: "#C8102E",
+    awayColor: "#0057A8",
+    homeTeamId: "team-3",
+    awayTeamId: "team-4",
   },
   {
     id: "upcoming-2",
@@ -89,8 +92,10 @@ export const mockUpcomingMatches: UpcomingMatchData[] = [
     time: "20:30",
     round: "Jornada 21",
     venue: "Estadio de la Cerámica",
-    homeColor: "#FFD700", // Villarreal amarillo
-    awayColor: "#FF8C00", // Valencia naranja/negro
+    homeColor: "#FFD700",
+    awayColor: "#FF8C00",
+    homeTeamId: "team-5",
+    awayTeamId: "team-6",
   },
   {
     id: "upcoming-3",
@@ -101,8 +106,10 @@ export const mockUpcomingMatches: UpcomingMatchData[] = [
     time: "19:00",
     round: "Jornada 21",
     venue: "Civitas Metropolitano",
-    homeColor: "#C8102E", // Atlético rojo
-    awayColor: "#005999", // Getafe azul — alineado con mockTeams team-6
+    homeColor: "#C8102E",
+    awayColor: "#005999",
+    homeTeamId: "team-7",
+    awayTeamId: "team-8",
   },
 ];
 

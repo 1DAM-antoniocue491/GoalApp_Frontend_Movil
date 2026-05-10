@@ -38,6 +38,8 @@ export interface ProgrammedMatchCardProps {
     /** Si no se pasa, la card navega al detalle del partido por defecto */
     onPress?: () => void;
     onStartMatch?: () => void;
+    /** Si se pasa, sobreescribe permissions.canStartMatch para este partido concreto */
+    showStartButton?: boolean;
 }
 
 // ---------------------------------------------------------------------------
@@ -109,10 +111,14 @@ export function ProgrammedMatchCard({
     permissions,
     onPress,
     onStartMatch,
+    showStartButton,
 }: ProgrammedMatchCardProps) {
     const router = useRouter();
     const homeColor = match.homeColor ?? '#A1A1AA';
     const awayColor = match.awayColor ?? '#C4F135';
+
+    // showStartButton sobreescribe permissions.canStartMatch para este partido concreto
+    const effectiveCanStart = showStartButton ?? permissions.canStartMatch;
 
     // Regla de negocio: el partido solo puede iniciarse dentro de la ventana de 1 hora
     const startAllowed = canStartMatchNow(match.day, match.month, match.time);
@@ -166,8 +172,8 @@ export function ProgrammedMatchCard({
                 {(permissions.canStartMatch || permissions.canManageSquad) && (
                     <View style={{ marginTop: 6, gap: 6 }}>
 
-                        {/* Iniciar — canStartMatch, solo dentro de la ventana de 1 hora */}
-                        {permissions.canStartMatch && (
+                        {/* Iniciar — effectiveCanStart (permiso global o por-partido), solo dentro de la ventana de 1 hora */}
+                        {effectiveCanStart && (
                             <View>
                                 <TouchableOpacity
                                     onPress={(e) => {

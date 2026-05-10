@@ -38,6 +38,8 @@ interface UpcomingMatchesSectionProps {
     permissions: DashboardPermissions;
     /** Callback cuando el usuario pulsa "Iniciar partido" */
     onStartMatch?: (matchId: string) => void;
+    /** ID del equipo del delegado — si se pasa, "Iniciar" solo se muestra cuando su equipo es local */
+    delegateTeamId?: string;
 }
 
 
@@ -49,6 +51,7 @@ export function UpcomingMatchesSection({
     matches,
     permissions,
     onStartMatch,
+    delegateTeamId,
 }: UpcomingMatchesSectionProps) {
     const router = useRouter();
 
@@ -106,17 +109,23 @@ export function UpcomingMatchesSection({
             </View>
 
             {/* ── Lista de partidos ── */}
-            {matches.map((match) => (
-                <ProgrammedMatchCard
-                    key={match.id}
-                    match={match}
-                    permissions={permissions}
-                    onPress={() => {
-                        router.push(routes.private.matchRoutes.programmed.detail(match.id) as never);
-                    }}
-                    onStartMatch={() => onStartMatch?.(match.id)}
-                />
-            ))}
+            {matches.map((match) => {
+                const isDelegadoHomeTeam = delegateTeamId
+                    ? match.homeTeamId === delegateTeamId
+                    : false;
+                return (
+                    <ProgrammedMatchCard
+                        key={match.id}
+                        match={match}
+                        permissions={permissions}
+                        onPress={() => {
+                            router.push(routes.private.matchRoutes.programmed.detail(match.id) as never);
+                        }}
+                        onStartMatch={() => onStartMatch?.(match.id)}
+                        showStartButton={delegateTeamId ? isDelegadoHomeTeam : undefined}
+                    />
+                );
+            })}
         </View>
     );
 }

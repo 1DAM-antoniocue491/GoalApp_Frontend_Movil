@@ -54,6 +54,8 @@ interface LiveMatchCardProps {
     onRegisterEvent?: (matchId: string) => void;
     /** Callback cuando el usuario pulsa "Finalizar partido" */
     onEndMatch?: (matchId: string) => void;
+    /** Si se pasa, sobreescribe permissions.canRegisterEvent para este partido concreto */
+    showRegisterEvent?: boolean;
 }
 
 // ---------------------------------------------------------------------------
@@ -147,6 +149,7 @@ export function LiveMatchCard({
     permissions,
     onRegisterEvent,
     onEndMatch,
+    showRegisterEvent,
 }: LiveMatchCardProps) {
     const router = useRouter();
 
@@ -358,7 +361,7 @@ export function LiveMatchCard({
                                 onPress={() => router.push(routes.private.matchRoutes.live.squad(match.id) as never)}
                             />
                         )}
-                        {permissions.canRegisterEvent && (
+                        {(showRegisterEvent ?? permissions.canRegisterEvent) && (
                             <ActionButton
                                 label="Añadir evento"
                                 icon="add-circle-outline"

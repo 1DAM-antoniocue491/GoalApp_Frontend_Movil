@@ -50,6 +50,23 @@ export function parseBackendDateTimeLiteral(value?: string | null): {
   const empty = { date: '', day: '–', month: '–', time: '', dateFormatted: '–' };
   if (!value) return empty;
   const clean = String(value).trim();
+
+  // Timezone-aware strings (Z or ±HH:MM): convert to device local time
+  if (/Z$|[+-]\d{2}:\d{2}$/.test(clean)) {
+    const d = new Date(clean);
+    if (!isNaN(d.getTime())) {
+      const year = d.getFullYear();
+      const monthRaw = String(d.getMonth() + 1).padStart(2, '0');
+      const dayRaw = String(d.getDate()).padStart(2, '0');
+      const hour = String(d.getHours()).padStart(2, '0');
+      const minute = String(d.getMinutes()).padStart(2, '0');
+      const day = String(d.getDate());
+      const month = MESES_ABREV[d.getMonth()] ?? '–';
+      return { date: `${year}-${monthRaw}-${dayRaw}`, day, month, time: `${hour}:${minute}`, dateFormatted: `${day} ${month}` };
+    }
+  }
+
+  // Naive datetime: extract digits literally (backend already stores in local time)
   const m = clean.match(/^(\d{4})-(\d{2})-(\d{2})(?:[T\s](\d{2}):(\d{2}))?/);
   if (!m) return empty;
   const [, year, monthRaw, dayRaw, hour = '00', minute = '00'] = m;
@@ -57,6 +74,26 @@ export function parseBackendDateTimeLiteral(value?: string | null): {
   const monthIndex = Math.max(0, Math.min(11, Number(monthRaw) - 1));
   const month = MESES_ABREV[monthIndex] ?? '–';
   return { date: `${year}-${monthRaw}-${dayRaw}`, day, month, time: `${hour}:${minute}`, dateFormatted: `${day} ${month}` };
+}
+
+/**
+ * Builds the datetime string to send to the API.
+ * The backend treats naive datetimes as UTC and renders them in UTC+2 (Spain).
+ * toISOString() converts device-local time → UTC, so the backend displays the
+ * correct local hour without needing a manual "−2 hours" adjustment.
+ *
+ * @param dateStr  YYYY-MM-DD
+ * @param timeStr  HH:mm
+ */
+export function buildApiDateTime(dateStr: string, timeStr: string): string {
+  const [year, month, day] = dateStr.split('-').map(Number);
+  const [hour, minute] = timeStr.split(':').map(Number);
+  if (!year || !month || !day || hour === undefined || minute === undefined) {
+    return `${dateStr}T${timeStr}:00`;
+  }
+  const local = new Date(year, month - 1, day, hour, minute, 0, 0);
+  if (isNaN(local.getTime())) return `${dateStr}T${timeStr}:00`;
+  return local.toISOString().substring(0, 16) + ':00';
 }
 
 function getApiErrorMessage(error: unknown): string {

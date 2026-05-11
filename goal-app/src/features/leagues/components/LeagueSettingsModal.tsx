@@ -221,29 +221,6 @@ function Divider() {
   return <View style={{ height: 1, backgroundColor: Colors.bg.surface2, marginBottom: theme.spacing.xl }} />;
 }
 
-function ShieldPreview({ name }: { name: string }) {
-  const initial = name.trim().charAt(0).toUpperCase() || 'G';
-  const colors = [Colors.brand.primary, Colors.brand.secondary, Colors.brand.accent, Colors.semantic.warning];
-  const color = colors[name.length % colors.length];
-
-  return (
-    <View
-      style={{
-        width: 64,
-        height: 64,
-        borderRadius: 20,
-        backgroundColor: `${color}20`,
-        borderWidth: 1,
-        borderColor: `${color}88`,
-        alignItems: 'center',
-        justifyContent: 'center',
-      }}
-    >
-      <Ionicons name="shield" size={20} color={color} />
-      <Text style={{ color, fontSize: 18, fontWeight: '800', marginTop: 2 }}>{initial}</Text>
-    </View>
-  );
-}
 
 export function LeagueSettingsModal({
   visible,
@@ -254,7 +231,7 @@ export function LeagueSettingsModal({
 }: LeagueSettingsModalProps) {
   const insets = useSafeAreaInsets();
   const [form, setForm] = useState<SettingsForm>(DEFAULT_FORM);
-  const [existingConfig, setExistingConfig] = useState<LeagueConfigResponse | null>(null);
+  const [, setExistingConfig] = useState<LeagueConfigResponse | null>(null);
   const [configExists, setConfigExists] = useState(false);
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [isLoadingConfig, setIsLoadingConfig] = useState(false);
@@ -372,7 +349,7 @@ export function LeagueSettingsModal({
 
     onSuccess();
     onClose();
-  }, [configExists, existingConfig, form, league, onClose, onSuccess]);
+  }, [configExists, form, league, onClose, onSuccess]);
 
   const handleDelete = useCallback(() => {
     if (!league) return;

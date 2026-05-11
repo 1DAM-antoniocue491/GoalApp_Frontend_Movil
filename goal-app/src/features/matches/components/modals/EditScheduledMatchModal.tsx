@@ -9,7 +9,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { Colors } from '@/src/shared/constants/colors';
 import { DateTimePickerField } from '@/src/shared/components/ui/DateTimePickerField';
 import type { EditableScheduledMatchStatus, PartidoApi } from '../../types/matches.types';
-import { getAwayTeamName, getHomeTeamName, getMatchDate, normalizeMatchStatus, parseBackendDateTimeLiteral } from '../../services/matchesService';
+import { buildApiDateTime, getAwayTeamName, getHomeTeamName, getMatchDate, normalizeMatchStatus, parseBackendDateTimeLiteral } from '../../services/matchesService';
 import { MatchModalActions, MatchModalButton, MatchModalShell } from './MatchModalShell';
 import { FieldTitle } from './matchEventModalHelpers';
 
@@ -88,7 +88,7 @@ function EditScheduledMatchModalComponent({ visible, match, saving = false, onCo
   const handleConfirm = () => {
     const isoDate = pickerDateToIso(date);
     if (!isoDate || error || saving) return;
-    onConfirm({ fecha: `${isoDate}T${time}:00`, estado: status });
+    onConfirm({ fecha: buildApiDateTime(isoDate, time), estado: status });
   };
 
   return (

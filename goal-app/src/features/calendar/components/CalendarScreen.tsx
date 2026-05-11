@@ -43,6 +43,7 @@ import { useTeamsByLeague } from '@/src/features/teams/hooks/useTeams';
 
 // Service de partidos — crear partido manual
 import {
+  buildApiDateTime,
   createManualMatchService,
   updateScheduledMatchService,
 } from '@/src/features/matches/services/matchesService';
@@ -592,9 +593,8 @@ export function CalendarScreen() {
     if (ligaId <= 0) return;
 
 
-    // Combinar fecha + hora en ISO: YYYY-MM-DDTHH:MM:00
-    // TODO API: si el backend requiere UTC, ajustar conversión aquí
-    const fechaHora = `${data.date}T${data.time}:00`;
+    // Convert local time to UTC so the backend (UTC+2) displays the correct hour
+    const fechaHora = buildApiDateTime(data.date, data.time);
 
     setNewMatchError(undefined);
     setNewMatchSubmitting(true);

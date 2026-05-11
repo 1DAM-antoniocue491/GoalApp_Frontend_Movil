@@ -9,7 +9,7 @@
  * - Solo se envían a API los campos que el usuario puede editar aquí.
  */
 
-import React, { useCallback, useMemo, useState } from 'react';
+import React, { useCallback, useState } from 'react';
 import {
   Modal,
   View,
@@ -82,32 +82,6 @@ function FieldError({ message }: { message?: string }) {
   return <Text style={{ color: Colors.semantic.error, fontSize: 12, marginTop: 6 }}>{message}</Text>;
 }
 
-function ShieldPreview({ name }: { name: string }) {
-  const initial = name.trim().charAt(0).toUpperCase() || 'G';
-  const palette = useMemo(() => {
-    const colors = [Colors.brand.primary, Colors.brand.secondary, Colors.brand.accent, Colors.semantic.warning];
-    const index = name.length % colors.length;
-    return colors[index];
-  }, [name]);
-
-  return (
-    <View
-      style={{
-        width: 72,
-        height: 72,
-        borderRadius: 22,
-        backgroundColor: `${palette}22`,
-        borderWidth: 1,
-        borderColor: `${palette}88`,
-        alignItems: 'center',
-        justifyContent: 'center',
-      }}
-    >
-      <Ionicons name="shield" size={22} color={palette} />
-      <Text style={{ color: palette, fontSize: 20, fontWeight: '800', marginTop: 2 }}>{initial}</Text>
-    </View>
-  );
-}
 
 export function CreateLeagueModal({
   visible,

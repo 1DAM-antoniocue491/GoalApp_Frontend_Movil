@@ -96,6 +96,20 @@ function parseFechaHora(fechaHora: string | null | undefined) {
     return { day: "–", month: "–", time: "–", dateFormatted: "–" };
 
   const clean = String(fechaHora).trim();
+
+  // Timezone-aware strings (Z or ±HH:MM): convert to device local time
+  if (/Z$|[+-]\d{2}:\d{2}$/.test(clean)) {
+    const d = new Date(clean);
+    if (!isNaN(d.getTime())) {
+      const day = String(d.getDate());
+      const month = MESES[d.getMonth()] ?? "–";
+      const hour = String(d.getHours()).padStart(2, "0");
+      const minute = String(d.getMinutes()).padStart(2, "0");
+      return { day, month, time: `${hour}:${minute}`, dateFormatted: `${day} ${month}` };
+    }
+  }
+
+  // Naive datetime: extract digits literally (backend already stores in local time)
   const match = clean.match(/^(\d{4})-(\d{2})-(\d{2})(?:[T\s](\d{2}):(\d{2}))?/);
   if (!match) return { day: "–", month: "–", time: "–", dateFormatted: "–" };
 

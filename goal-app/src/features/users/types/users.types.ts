@@ -1,38 +1,43 @@
-/**
- * Tipos del dominio de usuarios y roles dentro de una liga.
- *
- * Objetivo de integración:
- * - La UI móvil trabaja con un modelo normalizado (`LeagueUser`).
- * - La API puede devolver usuarios desde más de un endpoint con nombres de campo distintos.
- * - No se usan mocks ni IDs de rol hardcodeados: los roles vienen de `GET /roles/`.
- */
+/** Tipos del dominio de usuarios y roles dentro de una liga. */
 
 export type UserRole = 'admin' | 'coach' | 'player' | 'delegate' | 'observer';
 export type UserStatus = 'active' | 'pending';
 
+export interface SelectOption {
+  value: string;
+  label: string;
+}
+
+/** Opciones compartidas para formularios de jugador. */
+export const PLAYER_TYPES: SelectOption[] = [
+  { value: 'normal', label: 'Jugador' },
+  { value: 'capitan', label: 'Capitán' },
+];
+
+/** Posiciones compartidas para invitación y generación de código. */
+export const PLAYER_POSITIONS: SelectOption[] = [
+  { value: 'portero', label: 'Portero' },
+  { value: 'defensa', label: 'Defensa' },
+  { value: 'centrocampista', label: 'Centrocampista' },
+  { value: 'delantero', label: 'Delantero' },
+];
+
 export interface LeagueUser {
-  /** ID estable para listas React. Preferimos id_usuario_rol si existe. */
   id: string;
-  /** ID real del usuario en backend. Se usa para PUT/DELETE. */
   userId: number;
-  /** ID de la relación usuario-liga si el endpoint lo devuelve. */
   userRoleId?: number;
   name: string;
   email: string;
-  /** Rol normalizado para la UI móvil. */
-  role: UserRole;
-  /** ID real del rol en backend. */
   roleId: number;
-  /** Etiqueta legible procedente de API o generada por fallback. */
+  role: UserRole;
+  roleRaw?: string;
   roleLabel: string;
   status: UserStatus;
   active: boolean;
   teamId?: string;
   teamName?: string;
-  // Solo para jugadores, si el backend lo devuelve o se usa en invitación.
   jersey?: number;
   position?: string;
-  playerType?: string;
   isCaptain?: boolean;
 }
 
@@ -49,13 +54,16 @@ export interface InviteUserFormData {
 export interface ManageUserFormData {
   role: UserRole | '';
   active: boolean;
-  teamId?: string;
-  jersey?: string;
-  position?: string;
-  isCaptain?: boolean;
 }
 
-/** Etiquetas legibles por rol normalizado */
+export interface GenerateUnionCodeFormData {
+  role: UserRole | '';
+  teamId: string;
+  playerType: string;
+  jersey: string;
+  position: string;
+}
+
 export const ROLE_LABELS: Record<UserRole, string> = {
   admin: 'Administrador',
   coach: 'Entrenador',
@@ -64,49 +72,65 @@ export const ROLE_LABELS: Record<UserRole, string> = {
   observer: 'Observador',
 };
 
-// ---------------------------------------------------------------------------
-// Contratos API
-// ---------------------------------------------------------------------------
-
-export interface RoleResponse {
+export interface ApiRole {
   id_rol: number;
   nombre: string;
   descripcion?: string | null;
+  created_at?: string;
+  updated_at?: string;
 }
 
-/** Endpoint: GET /usuarios/ligas/{ligaId}/usuarios */
-export interface UserWithRoleResponse {
-  id_usuario: number;
-  nombre: string | null;
-  email: string | null;
-  id_rol: number;
-  rol: string | null;
-  activo: boolean;
-  created_at?: string | null;
-}
-
-/** Endpoint: GET /ligas/{ligaId}/usuarios */
-export interface UsuarioLigaResponse {
-  id_usuario_rol: number;
-  id_usuario: number;
-  nombre_usuario: string | null;
-  email: string | null;
-  id_rol: number;
-  nombre_rol: string | null;
-  activo: boolean;
-}
-
-export type LeagueUserApiResponse = UserWithRoleResponse | UsuarioLigaResponse;
-
-export interface TeamForUsersResponse {
+export interface TeamOptionApi {
   id_equipo: number;
   nombre: string;
-  escudo: string | null;
-  colores: string | null;
-  id_liga: number;
+  escudo?: string | null;
+  colores?: string | null;
+  id_liga?: number;
   id_entrenador?: number | null;
   id_delegado?: number | null;
 }
+
+export interface PlayerApi {
+  id_jugador: number;
+  id_usuario: number;
+  id_equipo: number;
+  posicion?: string | null;
+  dorsal?: number | string | null;
+  activo?: boolean;
+  tipo_jugador?: string | null;
+}
+
+export interface LeagueUserApiA {
+  id_usuario: number;
+  nombre: string;
+  email: string;
+  id_rol: number;
+  rol: string;
+  activo: boolean;
+  created_at?: string;
+  id_equipo?: number | null;
+  nombre_equipo?: string | null;
+  dorsal?: number | string | null;
+  posicion?: string | null;
+  tipo_jugador?: string | null;
+}
+
+export interface LeagueUserApiB {
+  id_usuario_rol: number;
+  id_usuario: number;
+  nombre_usuario: string;
+  email: string;
+  id_rol: number;
+  nombre_rol: string;
+  activo: boolean;
+  id_equipo?: number | null;
+  nombre_equipo?: string | null;
+  dorsal?: number | string | null;
+  posicion?: string | null;
+  tipo_jugador?: string | null;
+}
+
+export type LeagueUserApi = LeagueUserApiA | LeagueUserApiB;
 
 export interface InviteUserPayload {
   nombre: string;
@@ -118,15 +142,28 @@ export interface InviteUserPayload {
   tipo_jugador?: string | null;
 }
 
-export interface UpdateUserRolePayload {
+export interface GenerateUnionCodePayload {
   id_rol: number;
+  id_equipo?: number | null;
+  dorsal?: string | null;
+  posicion?: string | null;
+  tipo_jugador?: string | null;
 }
 
-export interface UpdateUserStatusPayload {
-  activo: boolean;
+export interface UnionCodeResponse {
+  codigo: string;
+  rol?: string;
+  liga?: string;
+  expiracion?: string;
+  expira_en?: string;
+  id_liga?: number;
+  id_rol?: number;
+  id_equipo?: number | null;
+  dorsal?: string | null;
+  posicion?: string | null;
 }
 
-export interface ServiceResult<T = void> {
+export interface ServiceResult<T = undefined> {
   success: boolean;
   data?: T;
   error?: string;

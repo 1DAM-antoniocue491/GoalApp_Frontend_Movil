@@ -1,359 +1,331 @@
-/**
- * UsersRolesScreen
- *
- * Pantalla principal de usuarios y roles dentro de una liga.
- * Integra datos reales con API:
- * - GET /usuarios/ligas/{ligaId}/usuarios o fallback GET /ligas/{ligaId}/usuarios
- * - GET /roles/
- * - GET /equipos/?liga_id={ligaId}
- * - POST /invitaciones/ligas/{ligaId}/invitar
- * - PUT /ligas/{ligaId}/usuarios/{usuarioId}/rol
- * - PUT /ligas/{ligaId}/usuarios/{usuarioId}/estado
- * - DELETE /ligas/{ligaId}/usuarios/{usuarioId}
- */
+/** Pantalla principal de usuarios y roles. Todo usa API real. */
 
-import React, { useMemo, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
-  View,
-  Text,
-  ScrollView,
-  TouchableOpacity,
   ActivityIndicator,
   RefreshControl,
+  ScrollView,
+  Text,
+  TouchableOpacity,
+  View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
-
-import { useActiveLeague } from '@/src/state/activeLeague/activeLeagueStore';
 import { SearchInput } from '@/src/shared/components/ui/SearchInput';
 import { SectionTitle } from '@/src/shared/components/ui/SectionTitle';
 import { ScrollEdgeButton } from '@/src/shared/components/navigation/ScrollEdgeButton';
 import { Colors } from '@/src/shared/constants/colors';
 import { theme } from '@/src/shared/styles/theme';
-
+import { useActiveLeague } from '@/src/state/activeLeague/activeLeagueStore';
+import { toUserRole } from '@/src/shared/utils/roles';
+import { roleOptionsFromApi, teamOptionsFromApi } from '../services/userService';
 import { useLeagueUsers } from '../hooks/useLeagueUsers';
 import { UsersSummary } from './UsersSummary';
 import { UserRowCard } from './UserRowCard';
 import { InviteUserModal } from './modals/InviteUserModal';
 import { ManageUserModal } from './modals/ManageUserModal';
-import type { InviteUserFormData, LeagueUser, ManageUserFormData } from '../types/users.types';
+import { GenerateUnionCodeModal } from './modals/GenerateUnionCodeModal';
+import type { InviteUserFormData, LeagueUser, ManageUserFormData, UserRole } from '../types/users.types';
 
-function ScreenState({
-  icon,
-  title,
-  description,
-  actionLabel,
-  onAction,
-}: {
-  icon: keyof typeof Ionicons.glyphMap;
-  title: string;
-  description: string;
-  actionLabel?: string;
-  onAction?: () => void;
-}) {
-  return (
-    <View className="items-center justify-center px-8" style={{ flex: 1, backgroundColor: Colors.bg.base }}>
-      <View
-        style={{
-          width: 76,
-          height: 76,
-          borderRadius: 38,
-          backgroundColor: Colors.bg.surface1,
-          alignItems: 'center',
-          justifyContent: 'center',
-          marginBottom: theme.spacing.lg,
-          borderWidth: 1,
-          borderColor: Colors.bg.surface2,
-        }}
-      >
-        <Ionicons name={icon} size={36} color={Colors.text.secondary} />
-      </View>
-      <Text style={{ color: Colors.text.primary, fontSize: theme.fontSize.xl, fontWeight: '800', textAlign: 'center' }}>
-        {title}
-      </Text>
-      <Text style={{ color: Colors.text.secondary, fontSize: theme.fontSize.sm, textAlign: 'center', lineHeight: 20, marginTop: theme.spacing.sm }}>
-        {description}
-      </Text>
-      {actionLabel && onAction ? (
-        <TouchableOpacity
-          onPress={onAction}
-          activeOpacity={0.85}
-          style={{
-            marginTop: theme.spacing.xl,
-            backgroundColor: Colors.brand.primary,
-            borderRadius: theme.borderRadius.full,
-            paddingHorizontal: theme.spacing.xl,
-            height: 48,
-            alignItems: 'center',
-            justifyContent: 'center',
-          }}
-        >
-          <Text style={{ color: '#000', fontWeight: '800', fontSize: theme.fontSize.sm }}>{actionLabel}</Text>
-        </TouchableOpacity>
-      ) : null}
-    </View>
-  );
+function getCurrentUserId(session: unknown): number | null {
+  const raw = (session as any)?.userId ?? (session as any)?.id_usuario ?? (session as any)?.user?.id_usuario ?? (session as any)?.user?.id;
+  const parsed = Number(raw);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : null;
+}
+
+function getAllowedInviteRoles(currentRole: UserRole): UserRole[] {
+  if (currentRole === 'admin') return ['admin', 'coach', 'delegate', 'player', 'observer'];
+  if (currentRole === 'coach') return ['delegate', 'player'];
+  return [];
 }
 
 export function UsersRolesScreen() {
   const router = useRouter();
   const { session } = useActiveLeague();
   const ligaId = session?.leagueId ? Number(session.leagueId) : 0;
-  const isAdmin = session?.role === 'admin';
+  const currentUserRole = toUserRole((session as any)?.role);
+  const currentUserId = getCurrentUserId(session);
 
   const {
     users,
-    roleOptions,
-    inviteRoleOptions,
-    teamOptions,
+    roles,
+    teams,
+    filteredUsers,
     isLoading,
     isRefreshing,
-    isInviting,
-    isUpdating,
-    isRemoving,
+    isSubmitting,
     error,
+    search,
+    setSearch,
     refresh,
     inviteUser,
     updateUser,
     removeUser,
+    generateUnionCode,
+    deleteCode,
+    adminCount,
     clearError,
   } = useLeagueUsers(ligaId);
 
-  const [search, setSearch] = useState('');
   const [inviteOpen, setInviteOpen] = useState(false);
+  const [unionCodeOpen, setUnionCodeOpen] = useState(false);
   const [managingUser, setManagingUser] = useState<LeagueUser | null>(null);
+  const [toast, setToast] = useState<string | null>(null);
+  const [togglingUserId, setTogglingUserId] = useState<string | null>(null);
 
-  // Ref del ScrollView para que ScrollEdgeButton pueda llamar a scrollTo.
   const scrollRef = useRef<ScrollView>(null);
   const [scrollY, setScrollY] = useState(0);
   const [contentHeight, setContentHeight] = useState(0);
   const [viewportHeight, setViewportHeight] = useState(0);
 
-  const filteredUsers = useMemo(() => {
-    const q = search.toLowerCase().trim();
-    if (!q) return users;
-    return users.filter(user =>
-      user.name.toLowerCase().includes(q) ||
-      user.email.toLowerCase().includes(q) ||
-      user.roleLabel.toLowerCase().includes(q),
-    );
-  }, [users, search]);
+  const allowedInviteRoles = useMemo(() => getAllowedInviteRoles(currentUserRole), [currentUserRole]);
+  const canInvite = allowedInviteRoles.length > 0;
+  const roleOptions = useMemo(() => roleOptionsFromApi(roles, allowedInviteRoles), [roles, allowedInviteRoles]);
+  const manageRoleOptions = useMemo(() => roleOptionsFromApi(roles), [roles]);
+  const teamOptions = useMemo(() => teamOptionsFromApi(teams), [teams]);
+
+  useEffect(() => {
+    if (!toast) return;
+    const timeout = setTimeout(() => setToast(null), 2400);
+    return () => clearTimeout(timeout);
+  }, [toast]);
 
   async function handleInviteSubmit(data: InviteUserFormData) {
-    return inviteUser(data);
+    const ok = await inviteUser(data);
+    if (ok) {
+      setInviteOpen(false);
+      setToast('Invitación enviada correctamente.');
+    }
+    return ok;
   }
 
   async function handleUpdateUser(userId: string, data: ManageUserFormData) {
     const ok = await updateUser(userId, data);
-    if (ok) setManagingUser(null);
+    if (ok) {
+      setManagingUser(null);
+      setToast('Usuario actualizado correctamente.');
+    }
     return ok;
   }
 
   async function handleRemoveUser(userId: string) {
     const ok = await removeUser(userId);
-    if (ok) setManagingUser(null);
+    if (ok) {
+      setManagingUser(null);
+      setToast('Usuario eliminado de la liga.');
+    }
     return ok;
   }
 
-  if (!session || ligaId <= 0) {
+  async function handleToggleActive(user: LeagueUser) {
+    if (togglingUserId || isSubmitting) return false;
+
+    setTogglingUserId(user.id);
+    const ok = await updateUser(user.id, { role: user.role, active: !user.active });
+    setTogglingUserId(null);
+
+    if (ok) setToast(user.active ? 'Usuario desactivado.' : 'Usuario activado.');
+    return ok;
+  }
+
+  if (!ligaId) {
     return (
-      <SafeAreaView style={{ flex: 1, backgroundColor: Colors.bg.base }}>
-        <ScreenState
-          icon="shield-outline"
-          title="Selecciona una liga"
-          description="Para gestionar usuarios y roles primero necesitas tener una liga activa."
-          actionLabel="Volver"
-          onAction={() => router.back()}
-        />
+      <SafeAreaView style={screenStyles.safeArea}>
+        <View style={screenStyles.centerState}>
+          <Ionicons name="warning-outline" size={42} color={Colors.semantic.warning} />
+          <Text style={screenStyles.stateTitle}>No hay liga activa</Text>
+          <Text style={screenStyles.stateText}>Selecciona una liga para gestionar sus usuarios.</Text>
+        </View>
+      </SafeAreaView>
+    );
+  }
+
+  if (isLoading) {
+    return (
+      <SafeAreaView style={screenStyles.safeArea}>
+        <View style={screenStyles.centerState}>
+          <ActivityIndicator color={Colors.brand.primary} />
+          <Text style={screenStyles.stateText}>Cargando usuarios...</Text>
+        </View>
       </SafeAreaView>
     );
   }
 
   return (
-    <SafeAreaView style={{ flex: 1, backgroundColor: Colors.bg.base }}>
-      {/* Header */}
-      <View
-        className="flex-row items-center justify-between px-6 py-4"
-        style={{ borderBottomWidth: 1, borderBottomColor: Colors.bg.surface2 }}
-      >
+    <SafeAreaView style={screenStyles.safeArea}>
+      <View style={screenStyles.header}>
         <View className="flex-row items-center gap-3" style={{ flex: 1 }}>
-          <TouchableOpacity
-            onPress={() => router.back()}
-            hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-            style={{
-              width: 38,
-              height: 38,
-              borderRadius: 19,
-              alignItems: 'center',
-              justifyContent: 'center',
-              backgroundColor: Colors.bg.surface1,
-            }}
-          >
-            <Ionicons name="arrow-back" size={21} color={Colors.text.primary} />
+          <TouchableOpacity onPress={() => router.back()} hitSlop={12}>
+            <Ionicons name="arrow-back" size={22} color={Colors.text.primary} />
           </TouchableOpacity>
-
           <View style={{ flex: 1 }}>
             <SectionTitle title="Usuarios y roles" />
-            <Text style={{ color: Colors.text.secondary, fontSize: theme.fontSize.xs, marginTop: 2 }} numberOfLines={1}>
-              {session.leagueName}
-            </Text>
+            <Text style={screenStyles.headerSubtitle} numberOfLines={1}>{session?.leagueName ?? 'Liga activa'}</Text>
           </View>
         </View>
 
-        {isAdmin ? (
-          <TouchableOpacity
-            onPress={() => {
-              clearError();
-              setInviteOpen(true);
-            }}
-            activeOpacity={0.85}
-            style={{
-              flexDirection: 'row',
-              alignItems: 'center',
-              backgroundColor: Colors.brand.primary,
-              borderRadius: theme.borderRadius.full,
-              paddingHorizontal: theme.spacing.md,
-              height: 38,
-              gap: 6,
-            }}
-          >
-            <Ionicons name="person-add-outline" size={16} color="#000" />
-            <Text style={{ color: '#000', fontSize: theme.fontSize.sm, fontWeight: '800' }}>
-              Invitar
-            </Text>
-          </TouchableOpacity>
+        {canInvite ? (
+          <View style={screenStyles.headerActions}>
+            <TouchableOpacity
+              style={screenStyles.iconButton}
+              onPress={() => {
+                clearError();
+                setUnionCodeOpen(true);
+              }}
+              activeOpacity={0.85}
+            >
+              <Ionicons name="key-outline" size={18} color={Colors.brand.primary} />
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={screenStyles.primaryButton}
+              onPress={() => {
+                clearError();
+                setInviteOpen(true);
+              }}
+              activeOpacity={0.85}
+            >
+              <Ionicons name="person-add-outline" size={16} color="#000" />
+              <Text style={screenStyles.primaryButtonText}>Invitar</Text>
+            </TouchableOpacity>
+          </View>
         ) : null}
       </View>
 
-      {isLoading ? (
-        <ScreenState icon="people-outline" title="Cargando usuarios" description="Estamos consultando los usuarios reales de la liga." />
-      ) : (
-        <>
-          <ScrollView
-            ref={scrollRef}
-            className="flex-1"
-            showsVerticalScrollIndicator={false}
-            contentContainerStyle={{
-              paddingHorizontal: theme.spacing.xl,
-              paddingTop: theme.spacing.xl,
-              paddingBottom: theme.spacing.xxl * 2,
-            }}
-            keyboardShouldPersistTaps="handled"
-            refreshControl={
-              <RefreshControl refreshing={isRefreshing} onRefresh={refresh} tintColor={Colors.brand.primary} />
-            }
-            scrollEventThrottle={16}
-            onScroll={(e) => setScrollY(e.nativeEvent.contentOffset.y)}
-            onContentSizeChange={(_, h) => setContentHeight(h)}
-            onLayout={(e) => setViewportHeight(e.nativeEvent.layout.height)}
-          >
-            {/* Error controlado */}
-            {error ? (
-              <View
-                style={{
-                  backgroundColor: 'rgba(255,69,52,0.10)',
-                  borderWidth: 1,
-                  borderColor: 'rgba(255,69,52,0.35)',
-                  borderRadius: theme.borderRadius.xl,
-                  padding: theme.spacing.md,
-                  marginBottom: theme.spacing.lg,
-                }}
-              >
-                <Text style={{ color: Colors.semantic.error, fontSize: theme.fontSize.sm, lineHeight: 20 }}>
-                  {error}
-                </Text>
-              </View>
-            ) : null}
+      {toast ? (
+        <View style={screenStyles.toast}>
+          <Ionicons name="checkmark-circle-outline" size={18} color={Colors.semantic.success} />
+          <Text style={screenStyles.toastText}>{toast}</Text>
+        </View>
+      ) : null}
 
-            {/* Resumen de métricas reales */}
-            <UsersSummary users={users} />
+      <ScrollView
+        ref={scrollRef}
+        className="flex-1"
+        showsVerticalScrollIndicator={false}
+        keyboardShouldPersistTaps="handled"
+        contentContainerStyle={screenStyles.content}
+        refreshControl={<RefreshControl refreshing={isRefreshing} onRefresh={refresh} tintColor={Colors.brand.primary} />}
+        scrollEventThrottle={16}
+        onScroll={event => setScrollY(event.nativeEvent.contentOffset.y)}
+        onContentSizeChange={(_, height) => setContentHeight(height)}
+        onLayout={event => setViewportHeight(event.nativeEvent.layout.height)}
+      >
+        <UsersSummary users={users} />
 
-            {/* Buscador */}
-            <View className="mb-5">
-              <SearchInput
-                value={search}
-                placeholder="Buscar por nombre, email o rol..."
-                onChangeText={setSearch}
-                onClear={() => setSearch('')}
-              />
-            </View>
-
-            {/* Encabezado de lista */}
-            <View className="flex-row items-center justify-between mb-3">
-              <Text style={{ color: Colors.text.secondary, fontSize: theme.fontSize.sm }}>
-                {filteredUsers.length} miembro{filteredUsers.length !== 1 ? 's' : ''}
-              </Text>
-              {isRefreshing ? <ActivityIndicator size="small" color={Colors.brand.primary} /> : null}
-            </View>
-
-            {/* Lista de usuarios reales */}
-            {filteredUsers.length > 0 ? (
-              filteredUsers.map(user => (
-                <UserRowCard
-                  key={user.id}
-                  user={user}
-                  onManage={isAdmin ? setManagingUser : () => undefined}
-                />
-              ))
-            ) : (
-              <View className="items-center py-14">
-                <View
-                  style={{
-                    width: 70,
-                    height: 70,
-                    borderRadius: 35,
-                    backgroundColor: Colors.bg.surface1,
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    borderWidth: 1,
-                    borderColor: Colors.bg.surface2,
-                  }}
-                >
-                  <Ionicons name="people-outline" size={34} color={Colors.text.disabled} />
-                </View>
-                <Text style={{ color: Colors.text.primary, fontSize: theme.fontSize.md, fontWeight: '700', marginTop: theme.spacing.md }}>
-                  No se encontraron usuarios
-                </Text>
-                <Text style={{ color: Colors.text.secondary, fontSize: theme.fontSize.sm, textAlign: 'center', marginTop: 6 }}>
-                  Prueba con otra búsqueda o invita nuevos usuarios a la liga.
-                </Text>
-              </View>
-            )}
-          </ScrollView>
-
-          <ScrollEdgeButton
-            scrollRef={scrollRef}
-            scrollY={scrollY}
-            contentHeight={contentHeight}
-            viewportHeight={viewportHeight}
+        <View className="mb-5">
+          <SearchInput
+            value={search}
+            placeholder="Buscar por nombre, email, rol o equipo..."
+            onChangeText={setSearch}
+            onClear={() => setSearch('')}
           />
-        </>
-      )}
+        </View>
 
-      {/* Modal Invitar usuario */}
+        {error ? (
+          <View style={screenStyles.errorBox}>
+            <Ionicons name="alert-circle-outline" size={18} color={Colors.semantic.error} />
+            <Text style={screenStyles.errorText}>{error}</Text>
+          </View>
+        ) : null}
+
+        <View style={screenStyles.listHeader}>
+          <Text style={screenStyles.listTitle}>{filteredUsers.length} miembro{filteredUsers.length !== 1 ? 's' : ''}</Text>
+          <TouchableOpacity onPress={refresh} hitSlop={12}>
+            <Ionicons name="refresh-outline" size={18} color={Colors.text.secondary} />
+          </TouchableOpacity>
+        </View>
+
+        {filteredUsers.length > 0 ? (
+          filteredUsers.map((user: LeagueUser) => (
+            <UserRowCard
+              key={user.id}
+              user={user}
+              onManage={setManagingUser}
+              onToggleActive={handleToggleActive}
+              isToggling={togglingUserId === user.id}
+            />
+          ))
+        ) : (
+          <View style={screenStyles.emptyState}>
+            <Ionicons name="people-outline" size={44} color={Colors.text.disabled} />
+            <Text style={screenStyles.emptyTitle}>No se encontraron usuarios</Text>
+            <Text style={screenStyles.emptyText}>Prueba con otra búsqueda o invita a un nuevo miembro.</Text>
+          </View>
+        )}
+      </ScrollView>
+
+      <ScrollEdgeButton scrollRef={scrollRef} scrollY={scrollY} contentHeight={contentHeight} viewportHeight={viewportHeight} />
+
       <InviteUserModal
         visible={inviteOpen}
         onClose={() => setInviteOpen(false)}
         onSubmit={handleInviteSubmit}
+        roleOptions={roleOptions}
         teamOptions={teamOptions}
-        roleOptions={inviteRoleOptions}
-        isSubmitting={isInviting}
+        isSubmitting={isSubmitting}
         error={error}
       />
 
-      {/* Modal Gestionar usuario */}
-      <ManageUserModal
-        user={managingUser}
-        visible={Boolean(managingUser)}
-        onClose={() => setManagingUser(null)}
-        onUpdate={handleUpdateUser}
-        onRemove={handleRemoveUser}
+      <GenerateUnionCodeModal
+        visible={unionCodeOpen}
+        onClose={() => setUnionCodeOpen(false)}
+        onGenerate={generateUnionCode}
+        onDelete={deleteCode}
         roleOptions={roleOptions}
-        isUpdating={isUpdating}
-        isRemoving={isRemoving}
+        teamOptions={teamOptions}
+        isSubmitting={isSubmitting}
         error={error}
       />
+
+      {managingUser ? (
+        <ManageUserModal
+          user={managingUser}
+          visible={true}
+          onClose={() => setManagingUser(null)}
+          onUpdate={handleUpdateUser}
+          onRemove={handleRemoveUser}
+          roleOptions={manageRoleOptions}
+          isSubmitting={isSubmitting}
+          error={error}
+          currentUserId={currentUserId}
+          adminCount={adminCount}
+        />
+      ) : null}
     </SafeAreaView>
   );
 }
+
+export default UsersRolesScreen;
+
+const screenStyles = {
+  safeArea: { flex: 1, backgroundColor: Colors.bg.base },
+  header: {
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    justifyContent: 'space-between' as const,
+    paddingHorizontal: theme.spacing.xl,
+    paddingVertical: theme.spacing.lg,
+    borderBottomWidth: 1,
+    borderBottomColor: Colors.bg.surface2,
+    gap: theme.spacing.md,
+  },
+  headerSubtitle: { color: Colors.text.secondary, fontSize: theme.fontSize.xs, marginTop: 2 },
+  headerActions: { flexDirection: 'row' as const, alignItems: 'center' as const, gap: theme.spacing.sm },
+  iconButton: { width: 38, height: 38, borderRadius: theme.borderRadius.lg, backgroundColor: Colors.bg.surface1, borderWidth: 1, borderColor: Colors.bg.surface2, alignItems: 'center' as const, justifyContent: 'center' as const },
+  primaryButton: { flexDirection: 'row' as const, alignItems: 'center' as const, backgroundColor: Colors.brand.primary, borderRadius: theme.borderRadius.lg, paddingHorizontal: theme.spacing.md, height: 38, gap: 6 },
+  primaryButtonText: { color: '#000', fontSize: theme.fontSize.sm, fontWeight: '800' as const },
+  toast: { flexDirection: 'row' as const, alignItems: 'center' as const, gap: 8, marginHorizontal: theme.spacing.xl, marginTop: theme.spacing.md, padding: theme.spacing.md, borderRadius: 16, backgroundColor: 'rgba(45,212,104,0.12)', borderWidth: 1, borderColor: 'rgba(45,212,104,0.35)' },
+  toastText: { flex: 1, color: Colors.semantic.success, fontSize: theme.fontSize.sm, fontWeight: '700' as const },
+  content: { paddingHorizontal: theme.spacing.xl, paddingVertical: theme.spacing.xl, paddingBottom: theme.spacing.xxl * 2 },
+  listHeader: { flexDirection: 'row' as const, alignItems: 'center' as const, justifyContent: 'space-between' as const, marginBottom: theme.spacing.md },
+  listTitle: { color: Colors.text.secondary, fontSize: theme.fontSize.sm, fontWeight: '600' as const },
+  errorBox: { flexDirection: 'row' as const, gap: 8, alignItems: 'center' as const, backgroundColor: 'rgba(255,69,52,0.10)', borderRadius: theme.borderRadius.lg, padding: theme.spacing.md, marginBottom: theme.spacing.md },
+  errorText: { flex: 1, color: Colors.semantic.error, fontSize: theme.fontSize.sm },
+  emptyState: { alignItems: 'center' as const, paddingVertical: theme.spacing.xxl },
+  emptyTitle: { color: Colors.text.primary, fontSize: theme.fontSize.md, fontWeight: '700' as const, marginTop: theme.spacing.md },
+  emptyText: { color: Colors.text.secondary, fontSize: theme.fontSize.sm, textAlign: 'center' as const, marginTop: 4 },
+  centerState: { flex: 1, alignItems: 'center' as const, justifyContent: 'center' as const, padding: theme.spacing.xl },
+  stateTitle: { color: Colors.text.primary, fontSize: theme.fontSize.lg, fontWeight: '700' as const, marginTop: theme.spacing.md },
+  stateText: { color: Colors.text.secondary, fontSize: theme.fontSize.sm, textAlign: 'center' as const, marginTop: theme.spacing.sm },
+};

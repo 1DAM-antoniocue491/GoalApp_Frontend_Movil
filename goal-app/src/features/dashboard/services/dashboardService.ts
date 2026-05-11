@@ -175,9 +175,15 @@ export function getRoleGreeting(role: LeagueRole): string {
 
 /**
  * Formatea un porcentaje para las tarjetas de progreso.
- * Siempre devuelve un entero con símbolo %, sin decimales.
+ *
+ * Regla de seguridad visual:
+ * - Nunca debe superar el 100%, aunque el backend devuelva más equipos/partidos
+ *   de los configurados.
+ * - Nunca debe ser negativo. Esto evita barras rotas si llega algún valor extraño.
  */
 export function formatProgress(current: number, total: number): string {
-  if (total === 0) return "0%";
-  return `${Math.round((current / total) * 100)}%`;
+  if (!Number.isFinite(current) || !Number.isFinite(total) || total <= 0) return "0%";
+
+  const ratio = Math.max(0, Math.min(current / total, 1));
+  return `${Math.round(ratio * 100)}%`;
 }

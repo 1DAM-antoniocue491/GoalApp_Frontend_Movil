@@ -38,6 +38,8 @@ export type CalendarRole = 'admin' | 'coach' | 'field_delegate' | 'player' | 'ob
  *   debe detectarse como conflicto — ver utils/calendarConflicts.ts.
  * - El backend debe respetar esta distinción en la persistencia.
  */
+// Diferencia clave para el menú: los partidos manuales no deben activar
+// las opciones de editar/eliminar calendario automático.
 export type MatchSource = 'automatic' | 'manual';
 
 /** Estado del partido dentro del calendario */
@@ -78,6 +80,12 @@ export interface CalendarMatch {
   awayScore?: number;
   /** Minuto actual — solo si status === 'live' */
   minute?: number;
+  /** Duración configurada del partido en la liga. */
+  duration?: number;
+  /** Fecha/hora literal usada para calcular el minuto visual en front. */
+  startedAt?: string | null;
+  homeTeamId?: number | null;
+  awayTeamId?: number | null;
   // Visual
   homeColor?: string;
   awayColor?: string;

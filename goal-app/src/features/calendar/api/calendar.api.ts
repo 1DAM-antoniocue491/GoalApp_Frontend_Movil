@@ -34,6 +34,10 @@ export interface PartidoConEquiposCalendario {
   goles_local: number;
   goles_visitante: number;
   minuto_actual?: number | null;
+  inicio_en?: string | null;
+  started_at?: string | null;
+  fecha_inicio?: string | null;
+  duracion_partido?: number | null;
   equipo_local: EquipoResumenCalendario;
   equipo_visitante: EquipoResumenCalendario;
   jornada?: JornadaResumenCalendario | null;
@@ -93,6 +97,10 @@ export interface PartidoCalendarioApi {
   goles_local?: number | null;
   goles_visitante?: number | null;
   minuto_actual?: number | null;
+  inicio_en?: string | null;
+  started_at?: string | null;
+  fecha_inicio?: string | null;
+  duracion_partido?: number | null;
   /** Objeto embebido de equipo (puede no venir) */
   equipo_local?: EquipoResumenJornada | null;
   equipo_visitante?: EquipoResumenJornada | null;

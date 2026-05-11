@@ -22,6 +22,12 @@ import { Ionicons } from '@expo/vector-icons';
 import { formatProgress } from '../services/dashboardService';
 import type { LeagueMetricsData } from '@/src/shared/types/dashboard.types';
 import { Colors } from '@/src/shared/constants/colors';
+import { theme } from '@/src/shared/styles/theme';
+
+function clampProgress(value: number): number {
+    if (!Number.isFinite(value)) return 0;
+    return Math.max(0, Math.min(value, 1));
+}
 
 // ---------------------------------------------------------------------------
 // Sub-componente: barra de progreso animada
@@ -85,8 +91,9 @@ interface ProgressCardConfig {
 }
 
 function ProgressCard({ config }: { config: ProgressCardConfig }) {
-    const progress = config.total > 0 ? config.current / config.total : 0;
-    // formatProgress viene del service: Math.round(ratio * 100) + '%'
+    // La barra se limita a 100% para evitar desbordes si current supera el máximo configurado.
+    const progress = config.total > 0 ? clampProgress(config.current / config.total) : 0;
+    // formatProgress aplica la misma regla de seguridad para la etiqueta textual.
     const pctLabel = formatProgress(config.current, config.total);
 
     return (
@@ -94,8 +101,8 @@ function ProgressCard({ config }: { config: ProgressCardConfig }) {
             style={{
                 flex: 1,
                 backgroundColor: Colors.bg.surface1,
-                borderRadius: 12,
-                padding: 14,
+                borderRadius: theme.borderRadius.lg,
+                padding: theme.spacing.lg,
             }}
         >
             {/* Badge de icono */}
@@ -104,29 +111,29 @@ function ProgressCard({ config }: { config: ProgressCardConfig }) {
                     width: 36,
                     height: 36,
                     backgroundColor: Colors.bg.surface2,
-                    borderRadius: 10,
+                    borderRadius: theme.borderRadius.lg,
                     alignItems: 'center',
                     justifyContent: 'center',
-                    marginBottom: 10,
+                    marginBottom: theme.spacing.md,
                 }}
             >
                 <Ionicons name={config.icon} size={18} color={Colors.brand.primary} />
             </View>
 
             {/* Caption */}
-            <Text style={{ color: Colors.text.secondary, fontSize: 12 }}>{config.label}</Text>
+            <Text style={{ color: Colors.text.secondary, fontSize: theme.fontSize.xs }}>{config.label}</Text>
 
             {/* Valor actual / total */}
-            <Text style={{ color: Colors.text.primary, fontSize: 24, fontWeight: 'bold', marginTop: 4 }}>
+            <Text style={{ color: Colors.text.primary, fontSize: theme.fontSize.xxl, fontWeight: 'bold', marginTop: theme.spacing.xs }}>
                 {config.current}{' '}
                 {/* El total en color disabled para reducir peso visual */}
-                <Text style={{ color: Colors.text.disabled, fontSize: 16, fontWeight: '400' }}>
+                <Text style={{ color: Colors.text.disabled, fontSize: theme.fontSize.md, fontWeight: '400' }}>
                     / {config.total}
                 </Text>
             </Text>
 
             {/* Porcentaje con color brand */}
-            <Text style={{ color: Colors.brand.primary, fontSize: 12, fontWeight: '600', marginTop: 2 }}>
+            <Text style={{ color: Colors.brand.primary, fontSize: theme.fontSize.xs, fontWeight: '600', marginTop: 2 }}>
                 {pctLabel} {config.suffix}
             </Text>
 
@@ -151,13 +158,16 @@ export function ProgressMetrics({ metrics }: ProgressMetricsProps) {
         {
             label: 'Equipos activos',
             current: metrics.activeTeams,
+            // totalTeams ya viene del mapper como max_equipos de la configuración de liga.
+            // Por eso esta barra solo llega al 100% al alcanzar el máximo, no el mínimo.
             total: metrics.totalTeams,
-            suffix: 'del total',
+            suffix: 'del máximo',
             icon: 'shield-outline',
             animDelay: 200, // la primera barra aparece ligeramente antes
         },
         {
             label: 'Jornadas completadas',
+            // completedRounds solo cuenta jornadas con TODOS sus partidos finalizados.
             current: metrics.completedRounds,
             total: metrics.totalRounds,
             suffix: 'completado',

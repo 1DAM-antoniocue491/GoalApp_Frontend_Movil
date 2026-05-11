@@ -38,6 +38,8 @@ interface UpcomingMatchesSectionProps {
     permissions: DashboardPermissions;
     /** Callback cuando el usuario pulsa "Iniciar partido" */
     onStartMatch?: (matchId: string) => void;
+    /** Callback cuando el usuario pulsa "Editar partido" */
+    onEditMatch?: (matchId: string) => void;
 }
 
 
@@ -49,6 +51,7 @@ export function UpcomingMatchesSection({
     matches,
     permissions,
     onStartMatch,
+    onEditMatch,
 }: UpcomingMatchesSectionProps) {
     const router = useRouter();
 
@@ -118,6 +121,7 @@ export function UpcomingMatchesSection({
                         router.push(routes.private.matchRoutes.programmed.detail(match.id) as never);
                     }}
                     onStartMatch={() => onStartMatch?.(match.id)}
+                    onEditMatch={onEditMatch ? () => onEditMatch(match.id) : undefined}
                 />
             ))}
         </View>

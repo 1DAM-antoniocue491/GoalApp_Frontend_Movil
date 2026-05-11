@@ -45,7 +45,7 @@ import {
   ScrollView,
   StatusBar,
   TouchableOpacity,
-  ActivityIndicator,
+  RefreshControl,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -289,34 +289,18 @@ export function DashboardLayout({
           style={{ flex: 1 }}
           contentContainerStyle={{ paddingBottom: theme.spacing.xxl }}
           showsVerticalScrollIndicator={false}
+          // Recarga silenciosa: el usuario desliza hacia abajo desde el top.
+          // No añadimos botones ni textos extra para mantener el dashboard limpio.
+          refreshControl={
+            <RefreshControl
+              refreshing={isRefetching}
+              onRefresh={onRetry}
+              tintColor={Colors.brand.primary}
+              colors={[Colors.brand.primary]}
+              progressBackgroundColor={Colors.bg.surface1}
+            />
+          }
         >
-          {/* Banner discreto de refetch — solo cuando hay datos ya visibles */}
-          {isRefetching && (
-            <View
-              style={{
-                flexDirection: 'row',
-                alignItems: 'center',
-                justifyContent: 'center',
-                gap: 6,
-                paddingVertical: 6,
-                backgroundColor: Colors.bg.surface1,
-                marginHorizontal: theme.spacing.lg,
-                marginTop: theme.spacing.md,
-                borderRadius: theme.borderRadius.md,
-              }}
-            >
-              <ActivityIndicator size="small" color={Colors.brand.primary} />
-              <Text
-                style={{
-                  color: Colors.text.secondary,
-                  fontSize: theme.fontSize.xs,
-                  fontWeight: '500',
-                }}
-              >
-                Actualizando datos...
-              </Text>
-            </View>
-          )}
           {children}
         </ScrollView>
       )}

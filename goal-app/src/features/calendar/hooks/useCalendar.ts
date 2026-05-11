@@ -9,8 +9,10 @@
  */
 
 import { useState, useEffect, useCallback, useRef } from 'react';
+import { useFocusEffect } from '@react-navigation/native';
 import { calendarService } from '../services/calendarService';
 import type { CalendarJourney, CalendarViewState } from '../types/calendar.types';
+import { subscribeMatchDataChanged } from '@/src/features/matches/services/matchSync';
 
 export interface CalendarDataState {
   journeys: CalendarJourney[];
@@ -49,11 +51,14 @@ export function useCalendarData(ligaId: number, leagueName: string): CalendarDat
     }
     setIsError(false);
     try {
+      // El hook recibe datos ya normalizados; no debe conocer detalles de endpoints.
       const data = await calendarService.getCalendarData(ligaId, leagueName);
       hasLoadedOnce.current = true;
       setJourneys(data.journeys);
       setViewState(data.viewState);
     } catch {
+      // El service intenta devolver fallbacks seguros, pero si algo escapa
+      // dejamos marcado el error para que la pantalla pueda mostrar estado visual.
       setIsError(true);
     } finally {
       setIsLoading(false);
@@ -63,6 +68,19 @@ export function useCalendarData(ligaId: number, leagueName: string): CalendarDat
 
   useEffect(() => {
     load();
+  }, [load]);
+
+  useFocusEffect(
+    useCallback(() => {
+      load();
+      const unsubscribe = subscribeMatchDataChanged(load);
+      return unsubscribe;
+    }, [load]),
+  );
+
+  useEffect(() => {
+    const intervalId = setInterval(load, 30000);
+    return () => clearInterval(intervalId);
   }, [load]);
 
   return { journeys, viewState, isLoading, isRefetching, isError, refetch: load };

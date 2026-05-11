@@ -2,16 +2,13 @@
  * CreateManualMatchModal
  *
  * Modal mobile para crear un partido manual.
- * Está alineado con el modal web entregado: equipo local, equipo visitante,
- * fecha y hora. La lógica de API vive fuera del modal; este componente solo
- * valida y entrega los datos al contenedor.
- *
- * Campos antiguos como delegado, estadio y jornada se mantienen como props/data
- * opcionales para no romper llamadas existentes, pero no se muestran porque la
- * API web confirmada crea partidos con POST /partidos/ y payload mínimo.
+ * Mantiene la lógica de validación y envío intacta.
+ * Visualmente sigue el patrón usado por los modales de calendario:
+ * bottom sheet, overlay oscuro, handle, header fijo, formulario con scroll,
+ * acción principal elevada y botón cancelar separado.
  */
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from "react";
 import {
   Modal,
   View,
@@ -21,15 +18,24 @@ import {
   KeyboardAvoidingView,
   Platform,
   Pressable,
-} from 'react-native';
-import { Ionicons } from '@expo/vector-icons';
-import { Colors } from '@/src/shared/constants/colors';
-import { theme } from '@/src/shared/styles/theme';
-import { Button } from '@/src/shared/components/ui/Button';
-import { OptionSelectField, SelectOption } from '@/src/shared/components/ui/OptionSelectField';
-import { DateTimePickerField } from '@/src/shared/components/ui/DateTimePickerField';
+  Animated,
+  Easing,
+  useWindowDimensions,
+} from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { Ionicons } from "@expo/vector-icons";
 
-// ─── Tipos ────────────────────────────────────────────────────────────────────
+import { Colors } from "@/src/shared/constants/colors";
+import { theme } from "@/src/shared/styles/theme";
+import {
+  OptionSelectField,
+  SelectOption,
+} from "@/src/shared/components/ui/OptionSelectField";
+import { DateTimePickerField } from "@/src/shared/components/ui/DateTimePickerField";
+
+// ---------------------------------------------------------------------------
+// Tipos
+// ---------------------------------------------------------------------------
 
 export interface CreateManualMatchFormData {
   homeTeamId: string;
@@ -58,18 +64,139 @@ interface CreateManualMatchModalProps {
   isSubmitting?: boolean;
 }
 
-// ─── Constantes ───────────────────────────────────────────────────────────────
+interface FieldLabelProps {
+  label: string;
+  helper?: string;
+}
+
+// ---------------------------------------------------------------------------
+// Constantes
+// ---------------------------------------------------------------------------
 
 const EMPTY_FORM: CreateManualMatchFormData = {
-  homeTeamId: '',
-  awayTeamId: '',
-  date: '',
-  time: '',
-  delegateId: '',
-  stadium: '',
-  round: '',
+  homeTeamId: "",
+  awayTeamId: "",
+  date: "",
+  time: "",
+  delegateId: "",
+  stadium: "",
+  round: "",
 };
 
+// Medidas concentradas en una constante para ajustar el bottom sheet
+// sin buscar valores sueltos por todo el componente.
+const MODAL_LAYOUT = {
+  overlayOpacityStart: 0,
+  overlayOpacityEnd: 1,
+  sheetTranslateYStart: 400,
+  sheetTranslateYEnd: 0,
+  openOverlayDuration: 200,
+  openSheetDuration: 300,
+  closeOverlayDuration: 160,
+  closeSheetDuration: 200,
+  maxHeightRatio: 0.9,
+  compactBreakpoint: 380,
+  minScrollHeight: 150,
+  estimatedFixedHeight: 292,
+  estimatedErrorHeight: 58,
+  handleWidth: 40,
+  handleHeight: 4,
+  handleRadius: 2,
+  sheetTopRadius: 32,
+  borderWidth: 1,
+  headerCloseSize: 32,
+  headerCloseRadius: 16,
+  closeIconSize: 16,
+  primaryButtonHeight: 56,
+  primaryButtonRadius: 18,
+  primaryIconSize: 18,
+  errorIconSize: 16,
+  disabledOpacity: 0.65,
+  enabledOpacity: 1,
+  shadowOffsetY: -8,
+  shadowOpacity: 0.35,
+  shadowRadius: 18,
+  elevation: 24,
+} as const;
+
+// Espaciados del modal. Separarlos del layout evita mezclar
+// decisiones visuales con lógica de formulario.
+const MODAL_SPACING = {
+  sheetPaddingTop: theme.spacing.md,
+  sheetPaddingHorizontal: theme.spacing.xl,
+  handleMarginBottom: theme.spacing.lg + theme.spacing.xs,
+  headerMarginBottom: theme.spacing.xl,
+  titleMarginTop: theme.spacing.xs,
+  closeHitSlop: theme.spacing.sm,
+  contentGap: theme.spacing.xl,
+  fieldLabelMarginBottom: theme.spacing.sm,
+  fieldHelperMarginTop: theme.spacing.xs,
+  fieldStackGap: theme.spacing.md,
+  dateTimeGap: theme.spacing.md,
+  scrollPaddingBottom: theme.spacing.sm,
+  footerPaddingTop: theme.spacing.lg + theme.spacing.xs,
+  footerHorizontalPadding: theme.spacing.xl,
+  footerGap: theme.spacing.sm + theme.spacing.xs,
+  footerRaisedOffset: theme.spacing.xxl + theme.spacing.lg,
+  androidNavigationFallback: theme.spacing.xl,
+  iosNavigationFallback: theme.spacing.md,
+  errorPaddingHorizontal: theme.spacing.md + theme.spacing.xs,
+  errorPaddingVertical: theme.spacing.sm + theme.spacing.xs,
+  errorGap: theme.spacing.sm + theme.spacing.xs,
+  cancelPaddingVertical: theme.spacing.md,
+  topClearance: theme.spacing.xl,
+} as const;
+
+const MODAL_COLORS = {
+  overlay: "rgba(0,0,0,0.65)",
+  sheetBackground: Colors.bg.surface1,
+  sheetBorder: Colors.bg.surface2,
+  handle: Colors.bg.surface2,
+  closeBackground: Colors.bg.surface2,
+  primaryEnabledBackground: Colors.brand.primary,
+  primaryDisabledBackground: Colors.bg.surface2,
+  primaryEnabledText: Colors.bg.base,
+  primaryDisabledText: Colors.text.disabled,
+  footerDivider: Colors.bg.surface2,
+  errorBackground: `${Colors.semantic.error}18`,
+  errorBorder: Colors.semantic.error,
+  shadow: Colors.bg.base,
+} as const;
+
+// ---------------------------------------------------------------------------
+// Subcomponentes visuales
+// ---------------------------------------------------------------------------
+
+function FieldLabel({ label, helper }: FieldLabelProps) {
+  return (
+    <View style={{ marginBottom: MODAL_SPACING.fieldLabelMarginBottom }}>
+      <Text
+        className="font-semibold uppercase tracking-wide"
+        style={{
+          color: Colors.text.secondary,
+          fontSize: theme.fontSize.xs,
+        }}
+      >
+        {label}
+      </Text>
+      {helper ? (
+        <Text
+          style={{
+            color: Colors.text.disabled,
+            fontSize: theme.fontSize.xs,
+            marginTop: MODAL_SPACING.fieldHelperMarginTop,
+          }}
+        >
+          {helper}
+        </Text>
+      ) : null}
+    </View>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Helpers
+// ---------------------------------------------------------------------------
 
 /**
  * El picker móvil puede devolver DD/MM/YYYY. Antes de entregar al contenedor,
@@ -79,79 +206,153 @@ function normalizeDateForSubmit(value: string): string | null {
   const clean = value.trim();
   if (!clean) return null;
 
-  const datePart = clean.includes('T') ? clean.split('T')[0] : clean;
+  const datePart = clean.includes("T") ? clean.split("T")[0] : clean;
 
   const isoMatch = datePart.match(/^(\d{4})-(\d{1,2})-(\d{1,2})$/);
   if (isoMatch) {
     const [, year, month, day] = isoMatch;
-    return `${year}-${month.padStart(2, '0')}-${day.padStart(2, '0')}`;
+    return `${year}-${month.padStart(2, "0")}-${day.padStart(2, "0")}`;
   }
 
   const spanishMatch = datePart.match(/^(\d{1,2})[\/-](\d{1,2})[\/-](\d{4})$/);
   if (spanishMatch) {
     const [, day, month, year] = spanishMatch;
-    return `${year}-${month.padStart(2, '0')}-${day.padStart(2, '0')}`;
+    return `${year}-${month.padStart(2, "0")}-${day.padStart(2, "0")}`;
   }
 
   const parsed = new Date(clean);
   if (!Number.isNaN(parsed.getTime())) {
-    return `${parsed.getFullYear()}-${String(parsed.getMonth() + 1).padStart(2, '0')}-${String(parsed.getDate()).padStart(2, '0')}`;
+    return `${parsed.getFullYear()}-${String(parsed.getMonth() + 1).padStart(2, "0")}-${String(parsed.getDate()).padStart(2, "0")}`;
   }
 
   return null;
 }
 
 /**
- * Normaliza H:m, HH:mm o HH:mm:ss a HH:mm:ss.
+ * Normaliza H:m, HH:mm, HH:mm:ss o una fecha ISO a HH:mm.
+ *
+ * Importante: se devuelve HH:mm, no HH:mm:ss. El contenedor que llama a este
+ * modal ya añade los segundos al construir el datetime final para la API.
+ * Devolver HH:mm:ss aquí provoca valores inválidos como HH:mm:ss:00.
  */
 function normalizeTimeForSubmit(value: string): string | null {
   const clean = value.trim();
   if (!clean) return null;
 
-  const timePart = clean.includes('T') ? clean.split('T')[1] : clean;
-  const timeMatch = timePart.match(/^(\d{1,2}):(\d{1,2})(?::(\d{1,2}))?/);
+  const timePart = clean.includes("T") ? clean.split("T")[1] : clean;
+  const timeMatch = timePart.match(/^(\d{1,2}):(\d{1,2})(?::\d{1,2})?/);
 
   if (timeMatch) {
-    const [, rawHour, rawMinute, rawSecond = '0'] = timeMatch;
+    const [, rawHour, rawMinute] = timeMatch;
     const hour = Number(rawHour);
     const minute = Number(rawMinute);
-    const second = Number(rawSecond);
 
     if (
-      Number.isInteger(hour) && hour >= 0 && hour <= 23 &&
-      Number.isInteger(minute) && minute >= 0 && minute <= 59 &&
-      Number.isInteger(second) && second >= 0 && second <= 59
+      Number.isInteger(hour) &&
+      hour >= 0 &&
+      hour <= 23 &&
+      Number.isInteger(minute) &&
+      minute >= 0 &&
+      minute <= 59
     ) {
-      return `${String(hour).padStart(2, '0')}:${String(minute).padStart(2, '0')}:${String(second).padStart(2, '0')}`;
+      return `${String(hour).padStart(2, "0")}:${String(minute).padStart(2, "0")}`;
     }
   }
 
   const parsed = new Date(clean);
   if (!Number.isNaN(parsed.getTime())) {
-    return `${String(parsed.getHours()).padStart(2, '0')}:${String(parsed.getMinutes()).padStart(2, '0')}:${String(parsed.getSeconds()).padStart(2, '0')}`;
+    return `${String(parsed.getHours()).padStart(2, "0")}:${String(parsed.getMinutes()).padStart(2, "0")}`;
   }
 
   return null;
 }
 
-// ─── Componente ───────────────────────────────────────────────────────────────
+// ---------------------------------------------------------------------------
+// Componente principal
+// ---------------------------------------------------------------------------
 
 export function CreateManualMatchModal({
   visible,
   onClose,
   onSubmit,
   teamOptions = [],
-  defaultRound = '',
+  defaultRound = "",
   error,
   isSubmitting = false,
 }: CreateManualMatchModalProps) {
+  const { width, height } = useWindowDimensions();
+  const insets = useSafeAreaInsets();
   const [form, setForm] = useState<CreateManualMatchFormData>(EMPTY_FORM);
-  const [validationError, setValidationError] = useState<string | undefined>(undefined);
+  const [validationError, setValidationError] = useState<string | undefined>(
+    undefined,
+  );
+
+  const slideAnim = useRef(
+    new Animated.Value(MODAL_LAYOUT.sheetTranslateYStart),
+  ).current;
+  const opacityAnim = useRef(
+    new Animated.Value(MODAL_LAYOUT.overlayOpacityStart),
+  ).current;
+
+  const isCompact = width < MODAL_LAYOUT.compactBreakpoint;
+  const visibleError = validationError ?? error;
+  const bottomSafeArea = Math.max(
+    insets.bottom,
+    Platform.OS === "android"
+      ? MODAL_SPACING.androidNavigationFallback
+      : MODAL_SPACING.iosNavigationFallback,
+  );
+  const footerBottomPadding = bottomSafeArea + MODAL_SPACING.footerRaisedOffset;
+  const modalMaxHeight = Math.min(
+    height - insets.top - MODAL_SPACING.topClearance,
+    height * MODAL_LAYOUT.maxHeightRatio,
+  );
+  const scrollMaxHeight = Math.max(
+    modalMaxHeight -
+    MODAL_LAYOUT.estimatedFixedHeight -
+    footerBottomPadding -
+    (visibleError ? MODAL_LAYOUT.estimatedErrorHeight : 0),
+    MODAL_LAYOUT.minScrollHeight,
+  );
+  // Solo bloqueamos por envío en curso: los errores de validación se muestran al pulsar guardar.
+  const primaryDisabled = isSubmitting;
+
+  useEffect(() => {
+    if (visible) {
+      Animated.parallel([
+        Animated.timing(opacityAnim, {
+          toValue: MODAL_LAYOUT.overlayOpacityEnd,
+          duration: MODAL_LAYOUT.openOverlayDuration,
+          easing: Easing.out(Easing.cubic),
+          useNativeDriver: true,
+        }),
+        Animated.timing(slideAnim, {
+          toValue: MODAL_LAYOUT.sheetTranslateYEnd,
+          duration: MODAL_LAYOUT.openSheetDuration,
+          easing: Easing.out(Easing.back(1.0)),
+          useNativeDriver: true,
+        }),
+      ]).start();
+    } else {
+      Animated.parallel([
+        Animated.timing(opacityAnim, {
+          toValue: MODAL_LAYOUT.overlayOpacityStart,
+          duration: MODAL_LAYOUT.closeOverlayDuration,
+          useNativeDriver: true,
+        }),
+        Animated.timing(slideAnim, {
+          toValue: MODAL_LAYOUT.sheetTranslateYStart,
+          duration: MODAL_LAYOUT.closeSheetDuration,
+          useNativeDriver: true,
+        }),
+      ]).start();
+    }
+  }, [visible, opacityAnim, slideAnim]);
 
   // Pre-rellena datos internos legacy al abrir, sin mostrarlos en UI.
   useEffect(() => {
     if (visible) {
-      setForm(prev => ({ ...prev, round: defaultRound }));
+      setForm((prev) => ({ ...prev, round: defaultRound }));
       setValidationError(undefined);
     }
   }, [visible, defaultRound]);
@@ -165,194 +366,330 @@ export function CreateManualMatchModal({
   function handleSubmit() {
     // Validaciones de cliente antes de llamar al servicio/API.
     if (!form.homeTeamId) {
-      setValidationError('Selecciona el equipo local');
+      setValidationError("Selecciona el equipo local");
       return;
     }
     if (!form.awayTeamId) {
-      setValidationError('Selecciona el equipo visitante');
+      setValidationError("Selecciona el equipo visitante");
       return;
     }
     if (form.homeTeamId === form.awayTeamId) {
-      setValidationError('El equipo local y visitante deben ser distintos');
+      setValidationError("El equipo local y visitante deben ser distintos");
       return;
     }
     if (!form.date) {
-      setValidationError('La fecha es obligatoria');
+      setValidationError("La fecha es obligatoria");
       return;
     }
     if (!form.time) {
-      setValidationError('La hora es obligatoria');
+      setValidationError("La hora es obligatoria");
       return;
     }
 
+    // Normalizar antes de salir del modal evita que cada pantalla tenga que
+    // conocer los formatos que devuelve DateTimePickerField.
     const normalizedDate = normalizeDateForSubmit(form.date);
     const normalizedTime = normalizeTimeForSubmit(form.time);
 
     if (!normalizedDate || !normalizedTime) {
-      setValidationError('Selecciona una fecha y hora válidas');
+      setValidationError("Selecciona una fecha y hora válidas");
       return;
     }
 
     setValidationError(undefined);
     onSubmit({
       ...form,
-      // El contenedor recibirá valores listos para construir YYYY-MM-DDTHH:mm:ss.
+      // El contenedor recibe fecha ISO y hora HH:mm; no añadimos segundos aquí.
       date: normalizedDate,
       time: normalizedTime,
     });
   }
 
-  const visibleError = validationError ?? error;
-
   return (
-    <Modal visible={visible} animationType="slide" transparent onRequestClose={handleClose}>
-      {/* Overlay — toque fuera cierra el modal. */}
-      <Pressable
-        style={{
-          flex: 1,
-          backgroundColor: 'rgba(0,0,0,0.72)',
-          justifyContent: 'flex-end',
-        }}
-        onPress={handleClose}
+    <Modal
+      transparent
+      visible={visible}
+      animationType="none"
+      statusBarTranslucent
+      onRequestClose={handleClose}
+    >
+      <KeyboardAvoidingView
+        className="flex-1"
+        behavior={Platform.OS === "ios" ? "padding" : undefined}
       >
-        <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
-          {/* Pressable interior: evita cerrar al tocar dentro del modal. */}
-          <Pressable>
+        <Animated.View
+          className="flex-1 justify-end"
+          style={{
+            backgroundColor: MODAL_COLORS.overlay,
+            opacity: opacityAnim,
+          }}
+        >
+          <Pressable
+            className="flex-1"
+            onPress={handleClose}
+            disabled={isSubmitting}
+          />
+
+          <Animated.View
+            className="overflow-hidden"
+            style={{
+              maxHeight: modalMaxHeight,
+              transform: [{ translateY: slideAnim }],
+              backgroundColor: MODAL_COLORS.sheetBackground,
+              borderTopLeftRadius: MODAL_LAYOUT.sheetTopRadius,
+              borderTopRightRadius: MODAL_LAYOUT.sheetTopRadius,
+              paddingTop: MODAL_SPACING.sheetPaddingTop,
+              borderWidth: MODAL_LAYOUT.borderWidth,
+              borderColor: MODAL_COLORS.sheetBorder,
+              shadowColor: MODAL_COLORS.shadow,
+              shadowOffset: { width: 0, height: MODAL_LAYOUT.shadowOffsetY },
+              shadowOpacity: MODAL_LAYOUT.shadowOpacity,
+              shadowRadius: MODAL_LAYOUT.shadowRadius,
+              elevation: MODAL_LAYOUT.elevation,
+            }}
+          >
             <View
+              className="self-center"
               style={{
-                backgroundColor: Colors.bg.surface1,
-                borderTopLeftRadius: theme.borderRadius.xl,
-                borderTopRightRadius: theme.borderRadius.xl,
-                paddingHorizontal: theme.spacing.xl,
-                paddingTop: theme.spacing.lg,
-                paddingBottom: theme.spacing.xxl,
-                maxHeight: '86%',
-                shadowColor: '#000',
-                shadowOffset: { width: 0, height: -4 },
-                shadowOpacity: 0.4,
-                shadowRadius: 12,
-                elevation: 20,
+                width: MODAL_LAYOUT.handleWidth,
+                height: MODAL_LAYOUT.handleHeight,
+                borderRadius: MODAL_LAYOUT.handleRadius,
+                backgroundColor: MODAL_COLORS.handle,
+                marginBottom: MODAL_SPACING.handleMarginBottom,
+              }}
+            />
+
+            <View
+              className="flex-row items-center justify-between"
+              style={{
+                paddingHorizontal: MODAL_SPACING.sheetPaddingHorizontal,
+                marginBottom: MODAL_SPACING.headerMarginBottom,
               }}
             >
-              {/* Header del modal */}
-              <View className="flex-row items-center justify-between mb-2">
-                <View style={{ flex: 1, paddingRight: theme.spacing.md }}>
-                  <Text
-                    style={{
-                      color: Colors.text.primary,
-                      fontSize: theme.fontSize.xl,
-                      fontWeight: '700',
-                    }}
-                  >
-                    Nuevo partido
-                  </Text>
-                  <Text
-                    style={{
-                      color: Colors.text.secondary,
-                      fontSize: theme.fontSize.sm,
-                      marginTop: 4,
-                      lineHeight: 20,
-                    }}
-                  >
-                    Selecciona los equipos y programa la fecha del encuentro.
-                  </Text>
-                </View>
-
-                <TouchableOpacity
-                  onPress={handleClose}
-                  hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
-                  disabled={isSubmitting}
-                >
-                  <Ionicons name="close" size={22} color={Colors.text.secondary} />
-                </TouchableOpacity>
-              </View>
-
-              {/* Error de validación o API */}
-              {visibleError && (
-                <View
+              <View className="flex-1">
+                <Text
+                  className="font-bold"
                   style={{
-                    marginTop: theme.spacing.md,
-                    marginBottom: theme.spacing.lg,
-                    padding: theme.spacing.md,
-                    borderRadius: theme.borderRadius.md,
-                    backgroundColor: 'rgba(248,113,113,0.12)',
-                    borderWidth: 1,
-                    borderColor: 'rgba(248,113,113,0.30)',
+                    color: Colors.text.primary,
+                    fontSize: theme.fontSize.xl,
                   }}
                 >
-                  <Text style={{ color: '#F87171', fontSize: theme.fontSize.sm }}>
-                    {visibleError}
-                  </Text>
-                </View>
-              )}
+                  Nuevo partido
+                </Text>
+                <Text
+                  style={{
+                    color: Colors.text.secondary,
+                    fontSize: theme.fontSize.xs,
+                    marginTop: MODAL_SPACING.titleMarginTop,
+                  }}
+                >
+                  Añade un encuentro manual al calendario de la liga
+                </Text>
+              </View>
 
-              <ScrollView showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
-                {/* Equipo local */}
-                <View style={{ marginBottom: theme.spacing.lg }}>
+              <Pressable
+                onPress={handleClose}
+                disabled={isSubmitting}
+                hitSlop={MODAL_SPACING.closeHitSlop}
+                className="items-center justify-center"
+                style={{
+                  width: MODAL_LAYOUT.headerCloseSize,
+                  height: MODAL_LAYOUT.headerCloseSize,
+                  borderRadius: MODAL_LAYOUT.headerCloseRadius,
+                  backgroundColor: MODAL_COLORS.closeBackground,
+                  opacity: isSubmitting
+                    ? MODAL_LAYOUT.disabledOpacity
+                    : MODAL_LAYOUT.enabledOpacity,
+                }}
+              >
+                <Ionicons
+                  name="close"
+                  size={MODAL_LAYOUT.closeIconSize}
+                  color={Colors.text.secondary}
+                />
+              </Pressable>
+            </View>
+
+            <ScrollView
+              className="shrink"
+              style={{ maxHeight: scrollMaxHeight }}
+              contentContainerStyle={{
+                paddingHorizontal: MODAL_SPACING.sheetPaddingHorizontal,
+                paddingBottom: MODAL_SPACING.scrollPaddingBottom,
+                gap: MODAL_SPACING.contentGap,
+              }}
+              showsVerticalScrollIndicator={false}
+              keyboardShouldPersistTaps="handled"
+              keyboardDismissMode={
+                Platform.OS === "ios" ? "interactive" : "on-drag"
+              }
+              nestedScrollEnabled
+              bounces
+            >
+              <View>
+                <FieldLabel
+                  label="Equipos"
+                  helper="Selecciona local y visitante. Deben ser equipos diferentes."
+                />
+                <View style={{ gap: MODAL_SPACING.fieldStackGap }}>
                   <OptionSelectField
                     label="Equipo local"
                     value={form.homeTeamId}
                     options={teamOptions}
                     placeholder="Selecciona el equipo local"
-                    onChange={v => setForm(prev => ({ ...prev, homeTeamId: v }))}
+                    onChange={(v) =>
+                      setForm((prev) => ({ ...prev, homeTeamId: v }))
+                    }
                   />
-                </View>
-
-                {/* Equipo visitante */}
-                <View style={{ marginBottom: theme.spacing.xl }}>
                   <OptionSelectField
                     label="Equipo visitante"
                     value={form.awayTeamId}
                     options={teamOptions}
                     placeholder="Selecciona el equipo visitante"
-                    onChange={v => setForm(prev => ({ ...prev, awayTeamId: v }))}
+                    onChange={(v) =>
+                      setForm((prev) => ({ ...prev, awayTeamId: v }))
+                    }
                   />
                 </View>
+              </View>
 
-                {/* Fecha y hora — selectores nativos reutilizables */}
-                <View className="flex-row gap-3" style={{ marginBottom: theme.spacing.xl }}>
+              <View>
+                <FieldLabel
+                  label="Fecha y hora"
+                  helper="Define cuándo se jugará el partido."
+                />
+                <View
+                  className={isCompact ? "flex-col" : "flex-row"}
+                  style={{ gap: MODAL_SPACING.dateTimeGap }}
+                >
                   <DateTimePickerField
                     label="Fecha"
                     value={form.date}
                     mode="date"
                     icon="calendar-outline"
-                    onChange={v => setForm(prev => ({ ...prev, date: v }))}
-                    style={{ flex: 1.4 }}
+                    onChange={(v) => setForm((prev) => ({ ...prev, date: v }))}
+                    style={{ flex: isCompact ? undefined : 1 }}
                   />
                   <DateTimePickerField
                     label="Hora"
                     value={form.time}
                     mode="time"
                     icon="time-outline"
-                    onChange={v => setForm(prev => ({ ...prev, time: v }))}
-                    style={{ flex: 1 }}
-                  />
-                </View>
-              </ScrollView>
-
-              {/* Footer de acciones */}
-              <View className="flex-row gap-3">
-                <View style={{ flex: 1 }}>
-                  <Button
-                    label="Cancelar"
-                    variant="secondary"
-                    onPress={handleClose}
-                    disabled={isSubmitting}
-                  />
-                </View>
-                <View style={{ flex: 1 }}>
-                  <Button
-                    label={isSubmitting ? 'Guardando...' : 'Guardar partido'}
-                    variant="primary"
-                    onPress={handleSubmit}
-                    disabled={isSubmitting}
+                    onChange={(v) => setForm((prev) => ({ ...prev, time: v }))}
+                    style={{ flex: isCompact ? undefined : 1 }}
                   />
                 </View>
               </View>
+            </ScrollView>
+
+            <View
+              style={{
+                height: MODAL_LAYOUT.borderWidth,
+                backgroundColor: MODAL_COLORS.footerDivider,
+              }}
+            />
+
+            <View
+              style={{
+                paddingHorizontal: MODAL_SPACING.footerHorizontalPadding,
+                paddingTop: MODAL_SPACING.footerPaddingTop,
+                paddingBottom: footerBottomPadding,
+                gap: MODAL_SPACING.footerGap,
+              }}
+            >
+              {visibleError ? (
+                <View
+                  className="flex-row items-center"
+                  style={{
+                    gap: MODAL_SPACING.errorGap,
+                    backgroundColor: MODAL_COLORS.errorBackground,
+                    borderRadius: theme.borderRadius.lg,
+                    borderWidth: MODAL_LAYOUT.borderWidth,
+                    borderColor: MODAL_COLORS.errorBorder,
+                    paddingHorizontal: MODAL_SPACING.errorPaddingHorizontal,
+                    paddingVertical: MODAL_SPACING.errorPaddingVertical,
+                  }}
+                >
+                  <Ionicons
+                    name="alert-circle-outline"
+                    size={MODAL_LAYOUT.errorIconSize}
+                    color={Colors.semantic.error}
+                  />
+                  <Text
+                    className="flex-1 font-medium"
+                    numberOfLines={4}
+                    style={{
+                      color: Colors.semantic.error,
+                      fontSize: theme.fontSize.xs,
+                    }}
+                  >
+                    {visibleError}
+                  </Text>
+                </View>
+              ) : null}
+
+              <TouchableOpacity
+                onPress={handleSubmit}
+                activeOpacity={0.88}
+                disabled={primaryDisabled}
+                className="flex-row items-center justify-center"
+                style={{
+                  height: MODAL_LAYOUT.primaryButtonHeight,
+                  borderRadius: MODAL_LAYOUT.primaryButtonRadius,
+                  gap: MODAL_SPACING.errorGap,
+                  backgroundColor: primaryDisabled
+                    ? MODAL_COLORS.primaryDisabledBackground
+                    : MODAL_COLORS.primaryEnabledBackground,
+                }}
+              >
+                <Ionicons
+                  name="checkmark-circle"
+                  size={MODAL_LAYOUT.primaryIconSize}
+                  color={
+                    primaryDisabled
+                      ? MODAL_COLORS.primaryDisabledText
+                      : MODAL_COLORS.primaryEnabledText
+                  }
+                />
+                <Text
+                  className="font-bold"
+                  style={{
+                    color: primaryDisabled
+                      ? MODAL_COLORS.primaryDisabledText
+                      : MODAL_COLORS.primaryEnabledText,
+                    fontSize: theme.fontSize.md,
+                  }}
+                >
+                  {isSubmitting ? "Guardando…" : "Guardar partido"}
+                </Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                onPress={handleClose}
+                activeOpacity={0.7}
+                disabled={isSubmitting}
+                className="items-center"
+                style={{
+                  paddingVertical: MODAL_SPACING.cancelPaddingVertical,
+                  opacity: isSubmitting
+                    ? MODAL_LAYOUT.disabledOpacity
+                    : MODAL_LAYOUT.enabledOpacity,
+                }}
+              >
+                <Text
+                  className="font-medium"
+                  style={{
+                    color: Colors.text.secondary,
+                    fontSize: theme.fontSize.sm,
+                  }}
+                >
+                  Cancelar
+                </Text>
+              </TouchableOpacity>
             </View>
-          </Pressable>
-        </KeyboardAvoidingView>
-      </Pressable>
+          </Animated.View>
+        </Animated.View>
+      </KeyboardAvoidingView>
     </Modal>
   );
 }

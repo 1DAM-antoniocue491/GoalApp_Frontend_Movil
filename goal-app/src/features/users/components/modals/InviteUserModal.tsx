@@ -1,60 +1,42 @@
-/**
- * InviteUserModal
- *
- * Modal slide-up para invitar a un nuevo usuario a la liga.
- * El formulario es dinámico: los campos extra cambian según el rol elegido.
- *
- * Integración real:
- * - Este componente NO llama directamente a la API.
- * - Envía el formulario a UsersRolesScreen → useLeagueUsers → userService → users.api.
- * - No contiene equipos mock; las opciones vienen desde GET /equipos/?liga_id={ligaId}.
- */
+/** Modal React Native para invitar usuarios por correo. */
 
 import React, { useEffect, useState } from 'react';
 import {
+  ActivityIndicator,
+  KeyboardAvoidingView,
   Modal,
-  View,
+  Platform,
+  Pressable,
+  ScrollView,
   Text,
   TextInput,
   TouchableOpacity,
-  ScrollView,
-  KeyboardAvoidingView,
-  Platform,
-  Pressable,
-  ActivityIndicator,
+  View,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { Colors } from '@/src/shared/constants/colors';
 import { theme } from '@/src/shared/styles/theme';
 import { styles } from '@/src/shared/styles';
-import { Button } from '@/src/shared/components/ui/Button';
-import { OptionSelectField, SelectOption } from '@/src/shared/components/ui/OptionSelectField';
+import { getRoleBadgeConfig } from '@/src/shared/utils/roles';
+import type { InviteUserFormData, SelectOption, UserRole } from '../../types/users.types';
 import { PlayerExtraFields } from './PlayerExtraFields';
-import type { InviteUserFormData, UserRole } from '../../types/users.types';
 
 interface InviteUserModalProps {
   visible: boolean;
   onClose: () => void;
-  onSubmit: (data: InviteUserFormData) => Promise<boolean> | boolean;
-  teamOptions?: SelectOption[];
-  roleOptions?: SelectOption[];
+  onSubmit: (data: InviteUserFormData) => Promise<boolean> | boolean | Promise<void> | void;
+  roleOptions: SelectOption[];
+  teamOptions: SelectOption[];
   isSubmitting?: boolean;
   error?: string | null;
 }
-
-const DEFAULT_ROLE_OPTIONS: SelectOption[] = [
-  { value: 'coach', label: 'Entrenador' },
-  { value: 'player', label: 'Jugador' },
-  { value: 'delegate', label: 'Delegado' },
-  { value: 'observer', label: 'Observador' },
-];
 
 const EMPTY_FORM: InviteUserFormData = {
   name: '',
   email: '',
   role: '',
   teamId: '',
-  playerType: '',
+  playerType: 'normal',
   jersey: '',
   position: '',
 };
@@ -63,8 +45,8 @@ export function InviteUserModal({
   visible,
   onClose,
   onSubmit,
-  teamOptions = [],
-  roleOptions = DEFAULT_ROLE_OPTIONS,
+  roleOptions,
+  teamOptions,
   isSubmitting = false,
   error,
 }: InviteUserModalProps) {
@@ -72,220 +54,135 @@ export function InviteUserModal({
   const [localError, setLocalError] = useState<string | null>(null);
 
   useEffect(() => {
-    if (!visible) {
+    if (visible) {
       setForm(EMPTY_FORM);
       setLocalError(null);
     }
   }, [visible]);
 
-  function handleClose() {
-    if (isSubmitting) return;
-    setForm(EMPTY_FORM);
-    setLocalError(null);
-    onClose();
-  }
-
   function handleChange(field: keyof InviteUserFormData, value: string) {
-    setLocalError(null);
     setForm(prev => ({ ...prev, [field]: value }));
   }
 
-  // Al cambiar de rol se limpian campos dependientes para evitar payloads inconsistentes.
-  function handleRoleChange(value: string) {
-    setLocalError(null);
+  function handleRoleChange(role: UserRole) {
     setForm(prev => ({
       ...prev,
-      role: value as UserRole,
+      role,
       teamId: '',
-      playerType: '',
+      playerType: 'normal',
       jersey: '',
       position: '',
     }));
+    setLocalError(null);
   }
 
   async function handleSubmit() {
-    if (isSubmitting) return;
+    setLocalError(null);
 
-    if (!form.name.trim()) {
-      setLocalError('Introduce el nombre completo.');
-      return;
-    }
+    if (!form.name.trim()) return setLocalError('El nombre es obligatorio.');
+    if (!form.email.trim()) return setLocalError('El correo electrónico es obligatorio.');
+    if (!form.role) return setLocalError('Selecciona un rol.');
 
-    if (!form.email.trim()) {
-      setLocalError('Introduce el correo electrónico.');
-      return;
-    }
-
-    if (!form.role) {
-      setLocalError('Selecciona un rol.');
-      return;
-    }
-
-    const success = await onSubmit(form);
-    if (success) handleClose();
+    const result = await onSubmit(form);
+    if (result !== false) onClose();
   }
 
-  const visibleError = localError ?? error;
-
   return (
-    <Modal visible={visible} animationType="slide" transparent onRequestClose={handleClose}>
-      <Pressable
-        style={{
-          flex: 1,
-          backgroundColor: 'rgba(0,0,0,0.72)',
-          justifyContent: 'flex-end',
-        }}
-        onPress={handleClose}
-      >
+    <Modal visible={visible} animationType="slide" transparent onRequestClose={onClose}>
+      <Pressable style={modalStyles.backdrop} onPress={onClose}>
         <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
           <Pressable>
-            <View
-              style={{
-                backgroundColor: Colors.bg.surface1,
-                borderTopLeftRadius: theme.borderRadius.xl,
-                borderTopRightRadius: theme.borderRadius.xl,
-                paddingHorizontal: theme.spacing.xl,
-                paddingTop: theme.spacing.lg,
-                paddingBottom: theme.spacing.xxl,
-                borderWidth: 1,
-                borderColor: Colors.bg.surface2,
-                shadowColor: '#000',
-                shadowOffset: { width: 0, height: -4 },
-                shadowOpacity: 0.4,
-                shadowRadius: 12,
-                elevation: 20,
-                maxHeight: '88%',
-              }}
-            >
-              {/* Header */}
-              <View className="flex-row items-center justify-between mb-2">
+            <View style={modalStyles.sheet}>
+              <View className="flex-row items-start justify-between mb-4">
                 <View style={{ flex: 1 }}>
-                  <Text style={{ color: Colors.text.primary, fontSize: theme.fontSize.xl, fontWeight: '800' }}>
-                    Invitar usuario
-                  </Text>
-                  <Text style={{ color: Colors.text.secondary, fontSize: theme.fontSize.sm, marginTop: 4, lineHeight: 20 }}>
-                    Se enviará una invitación real por correo para unirse a la liga.
-                  </Text>
+                  <Text style={modalStyles.title}>Invitar usuario</Text>
+                  <Text style={modalStyles.subtitle}>Envía una invitación real por correo para unirse a la liga.</Text>
                 </View>
-
-                <TouchableOpacity
-                  onPress={handleClose}
-                  disabled={isSubmitting}
-                  hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
-                  style={{
-                    width: 40,
-                    height: 40,
-                    borderRadius: 20,
-                    backgroundColor: Colors.bg.surface2,
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    marginLeft: theme.spacing.md,
-                  }}
-                >
+                <TouchableOpacity onPress={onClose} disabled={isSubmitting} hitSlop={12} style={modalStyles.closeButton}>
                   <Ionicons name="close" size={22} color={Colors.text.secondary} />
                 </TouchableOpacity>
               </View>
 
-              {visibleError ? (
-                <View
-                  style={{
-                    backgroundColor: 'rgba(255,69,52,0.10)',
-                    borderWidth: 1,
-                    borderColor: 'rgba(255,69,52,0.35)',
-                    borderRadius: theme.borderRadius.lg,
-                    padding: theme.spacing.md,
-                    marginTop: theme.spacing.md,
-                    marginBottom: theme.spacing.lg,
-                  }}
-                >
-                  <Text style={{ color: Colors.semantic.error, fontSize: theme.fontSize.sm, lineHeight: 20 }}>
-                    {visibleError}
-                  </Text>
-                </View>
-              ) : null}
-
               <ScrollView showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
-                {/* Nombre */}
+                <Text style={modalStyles.sectionLabel}>Rol en la liga</Text>
+                <View className="flex-row flex-wrap mb-5" style={{ gap: 10 }}>
+                  {roleOptions.map(option => {
+                    const value = option.value as UserRole;
+                    const selected = form.role === value;
+                    const config = getRoleBadgeConfig(value);
+
+                    return (
+                      <TouchableOpacity
+                        key={option.value}
+                        onPress={() => handleRoleChange(value)}
+                        disabled={isSubmitting}
+                        activeOpacity={0.85}
+                        style={[modalStyles.roleButton, selected ? { backgroundColor: Colors.brand.primary } : null]}
+                      >
+                        <Ionicons name={config.icon} size={17} color={selected ? '#000' : config.textColor} />
+                        <Text style={[modalStyles.roleText, selected ? { color: '#000' } : null]}>{option.label}</Text>
+                      </TouchableOpacity>
+                    );
+                  })}
+                </View>
+
                 <View className="mb-4">
                   <Text className={styles.label} style={{ marginBottom: 6 }}>Nombre completo</Text>
                   <View className={styles.inputRow}>
-                    <View className={styles.inputIcon}>
-                      <Ionicons name="person-outline" size={17} color={Colors.text.secondary} />
-                    </View>
+                    <Ionicons name="person-outline" size={18} color={Colors.text.secondary} />
                     <TextInput
                       className={styles.input}
-                      placeholder="Nombre y apellidos"
+                      placeholder="Nombre del usuario"
                       placeholderTextColor={styles.inputPlaceholder}
                       value={form.name}
-                      onChangeText={v => handleChange('name', v)}
-                      autoCapitalize="words"
-                      returnKeyType="next"
-                      editable={!isSubmitting}
+                      onChangeText={value => handleChange('name', value)}
                     />
                   </View>
                 </View>
 
-                {/* Email */}
                 <View className="mb-4">
                   <Text className={styles.label} style={{ marginBottom: 6 }}>Correo electrónico</Text>
                   <View className={styles.inputRow}>
-                    <View className={styles.inputIcon}>
-                      <Ionicons name="mail-outline" size={17} color={Colors.text.secondary} />
-                    </View>
+                    <Ionicons name="mail-outline" size={18} color={Colors.text.secondary} />
                     <TextInput
                       className={styles.input}
-                      placeholder="usuario@email.com"
+                      placeholder="usuario@ejemplo.com"
                       placeholderTextColor={styles.inputPlaceholder}
                       value={form.email}
-                      onChangeText={v => handleChange('email', v)}
+                      onChangeText={value => handleChange('email', value)}
                       keyboardType="email-address"
                       autoCapitalize="none"
-                      returnKeyType="next"
-                      editable={!isSubmitting}
                     />
                   </View>
                 </View>
 
-                {/* Rol */}
-                <View className="mb-4">
-                  <OptionSelectField
-                    label="Rol en la liga"
-                    value={form.role}
-                    options={roleOptions.length > 0 ? roleOptions : DEFAULT_ROLE_OPTIONS}
-                    placeholder="Selecciona un rol"
-                    onChange={handleRoleChange}
-                  />
-                </View>
-
-                {/* Campos dinámicos según rol */}
                 <PlayerExtraFields
-                  role={form.role as UserRole}
+                  role={form.role}
                   teamId={form.teamId}
                   playerType={form.playerType}
                   jersey={form.jersey}
                   position={form.position}
                   teamOptions={teamOptions}
-                  onChange={(field, value) => handleChange(field as keyof InviteUserFormData, value)}
+                  onChange={(field, value) => handleChange(field, value)}
                 />
 
-                <View style={{ height: theme.spacing.sm }} />
+                {(localError || error) ? (
+                  <View style={modalStyles.errorBox}>
+                    <Ionicons name="alert-circle-outline" size={18} color={Colors.semantic.error} />
+                    <Text style={modalStyles.errorText}>{localError || error}</Text>
+                  </View>
+                ) : null}
               </ScrollView>
 
-              {/* Footer */}
-              <View className="flex-row gap-3" style={{ paddingTop: theme.spacing.md }}>
-                <View style={{ flex: 1 }}>
-                  <Button label="Cancelar" variant="secondary" onPress={handleClose} />
-                </View>
-                <View style={{ flex: 1 }}>
-                  <Button label={isSubmitting ? 'Invitando...' : 'Invitar'} variant="primary" onPress={handleSubmit} />
-                </View>
+              <View className="flex-row gap-3 mt-4">
+                <TouchableOpacity onPress={onClose} disabled={isSubmitting} style={modalStyles.secondaryButton}>
+                  <Text style={modalStyles.secondaryText}>Cancelar</Text>
+                </TouchableOpacity>
+                <TouchableOpacity onPress={handleSubmit} disabled={isSubmitting} style={modalStyles.primaryButton}>
+                  {isSubmitting ? <ActivityIndicator color="#000" style={{ marginRight: 8 }} /> : null}
+                  <Text style={modalStyles.primaryText}>{isSubmitting ? 'Enviando...' : 'Invitar'}</Text>
+                </TouchableOpacity>
               </View>
-
-              {isSubmitting ? (
-                <View style={{ position: 'absolute', right: theme.spacing.xl, bottom: theme.spacing.sm }}>
-                  <ActivityIndicator size="small" color={Colors.brand.primary} />
-                </View>
-              ) : null}
             </View>
           </Pressable>
         </KeyboardAvoidingView>
@@ -293,3 +190,34 @@ export function InviteUserModal({
     </Modal>
   );
 }
+
+export default InviteUserModal;
+
+const modalStyles = {
+  backdrop: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.72)',
+    justifyContent: 'flex-end' as const,
+  },
+  sheet: {
+    maxHeight: '90%' as const,
+    backgroundColor: Colors.bg.surface1,
+    borderTopLeftRadius: 28,
+    borderTopRightRadius: 28,
+    paddingHorizontal: theme.spacing.xl,
+    paddingTop: theme.spacing.lg,
+    paddingBottom: theme.spacing.xxl,
+  },
+  title: { color: Colors.text.primary, fontSize: theme.fontSize.xxl, fontWeight: '900' as const },
+  subtitle: { color: Colors.text.secondary, fontSize: theme.fontSize.sm, marginTop: 6, lineHeight: 20 },
+  closeButton: { width: 48, height: 48, borderRadius: 18, backgroundColor: Colors.bg.surface2, alignItems: 'center' as const, justifyContent: 'center' as const },
+  sectionLabel: { color: Colors.text.secondary, fontSize: theme.fontSize.sm, marginBottom: 10 },
+  roleButton: { flexDirection: 'row' as const, alignItems: 'center' as const, borderRadius: 16, paddingHorizontal: 14, paddingVertical: 12, backgroundColor: Colors.bg.surface2, gap: 8 },
+  roleText: { color: Colors.text.primary, fontSize: theme.fontSize.sm, fontWeight: '800' as const },
+  errorBox: { flexDirection: 'row' as const, gap: 8, borderWidth: 1, borderColor: 'rgba(255,69,52,0.35)', backgroundColor: 'rgba(255,69,52,0.10)', borderRadius: 16, padding: theme.spacing.md, marginBottom: theme.spacing.md },
+  errorText: { flex: 1, color: Colors.semantic.error, fontSize: theme.fontSize.sm },
+  secondaryButton: { flex: 1, height: 52, borderRadius: 18, backgroundColor: Colors.bg.surface2, alignItems: 'center' as const, justifyContent: 'center' as const },
+  secondaryText: { color: Colors.text.primary, fontSize: theme.fontSize.sm, fontWeight: '800' as const },
+  primaryButton: { flex: 1.25, height: 52, borderRadius: 18, backgroundColor: Colors.brand.primary, flexDirection: 'row' as const, alignItems: 'center' as const, justifyContent: 'center' as const },
+  primaryText: { color: '#000', fontSize: theme.fontSize.sm, fontWeight: '900' as const },
+};

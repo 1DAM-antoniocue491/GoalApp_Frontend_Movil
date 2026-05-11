@@ -1,47 +1,24 @@
 /**
  * useMatchActionModals.ts
- *
- * Hook reutilizable que centraliza el estado y los handlers de los modales
- * operativos de partido en vivo:
- *
- *   1. RegisterEventModal   — selector de tipo de evento
- *   2. GoalEventModal       — registrar gol
- *   3. YellowCardModal      — tarjeta amarilla
- *   4. RedCardModal         — tarjeta roja
- *   5. SubstitutionModal    — cambio de jugador
- *   6. StartMatchModal      — iniciar partido
- *   7. EndMatchModal        — finalizar partido
- *
- * Uso típico en cualquier pantalla que necesite estas acciones:
- *
- *   const { modals, openRegisterEvent, openStartMatch, openEndMatch, modalProps } =
- *     useMatchActionModals();
- *
- *   // Montar los modales al final del return:
- *   <MatchActionModals {@/src/features/matches.modalProps} />
- *
- * PREPARADO PARA API:
- * Los handlers `onGoalConfirm`, `onYellowCardConfirm`, `onRedCardConfirm`,
- * `onSubstitutionConfirm`, `onEndMatchConfirm` y `onStartMatchConfirm`
- * tienen comentarios TODO listos para conectar a los endpoints reales.
+ * Centraliza modales operativos con API real y bloqueo anti-doble toque.
  */
 
-import { useState } from 'react';
-
-import type { LiveMatchContext } from '@/src/features/matches/components/modals/RegisterEventModal';
+import { useCallback, useMemo, useState } from 'react';
+import { Alert } from 'react-native';
+import type { LiveMatchContext, MatchEventType } from '@/src/features/matches/components/modals/RegisterEventModal';
 import type { LiveMatchSummary, EndMatchData } from '@/src/features/matches/components/modals/EndMatchModal';
 import type { ProgrammedMatchContext } from '@/src/features/matches/components/modals/StartMatchModal';
-import type { MatchEventType } from '@/src/features/matches/components/modals/RegisterEventModal';
 import type { GoalEventData } from '@/src/features/matches/components/modals/GoalEventModal';
 import type { YellowCardEventData } from '@/src/features/matches/components/modals/YellowCardModal';
 import type { RedCardEventData } from '@/src/features/matches/components/modals/RedCardModal';
 import type { SubstitutionEventData } from '@/src/features/matches/components/modals/SubstitutionModal';
+import {
+  createMatchEventService,
+  finishMatchService,
+  getMatchPlayersBySideService,
+  startMatchService,
+} from '../services/matchesService';
 
-// ---------------------------------------------------------------------------
-// Tipos del hook
-// ---------------------------------------------------------------------------
-
-/** Estado de visibilidad de todos los modales operativos */
 export interface MatchModalVisibility {
   registerEvent: boolean;
   goal: boolean;
@@ -52,16 +29,21 @@ export interface MatchModalVisibility {
   endMatch: boolean;
 }
 
-/** Todo lo necesario para montar los modales en la pantalla consumidora */
+export interface MatchActionPendingState {
+  hydratingEventPlayers: boolean;
+  hydratingEndMatch: boolean;
+  submittingEvent: boolean;
+  startingMatch: boolean;
+  endingMatch: boolean;
+  any: boolean;
+}
+
 export interface MatchActionModalProps {
   modals: MatchModalVisibility;
-  /** Contexto del partido en vivo activo (RegisterEvent + sub-modales) */
   activeEventMatch: LiveMatchContext | null;
-  /** Contexto del partido a finalizar */
   activeEndMatch: LiveMatchSummary | null;
-  /** Contexto del partido a iniciar */
   activeStartMatch: ProgrammedMatchContext | null;
-  /** Handlers de selección y confirmación */
+  pending: MatchActionPendingState;
   onSelectEvent: (type: MatchEventType) => void;
   onGoalConfirm: (data: GoalEventData) => void;
   onYellowCardConfirm: (data: YellowCardEventData) => void;
@@ -69,7 +51,6 @@ export interface MatchActionModalProps {
   onSubstitutionConfirm: (data: SubstitutionEventData) => void;
   onEndMatchConfirm: (data: EndMatchData) => void;
   onStartMatchConfirm: () => void;
-  /** Cierre individual de cada modal */
   onCloseRegisterEvent: () => void;
   onCloseGoal: () => void;
   onCloseYellowCard: () => void;
@@ -79,12 +60,17 @@ export interface MatchActionModalProps {
   onCloseStartMatch: () => void;
 }
 
-// ---------------------------------------------------------------------------
-// Hook
-// ---------------------------------------------------------------------------
+function getMatchIdValue(id?: string | number | null): number {
+  return Number(id ?? 0);
+}
 
-export function useMatchActionModals() {
-  // ── Visibilidad de modales ──
+function getTeamIdFromContext(match: LiveMatchContext, team?: 'home' | 'away'): number | undefined {
+  if (team === 'home') return match.homeTeamId;
+  if (team === 'away') return match.awayTeamId;
+  return undefined;
+}
+
+export function useMatchActionModals(onChanged?: () => void | Promise<void>) {
   const [registerEventVisible, setRegisterEventVisible] = useState(false);
   const [goalVisible, setGoalVisible] = useState(false);
   const [yellowCardVisible, setYellowCardVisible] = useState(false);
@@ -93,102 +79,157 @@ export function useMatchActionModals() {
   const [startMatchVisible, setStartMatchVisible] = useState(false);
   const [endMatchVisible, setEndMatchVisible] = useState(false);
 
-  // ── Contextos activos — se establecen al abrir cada modal ──
   const [activeEventMatch, setActiveEventMatch] = useState<LiveMatchContext | null>(null);
   const [activeEndMatch, setActiveEndMatch] = useState<LiveMatchSummary | null>(null);
   const [activeStartMatch, setActiveStartMatch] = useState<ProgrammedMatchContext | null>(null);
 
-  // ---------------------------------------------------------------------------
-  // Abrirores — la pantalla consumidora llama a estos con los datos del partido
-  // ---------------------------------------------------------------------------
+  const [hydratingEventPlayers, setHydratingEventPlayers] = useState(false);
+  const [hydratingEndMatch, setHydratingEndMatch] = useState(false);
+  const [submittingEvent, setSubmittingEvent] = useState(false);
+  const [startingMatch, setStartingMatch] = useState(false);
+  const [endingMatch, setEndingMatch] = useState(false);
 
-  /** Abre el selector de tipo de evento para un partido en vivo */
-  const openRegisterEvent = (match: LiveMatchContext) => {
+  const pending = useMemo<MatchActionPendingState>(() => {
+    const any = hydratingEventPlayers || hydratingEndMatch || submittingEvent || startingMatch || endingMatch;
+    return { hydratingEventPlayers, hydratingEndMatch, submittingEvent, startingMatch, endingMatch, any };
+  }, [hydratingEventPlayers, hydratingEndMatch, submittingEvent, startingMatch, endingMatch]);
+
+  const hydratePlayers = useCallback(async <T extends LiveMatchContext | LiveMatchSummary>(match: T): Promise<T> => {
+    const matchId = getMatchIdValue(match.id);
+    const result = await getMatchPlayersBySideService(matchId);
+    if (!result.success || !result.data) return match;
+    return { ...match, homePlayers: result.data.home, awayPlayers: result.data.away };
+  }, []);
+
+  const notifyError = (error?: string) => Alert.alert('No se pudo completar la acción', error || 'Inténtalo de nuevo.');
+
+  const openRegisterEvent = useCallback((match: LiveMatchContext) => {
+    if (pending.any) return;
     setActiveEventMatch(match);
     setRegisterEventVisible(true);
-  };
+    setHydratingEventPlayers(true);
+    void hydratePlayers(match)
+      .then(setActiveEventMatch)
+      .finally(() => setHydratingEventPlayers(false));
+  }, [hydratePlayers, pending.any]);
 
-  /** Abre el modal de confirmación de inicio de partido */
-  const openStartMatch = (match: ProgrammedMatchContext) => {
+  const openStartMatch = useCallback((match: ProgrammedMatchContext) => {
+    if (pending.any) return;
     setActiveStartMatch(match);
     setStartMatchVisible(true);
-  };
+  }, [pending.any]);
 
-  /** Abre el modal de finalización de partido */
-  const openEndMatch = (match: LiveMatchSummary) => {
+  const openEndMatch = useCallback((match: LiveMatchSummary) => {
+    if (pending.any) return;
     setActiveEndMatch(match);
     setEndMatchVisible(true);
-  };
-
-  /** Cierra todos los modales a la vez (útil al navegar o desmontar) */
-  const closeAll = () => {
-    setRegisterEventVisible(false);
-    setGoalVisible(false);
-    setYellowCardVisible(false);
-    setRedCardVisible(false);
-    setSubstitutionVisible(false);
-    setStartMatchVisible(false);
-    setEndMatchVisible(false);
-  };
-
-  // ---------------------------------------------------------------------------
-  // Handler de selección de evento — despacha al sub-modal correcto
-  // ---------------------------------------------------------------------------
+    setHydratingEndMatch(true);
+    void hydratePlayers(match)
+      .then(setActiveEndMatch)
+      .finally(() => setHydratingEndMatch(false));
+  }, [hydratePlayers, pending.any]);
 
   const handleSelectEvent = (type: MatchEventType) => {
-    // Cierra el selector antes de abrir el sub-modal para evitar superposición
+    if (pending.any) return;
     setRegisterEventVisible(false);
     if (type === 'goal') setGoalVisible(true);
     else if (type === 'yellow_card') setYellowCardVisible(true);
     else if (type === 'red_card') setRedCardVisible(true);
-    else if (type === 'substitution') setSubstitutionVisible(true);
+    else setSubstitutionVisible(true);
   };
 
-  // ---------------------------------------------------------------------------
-  // Handlers de confirmación — preparados para conectar a API
-  // ---------------------------------------------------------------------------
-
-  const handleGoalConfirm = (data: GoalEventData) => {
+  const submitEvent = async (input: {
+    id_jugador: number;
+    tipo_evento: 'gol' | 'tarjeta_amarilla' | 'tarjeta_roja' | 'cambio';
+    id_jugador_sale?: number;
+    team?: 'home' | 'away';
+    incidencias?: string;
+  }) => {
+    if (!activeEventMatch || submittingEvent) return;
+    setSubmittingEvent(true);
+    const result = await createMatchEventService({
+      id_partido: getMatchIdValue(activeEventMatch.id),
+      id_jugador: input.id_jugador,
+      tipo_evento: input.tipo_evento,
+      minuto: Math.max(1, Number(activeEventMatch.minute ?? 1)),
+      id_jugador_sale: input.id_jugador_sale,
+      id_equipo: getTeamIdFromContext(activeEventMatch, input.team),
+      incidencias: input.incidencias,
+    });
+    setSubmittingEvent(false);
+    if (!result.success) {
+      notifyError(result.error);
+      return;
+    }
     setGoalVisible(false);
-    // TODO: POST /matches/:id/events { type: 'goal', @/src/features/matches.data, minute: activeEventMatch?.minute }
-    console.log('[useMatchActionModals] goal confirmed for match:', activeEventMatch?.id, data);
-  };
-
-  const handleYellowCardConfirm = (data: YellowCardEventData) => {
     setYellowCardVisible(false);
-    // TODO: POST /matches/:id/events { type: 'yellow_card', @/src/features/matches.data, minute: activeEventMatch?.minute }
-    console.log('[useMatchActionModals] yellow_card confirmed for match:', activeEventMatch?.id, data);
-  };
-
-  const handleRedCardConfirm = (data: RedCardEventData) => {
     setRedCardVisible(false);
-    // TODO: POST /matches/:id/events { type: 'red_card', @/src/features/matches.data, minute: activeEventMatch?.minute }
-    console.log('[useMatchActionModals] red_card confirmed for match:', activeEventMatch?.id, data);
-  };
-
-  const handleSubstitutionConfirm = (data: SubstitutionEventData) => {
     setSubstitutionVisible(false);
-    // TODO: POST /matches/:id/events { type: 'substitution', @/src/features/matches.data, minute: activeEventMatch?.minute }
-    console.log('[useMatchActionModals] substitution confirmed for match:', activeEventMatch?.id, data);
+    void onChanged?.();
   };
 
-  const handleEndMatchConfirm = (data: EndMatchData) => {
+  const handleGoalConfirm = (data: GoalEventData) => submitEvent({
+    id_jugador: data.scorerId,
+    tipo_evento: 'gol',
+    team: data.team,
+    incidencias: data.ownGoal ? 'Gol en propia puerta' : undefined,
+  });
+
+  const handleYellowCardConfirm = (data: YellowCardEventData) => submitEvent({
+    id_jugador: data.playerId,
+    tipo_evento: 'tarjeta_amarilla',
+    team: data.team,
+  });
+
+  const handleRedCardConfirm = (data: RedCardEventData) => submitEvent({
+    id_jugador: data.playerId,
+    tipo_evento: 'tarjeta_roja',
+    team: data.team,
+    incidencias: data.cardType === 'second_yellow' ? 'Segunda amarilla' : 'Roja directa',
+  });
+
+  const handleSubstitutionConfirm = (data: SubstitutionEventData) => submitEvent({
+    id_jugador: data.playerInId,
+    id_jugador_sale: data.playerOutId,
+    tipo_evento: 'cambio',
+    team: data.team,
+  });
+
+  const handleEndMatchConfirm = async (data: EndMatchData) => {
+    if (!activeEndMatch || endingMatch) return;
+    setEndingMatch(true);
+    const result = await finishMatchService(getMatchIdValue(activeEndMatch.id), {
+      goles_local: activeEndMatch.homeScore,
+      goles_visitante: activeEndMatch.awayScore,
+      id_mvp: data.mvpId,
+      puntuacion_mvp: data.mvpScore,
+      incidencias: data.observations,
+    });
+    setEndingMatch(false);
+    if (!result.success) {
+      notifyError(result.error);
+      return;
+    }
     setEndMatchVisible(false);
-    // TODO: PATCH /matches/:id/finish { mvp, observations }
-    // Después actualizar la lista local cambiando el status a 'finished'
-    console.log('[useMatchActionModals] end match confirmed for match:', activeEndMatch?.id, data);
+    void onChanged?.();
   };
 
-  const handleStartMatchConfirm = () => {
+  const handleStartMatchConfirm = async () => {
+    if (!activeStartMatch || startingMatch) return;
+    setStartingMatch(true);
+    const result = await startMatchService(getMatchIdValue(activeStartMatch.id));
+    setStartingMatch(false);
+    if (!result.success) {
+      notifyError(result.error);
+      return;
+    }
     setStartMatchVisible(false);
-    // TODO: PATCH /matches/:id/start
-    // Después actualizar la lista local cambiando el status a 'live'
-    console.log('[useMatchActionModals] start match confirmed for match:', activeStartMatch?.id);
+    void onChanged?.();
   };
 
-  // ---------------------------------------------------------------------------
-  // Retorno
-  // ---------------------------------------------------------------------------
+  const closeIfIdle = (close: () => void) => {
+    if (!pending.any) close();
+  };
 
   const modals: MatchModalVisibility = {
     registerEvent: registerEventVisible,
@@ -200,12 +241,12 @@ export function useMatchActionModals() {
     endMatch: endMatchVisible,
   };
 
-  /** Props listas para spreadearse en <MatchActionModals /> o pasar individualmente */
   const modalProps: MatchActionModalProps = {
     modals,
     activeEventMatch,
     activeEndMatch,
     activeStartMatch,
+    pending,
     onSelectEvent: handleSelectEvent,
     onGoalConfirm: handleGoalConfirm,
     onYellowCardConfirm: handleYellowCardConfirm,
@@ -213,28 +254,23 @@ export function useMatchActionModals() {
     onSubstitutionConfirm: handleSubstitutionConfirm,
     onEndMatchConfirm: handleEndMatchConfirm,
     onStartMatchConfirm: handleStartMatchConfirm,
-    onCloseRegisterEvent: () => setRegisterEventVisible(false),
-    onCloseGoal: () => setGoalVisible(false),
-    onCloseYellowCard: () => setYellowCardVisible(false),
-    onCloseRedCard: () => setRedCardVisible(false),
-    onCloseSubstitution: () => setSubstitutionVisible(false),
-    onCloseEndMatch: () => setEndMatchVisible(false),
-    onCloseStartMatch: () => setStartMatchVisible(false),
+    onCloseRegisterEvent: () => closeIfIdle(() => setRegisterEventVisible(false)),
+    onCloseGoal: () => closeIfIdle(() => setGoalVisible(false)),
+    onCloseYellowCard: () => closeIfIdle(() => setYellowCardVisible(false)),
+    onCloseRedCard: () => closeIfIdle(() => setRedCardVisible(false)),
+    onCloseSubstitution: () => closeIfIdle(() => setSubstitutionVisible(false)),
+    onCloseEndMatch: () => closeIfIdle(() => setEndMatchVisible(false)),
+    onCloseStartMatch: () => closeIfIdle(() => setStartMatchVisible(false)),
   };
 
   return {
-    /** Estado de visibilidad de todos los modales */
     modals,
-    /** Contexto del partido activo según el modal abierto */
     activeEventMatch,
     activeEndMatch,
     activeStartMatch,
-    /** Abrirores — llamar con los datos del partido desde las cards */
     openRegisterEvent,
     openStartMatch,
     openEndMatch,
-    closeAll,
-    /** Props agregadas — útiles si se monta un componente <MatchActionModals> */
     modalProps,
   };
 }

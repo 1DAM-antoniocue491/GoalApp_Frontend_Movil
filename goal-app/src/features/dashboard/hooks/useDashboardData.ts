@@ -24,6 +24,7 @@ import { useFocusEffect } from "@react-navigation/native";
 import type { DashboardData } from "@/src/shared/types/dashboard.types";
 import { fetchDashboardData } from "@/src/features/dashboard/api/dashboard.api";
 import { logger } from "@/src/shared/utils/logger";
+import { subscribeMatchDataChanged } from '@/src/features/matches/services/matchSync';
 
 // ---------------------------------------------------------------------------
 // Contrato del hook
@@ -203,6 +204,19 @@ export function useDashboardData(leagueId: string): DashboardHookResult {
 
   useEffect(() => {
     loadData();
+  }, [loadData]);
+
+  useFocusEffect(
+    useCallback(() => {
+      loadData();
+      const unsubscribe = subscribeMatchDataChanged(loadData);
+      return unsubscribe;
+    }, [loadData]),
+  );
+
+  useEffect(() => {
+    const intervalId = setInterval(loadData, 30000);
+    return () => clearInterval(intervalId);
   }, [loadData]);
 
   return {

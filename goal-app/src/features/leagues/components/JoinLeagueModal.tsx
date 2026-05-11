@@ -10,6 +10,7 @@ import {
   Pressable,
   KeyboardAvoidingView,
   Platform,
+  ActivityIndicator,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { Colors } from '@/src/shared/constants/colors';
@@ -17,11 +18,21 @@ import { theme } from '@/src/shared/styles/theme';
 
 interface JoinLeagueModalProps {
   visible: boolean;
-  onConfirm: (code: string) => void;
+  onConfirm: (code: string) => void | Promise<void>;
   onCancel: () => void;
+  /** Se muestra mientras se valida/acepta el código en la API. */
+  submitting?: boolean;
+  /** Error devuelto por useLeagues.joinLeagueByCode. */
+  errorMessage?: string | null;
 }
 
-function JoinLeagueModalComponent({ visible, onConfirm, onCancel }: JoinLeagueModalProps) {
+function JoinLeagueModalComponent({
+  visible,
+  onConfirm,
+  onCancel,
+  submitting = false,
+  errorMessage,
+}: JoinLeagueModalProps) {
   const [code, setCode] = useState('');
   const slideAnim = useRef(new Animated.Value(100)).current;
   const opacityAnim = useRef(new Animated.Value(0)).current;
@@ -60,11 +71,12 @@ function JoinLeagueModalComponent({ visible, onConfirm, onCancel }: JoinLeagueMo
   }, [visible, opacityAnim, slideAnim]);
 
   const handleConfirm = useCallback(() => {
-    if (code.trim().length === 0) return;
+    if (code.trim().length === 0 || submitting) return;
     onConfirm(code.trim());
-  }, [code, onConfirm]);
+  }, [code, onConfirm, submitting]);
 
   const isValid = code.trim().length >= 3;
+  const canSubmit = isValid && !submitting;
 
   return (
     <Modal transparent visible={visible} animationType="none" statusBarTranslucent>
@@ -80,7 +92,7 @@ function JoinLeagueModalComponent({ visible, onConfirm, onCancel }: JoinLeagueMo
             opacity: opacityAnim,
           }}
         >
-          <Pressable style={{ flex: 1 }} onPress={onCancel} />
+          <Pressable style={{ flex: 1 }} onPress={() => { if (!submitting) onCancel(); }} />
 
           <Animated.View
             style={{
@@ -95,7 +107,6 @@ function JoinLeagueModalComponent({ visible, onConfirm, onCancel }: JoinLeagueMo
               borderColor: Colors.bg.surface2,
             }}
           >
-            {/* Handle */}
             <View
               style={{
                 width: 40,
@@ -107,13 +118,13 @@ function JoinLeagueModalComponent({ visible, onConfirm, onCancel }: JoinLeagueMo
               }}
             />
 
-            {/* Header row */}
             <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
               <Text style={{ color: Colors.text.primary, fontSize: 22, fontWeight: '700' }}>
                 Unirme a una liga
               </Text>
               <TouchableOpacity
                 onPress={onCancel}
+                disabled={submitting}
                 style={{
                   height: 36,
                   width: 36,
@@ -121,6 +132,7 @@ function JoinLeagueModalComponent({ visible, onConfirm, onCancel }: JoinLeagueMo
                   alignItems: 'center',
                   justifyContent: 'center',
                   backgroundColor: Colors.bg.surface2,
+                  opacity: submitting ? 0.5 : 1,
                 }}
               >
                 <Ionicons name="close" size={18} color={Colors.text.secondary} />
@@ -138,7 +150,6 @@ function JoinLeagueModalComponent({ visible, onConfirm, onCancel }: JoinLeagueMo
               Introduce tu código de invitación para acceder.
             </Text>
 
-            {/* Code Input */}
             <View
               style={{
                 flexDirection: 'row',
@@ -147,7 +158,7 @@ function JoinLeagueModalComponent({ visible, onConfirm, onCancel }: JoinLeagueMo
                 borderWidth: 1.5,
                 paddingHorizontal: 16,
                 height: 58,
-                marginBottom: 28,
+                marginBottom: errorMessage ? 12 : 28,
                 backgroundColor: Colors.bg.base,
                 borderColor: code.length > 0 ? Colors.brand.primary : Colors.bg.surface2,
               }}
@@ -166,25 +177,43 @@ function JoinLeagueModalComponent({ visible, onConfirm, onCancel }: JoinLeagueMo
                   fontWeight: '600',
                   letterSpacing: 1,
                 }}
-                placeholder="ABC-123-XYZ"
+                placeholder="ABC123"
                 placeholderTextColor={Colors.text.disabled}
                 value={code}
                 onChangeText={setCode}
                 autoCapitalize="characters"
                 autoCorrect={false}
+                editable={!submitting}
               />
-              {code.length > 0 && (
+              {code.length > 0 && !submitting && (
                 <TouchableOpacity onPress={() => setCode('')}>
                   <Ionicons name="close-circle" size={20} color={Colors.text.disabled} />
                 </TouchableOpacity>
               )}
             </View>
 
-            {/* Buttons */}
+            {errorMessage ? (
+              <View
+                style={{
+                  borderRadius: 14,
+                  borderWidth: 1,
+                  borderColor: `${Colors.semantic.error}50`,
+                  backgroundColor: `${Colors.semantic.error}14`,
+                  padding: theme.spacing.md,
+                  marginBottom: 20,
+                }}
+              >
+                <Text style={{ color: Colors.semantic.error, fontSize: theme.fontSize.sm }}>
+                  {errorMessage}
+                </Text>
+              </View>
+            ) : null}
+
             <View style={{ flexDirection: 'row', gap: 12 }}>
               <TouchableOpacity
                 activeOpacity={0.75}
                 onPress={onCancel}
+                disabled={submitting}
                 style={{
                   flex: 1,
                   height: 56,
@@ -192,6 +221,7 @@ function JoinLeagueModalComponent({ visible, onConfirm, onCancel }: JoinLeagueMo
                   alignItems: 'center',
                   justifyContent: 'center',
                   backgroundColor: Colors.bg.surface2,
+                  opacity: submitting ? 0.5 : 1,
                 }}
               >
                 <Text style={{ color: Colors.text.secondary, fontSize: 15, fontWeight: '600' }}>
@@ -200,36 +230,41 @@ function JoinLeagueModalComponent({ visible, onConfirm, onCancel }: JoinLeagueMo
               </TouchableOpacity>
 
               <TouchableOpacity
-                activeOpacity={isValid ? 0.88 : 1}
+                activeOpacity={canSubmit ? 0.88 : 1}
                 onPress={handleConfirm}
-                disabled={!isValid}
+                disabled={!canSubmit}
                 style={{
                   flex: 2,
                   height: 56,
                   borderRadius: 16,
                   alignItems: 'center',
                   justifyContent: 'center',
-                  backgroundColor: isValid ? Colors.brand.primary : `${Colors.brand.primary}40`,
+                  backgroundColor: canSubmit ? Colors.brand.primary : `${Colors.brand.primary}40`,
                   flexDirection: 'row',
                   gap: 8,
                 }}
               >
+                {submitting ? (
+                  <ActivityIndicator size="small" color="#0A0A0C" />
+                ) : null}
                 <Text
                   style={{
                     color: '#0A0A0C',
                     fontSize: 15,
                     fontWeight: '700',
-                    opacity: isValid ? 1 : 0.5,
+                    opacity: canSubmit ? 1 : 0.5,
                   }}
                 >
-                  Unirme a la liga
+                  {submitting ? 'Uniendo...' : 'Unirme a la liga'}
                 </Text>
-                <Ionicons
-                  name="arrow-forward"
-                  size={18}
-                  color="#0A0A0C"
-                  style={{ opacity: isValid ? 1 : 0.5 }}
-                />
+                {!submitting ? (
+                  <Ionicons
+                    name="arrow-forward"
+                    size={18}
+                    color="#0A0A0C"
+                    style={{ opacity: canSubmit ? 1 : 0.5 }}
+                  />
+                ) : null}
               </TouchableOpacity>
             </View>
           </Animated.View>

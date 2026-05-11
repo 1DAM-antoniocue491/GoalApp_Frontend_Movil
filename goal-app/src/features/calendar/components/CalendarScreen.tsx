@@ -3,6 +3,11 @@
  *
  * Pantalla principal del calendario de la liga.
  * Datos reales vía useCalendarData → calendarService → calendar.api.
+ *
+ * Regla importante:
+ * esta pantalla solo coordina UI, navegación, modales y permisos.
+ * La normalización de datos del backend vive en calendarService para evitar
+ * duplicar mapeos o reglas en los componentes visuales.
  */
 
 import React, { useRef, useState, useEffect } from 'react';
@@ -37,7 +42,11 @@ import { calendarService } from '../services/calendarService';
 import { useTeamsByLeague } from '@/src/features/teams/hooks/useTeams';
 
 // Service de partidos — crear partido manual
-import { createManualMatchService } from '@/src/features/matches/services/matchesService';
+import {
+  buildApiDateTime,
+  createManualMatchService,
+  updateScheduledMatchService,
+} from '@/src/features/matches/services/matchesService';
 
 // Componentes propios del módulo
 import { CalendarHeader } from './CalendarHeader';
@@ -55,8 +64,10 @@ import { GoalEventModal } from '@/src/features/matches/components/modals/GoalEve
 import { YellowCardModal } from '@/src/features/matches/components/modals/YellowCardModal';
 import { RedCardModal } from '@/src/features/matches/components/modals/RedCardModal';
 import { SubstitutionModal } from '@/src/features/matches/components/modals/SubstitutionModal';
+import { EditScheduledMatchModal, type EditScheduledMatchData } from '@/src/features/matches/components/modals/EditScheduledMatchModal';
 // Hook centralizado de estado/control de modales de partido
 import { useMatchActionModals } from '@/src/features/matches/hooks/useMatchActionModals';
+import { emitMatchDataChanged } from '@/src/features/matches/services/matchSync';
 
 // Tipos y utilidades
 import type {
@@ -74,11 +85,15 @@ import {
 import type { CalendarConfigData } from './modals/CalendarConfigModal';
 import type { CreateCalendarInput } from '../services/calendarService';
 import type { CreateManualMatchFormData } from './modals/CreateManualMatchModal';
+import type { PartidoApi } from '@/src/features/matches/types/matches.types';
 
 
 // ---------------------------------------------------------------------------
 // Adaptadores CalendarMatch → tipos de cada card
 // ---------------------------------------------------------------------------
+// Las cards de partidos ya existen en el módulo matches y tienen su propio contrato.
+// Estos adaptadores aíslan ese contrato para que CalendarMatch pueda evolucionar
+// sin obligar a modificar LiveMatchCard, ProgrammedMatchCard o FinishedMatchCard.
 
 function toLiveData(m: CalendarMatch) {
   return {
@@ -87,7 +102,12 @@ function toLiveData(m: CalendarMatch) {
     awayTeam: m.awayTeam,
     homeScore: m.homeScore ?? 0,
     awayScore: m.awayScore ?? 0,
-    minute: m.minute ?? 0,
+    minute: Math.max(1, m.minute ?? 1),
+    duration: m.duration ?? 90,
+    startedAt: m.startedAt ?? null,
+    homeTeamId: m.homeTeamId ?? undefined,
+    awayTeamId: m.awayTeamId ?? undefined,
+    eventsLocked: (m.minute ?? 1) >= (m.duration ?? 90),
     leagueName: m.leagueName,
     venue: m.venue,
     homeShieldLetter: m.homeShieldLetter,
@@ -109,6 +129,8 @@ function toProgrammedData(m: CalendarMatch) {
     venue: m.venue,
     homeColor: m.homeColor,
     awayColor: m.awayColor,
+    startsAt: m.startedAt ?? null,
+    rawDate: m.startedAt ?? null,
   };
 }
 
@@ -305,23 +327,6 @@ function EmptyFilterState({ filter }: { filter: JourneyStatusFilter }) {
   );
 }
 
-function PlaceholderTab({ label }: { label: string }) {
-  return (
-    <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', padding: 40 }}>
-      <Ionicons name="construct-outline" size={36} color={Colors.text.disabled} />
-      <Text
-        style={{
-          color: Colors.text.disabled,
-          fontSize: theme.fontSize.sm,
-          marginTop: 12,
-          textAlign: 'center',
-        }}
-      >
-        {label} disponible próximamente
-      </Text>
-    </View>
-  );
-}
 
 function ManualMatchBadge() {
   return (
@@ -339,96 +344,6 @@ function ManualMatchBadge() {
       <Text style={{ color: Colors.text.disabled, fontSize: 10 }}>Partido manual</Text>
     </View>
   );
-}
-
-
-// ---------------------------------------------------------------------------
-// Helpers de fecha para partido manual
-// ---------------------------------------------------------------------------
-
-/**
- * DateTimePickerField puede devolver fechas visuales tipo DD/MM/YYYY.
- * La API, igual que web, espera un datetime válido con año primero:
- * YYYY-MM-DDTHH:mm:ss.
- */
-function normalizeDateForApi(value: string | undefined | null): string | null {
-  if (!value) return null;
-
-  const clean = String(value).trim();
-  if (!clean) return null;
-
-  // Si ya llega como datetime, nos quedamos con la parte de fecha.
-  const datePart = clean.includes('T') ? clean.split('T')[0] : clean;
-
-  // Formato correcto: YYYY-MM-DD.
-  const isoMatch = datePart.match(/^(\d{4})-(\d{1,2})-(\d{1,2})$/);
-  if (isoMatch) {
-    const [, year, month, day] = isoMatch;
-    return `${year}-${month.padStart(2, '0')}-${day.padStart(2, '0')}`;
-  }
-
-  // Formato visual del picker móvil: DD/MM/YYYY o DD-MM-YYYY.
-  const spanishMatch = datePart.match(/^(\d{1,2})[\/-](\d{1,2})[\/-](\d{4})$/);
-  if (spanishMatch) {
-    const [, day, month, year] = spanishMatch;
-    return `${year}-${month.padStart(2, '0')}-${day.padStart(2, '0')}`;
-  }
-
-  const parsed = new Date(clean);
-  if (!Number.isNaN(parsed.getTime())) {
-    const year = String(parsed.getFullYear());
-    const month = String(parsed.getMonth() + 1).padStart(2, '0');
-    const day = String(parsed.getDate()).padStart(2, '0');
-    return `${year}-${month}-${day}`;
-  }
-
-  return null;
-}
-
-/**
- * Normaliza horas que pueden llegar como H:m, H:m:s o como Date string.
- */
-function normalizeTimeForApi(value: string | undefined | null): string | null {
-  if (!value) return null;
-
-  const clean = String(value).trim();
-  if (!clean) return null;
-
-  const timePart = clean.includes('T') ? clean.split('T')[1] : clean;
-  const timeMatch = timePart.match(/^(\d{1,2}):(\d{1,2})(?::(\d{1,2}))?/);
-
-  if (timeMatch) {
-    const [, rawHour, rawMinute, rawSecond = '0'] = timeMatch;
-    const hour = Number(rawHour);
-    const minute = Number(rawMinute);
-    const second = Number(rawSecond);
-
-    if (
-      Number.isInteger(hour) && hour >= 0 && hour <= 23 &&
-      Number.isInteger(minute) && minute >= 0 && minute <= 59 &&
-      Number.isInteger(second) && second >= 0 && second <= 59
-    ) {
-      return `${String(hour).padStart(2, '0')}:${String(minute).padStart(2, '0')}:${String(second).padStart(2, '0')}`;
-    }
-  }
-
-  const parsed = new Date(clean);
-  if (!Number.isNaN(parsed.getTime())) {
-    const hour = String(parsed.getHours()).padStart(2, '0');
-    const minute = String(parsed.getMinutes()).padStart(2, '0');
-    const second = String(parsed.getSeconds()).padStart(2, '0');
-    return `${hour}:${minute}:${second}`;
-  }
-
-  return null;
-}
-
-function buildMatchDateTimeForApi(date: string, time: string): string | null {
-  const normalizedDate = normalizeDateForApi(date);
-  const normalizedTime = normalizeTimeForApi(time);
-
-  if (!normalizedDate || !normalizedTime) return null;
-  return `${normalizedDate}T${normalizedTime}`;
 }
 
 // ---------------------------------------------------------------------------
@@ -450,6 +365,9 @@ export function CalendarScreen() {
   const leagueName = session?.leagueName ?? '–';
   const temporada = session?.temporada ?? '–';
   const role = (session?.role ?? 'observer') as CalendarRole;
+  // Único rol con acceso al menú contextual del calendario.
+  // Los roles no administradores no deben ver los tres puntos ni poder abrir acciones de gestión.
+  const isAdmin = role === 'admin';
 
   // ── Datos reales del calendario ──
   const {
@@ -498,6 +416,8 @@ export function CalendarScreen() {
   const [newMatchError, setNewMatchError] = useState<string | undefined>(undefined);
   const [newMatchSubmitting, setNewMatchSubmitting] = useState(false);
   const [createTeamVisible, setCreateTeamVisible] = useState(false);
+  const [editingMatch, setEditingMatch] = useState<PartidoApi | null>(null);
+  const [editMatchSubmitting, setEditMatchSubmitting] = useState(false);
 
   // Modales de acción sobre partidos — estado centralizado en el hook
   const {
@@ -509,7 +429,7 @@ export function CalendarScreen() {
     openStartMatch,
     openEndMatch,
     modalProps,
-  } = useMatchActionModals();
+  } = useMatchActionModals(refetchJourneys);
 
   // ── Scroll ──
   const scrollRef = useRef<ScrollView | null>(null);
@@ -548,6 +468,13 @@ export function CalendarScreen() {
   };
 
   // ── Estado del calendario para el menú — 3 estados igual que la web ──
+  // Los partidos manuales NO cuentan como calendario generado.
+  // Esta bandera controla que "Editar calendario" solo aparezca cuando existe
+  // calendario automático creado desde CalendarConfigModal/API.
+  const hasGeneratedCalendar = journeys.some((j) =>
+    j.matches.some((m) => m.source === 'automatic'),
+  );
+
   const hasMatchesInPlayOrFinished = journeys.some((j) =>
     j.matches.some((m) => m.status === 'live' || m.status === 'finished'),
   );
@@ -559,7 +486,12 @@ export function CalendarScreen() {
         : 'editable';
 
   // ── Handlers del menú de admin ──
-  const handleMenuPress = () => setMenuVisible(true);
+  const handleMenuPress = () => {
+    // Defensa extra: aunque el botón se oculte en CalendarHeader,
+    // nunca abrimos el menú si la sesión actual no es administradora.
+    if (!isAdmin) return;
+    setMenuVisible(true);
+  };
 
   const handleOpenCreateCalendar = () => {
     setMenuVisible(false);
@@ -621,11 +553,13 @@ export function CalendarScreen() {
   };
 
   // ── Handlers de acciones en jornada ──
-  const handleAddMatch = () => setNewMatchModalVisible(true);
 
-  const handleAddTeam = () => setCreateTeamVisible(true);
 
   // ── Confirm de modales ──
+  /**
+   * Crea o regenera el calendario desde el mismo formulario.
+   * El modo activo decide si se llama al endpoint de creación o al de edición.
+   */
   const handleCalendarConfigConfirm = async (data: CalendarConfigData) => {
     setCalendarModalError(undefined);
     setCalendarModalSubmitting(true);
@@ -651,21 +585,16 @@ export function CalendarScreen() {
     }
   };
 
+  /**
+   * Crea un partido manual sin marcarlo como calendario automático.
+   * Esto permite añadir partidos sueltos sin desbloquear opciones de editar/eliminar calendario.
+   */
   const handleNewMatchConfirm = async (data: CreateManualMatchFormData) => {
     if (ligaId <= 0) return;
 
-    // Número de jornada: preferir backendNumber (real) sobre number (visual)
-    const activeJornada = journeys[journeyIndex];
-    const jornadaNum = activeJornada?.backendNumber ?? activeJornada?.number ?? 1;
 
-    // Combinar fecha + hora en formato válido para API: YYYY-MM-DDTHH:mm:ss.
-    // El picker móvil puede devolver DD/MM/YYYY o horas sin padding; aquí se normaliza.
-    const fechaHora = buildMatchDateTimeForApi(data.date, data.time);
-
-    if (!fechaHora) {
-      setNewMatchError('Selecciona una fecha y hora válidas');
-      return;
-    }
+    // Convert local time to UTC so the backend (UTC+2) displays the correct hour
+    const fechaHora = buildApiDateTime(data.date, data.time);
 
     setNewMatchError(undefined);
     setNewMatchSubmitting(true);
@@ -729,7 +658,11 @@ export function CalendarScreen() {
       awayTeam: match.awayTeam,
       homeScore: match.homeScore ?? 0,
       awayScore: match.awayScore ?? 0,
-      minute: match.minute ?? 0,
+      minute: Math.max(1, match.minute ?? 1),
+      duration: match.duration ?? 90,
+      startedAt: match.startedAt ?? null,
+      homeTeamId: match.homeTeamId ?? undefined,
+      awayTeamId: match.awayTeamId ?? undefined,
     });
   };
 
@@ -742,6 +675,8 @@ export function CalendarScreen() {
       awayTeam: match.awayTeam,
       homeScore: match.homeScore ?? 0,
       awayScore: match.awayScore ?? 0,
+      homeTeamId: match.homeTeamId ?? undefined,
+      awayTeamId: match.awayTeamId ?? undefined,
     });
   };
 
@@ -756,6 +691,52 @@ export function CalendarScreen() {
       time: match.time,
       venue: match.venue,
     });
+  };
+
+  const handleEditMatch = (matchId: string) => {
+    const match = findMatch(matchId);
+    if (!match || match.status !== 'programmed') return;
+
+    setEditingMatch({
+      id_partido: Number(match.id),
+      id_liga: ligaId,
+      id_equipo_local: match.homeTeamId ?? undefined,
+      id_equipo_visitante: match.awayTeamId ?? undefined,
+      fecha_hora: match.startedAt ?? null,
+      estadio: match.venue,
+      estado: 'programado',
+      goles_local: match.homeScore ?? 0,
+      goles_visitante: match.awayScore ?? 0,
+      equipo_local: {
+        id_equipo: match.homeTeamId ?? undefined,
+        nombre: match.homeTeam,
+        color_primario: match.homeColor ?? null,
+      },
+      equipo_visitante: {
+        id_equipo: match.awayTeamId ?? undefined,
+        nombre: match.awayTeam,
+        color_primario: match.awayColor ?? null,
+      },
+    } as PartidoApi);
+  };
+
+  const handleEditMatchConfirm = async (payload: EditScheduledMatchData) => {
+    if (!editingMatch || editMatchSubmitting) return;
+
+    setEditMatchSubmitting(true);
+    const result = await updateScheduledMatchService(editingMatch.id_partido, payload);
+    setEditMatchSubmitting(false);
+
+    if (!result.success) {
+      Alert.alert('No se pudo editar el partido', result.error ?? 'Inténtalo de nuevo.');
+      return;
+    }
+
+    setEditingMatch(null);
+    setActiveTab('journey');
+    setStatusFilter('programmed');
+    emitMatchDataChanged();
+    refetchJourneys();
   };
 
   // ── Render: contenido de la tab Jornada ──
@@ -814,6 +795,7 @@ export function CalendarScreen() {
                     <LiveMatchCard
                       match={toLiveData(match)}
                       permissions={dashPerms}
+                      actionsDisabled={modalProps.pending.any}
                       onRegisterEvent={dashPerms.canRegisterEvent ? handleRegisterEvent : undefined}
                       onEndMatch={dashPerms.canEndMatch ? handleEndMatch : undefined}
                     />
@@ -829,7 +811,9 @@ export function CalendarScreen() {
                       match={toProgrammedData(match)}
                       permissions={dashPerms}
                       onPress={() => handleMatchPress(match.id, match.status)}
-                      onStartMatch={() => handleStartMatch(match.id)}
+                      onStartMatch={dashPerms.canStartMatch ? () => handleStartMatch(match.id) : undefined}
+                      onEditMatch={dashPerms.canEditMatch ? () => handleEditMatch(match.id) : undefined}
+                      actionsDisabled={modalProps.pending.any || editMatchSubmitting}
                     />
                     {match.source === 'manual' && <ManualMatchBadge />}
                   </View>
@@ -862,8 +846,10 @@ export function CalendarScreen() {
       <CalendarHeader
         leagueName={leagueName}
         season={temporada}
-        // TODO: pasar logo real cuando el store incluya crestUrl de la liga activa
+        //  pasar logo real cuando el store incluya crestUrl de la liga activa
         hasMultipleSeasons={false}
+        // Ocultamos por completo los tres puntos a cualquier rol que no sea administrador.
+        showMenu={isAdmin}
         onMenuPress={handleMenuPress}
       />
 
@@ -908,17 +894,20 @@ export function CalendarScreen() {
       {/* ── Modales ── */}
 
       {/* Menú de acciones de admin (desde el header) */}
-      <CalendarActionsMenu
-        visible={menuVisible}
-        permissions={calendarPerms}
-        calendarMenuState={calendarMenuState}
-        onClose={() => setMenuVisible(false)}
-        onCreateCalendar={handleOpenCreateCalendar}
-        onEditCalendar={handleOpenEditCalendar}
-        onDeleteCalendar={handleOpenDeleteCalendar}
-        onAddMatch={handleOpenAddMatch}
-        onAddTeam={calendarPerms.canAddMatch ? handleOpenAddTeam : undefined}
-      />
+      {isAdmin && (
+        <CalendarActionsMenu
+          visible={menuVisible}
+          permissions={calendarPerms}
+          calendarMenuState={calendarMenuState}
+          hasGeneratedCalendar={hasGeneratedCalendar}
+          onClose={() => setMenuVisible(false)}
+          onCreateCalendar={handleOpenCreateCalendar}
+          onEditCalendar={handleOpenEditCalendar}
+          onDeleteCalendar={handleOpenDeleteCalendar}
+          onAddMatch={handleOpenAddMatch}
+          onAddTeam={calendarPerms.canAddMatch ? handleOpenAddTeam : undefined}
+        />
+      )}
 
       {/* Modal crear / editar calendario */}
       <CalendarConfigModal
@@ -953,56 +942,75 @@ export function CalendarScreen() {
         onClose={() => { setNewMatchModalVisible(false); setNewMatchError(undefined); }}
       />
 
-      {/* ── Modales operativos de partido — estado gestionado por useMatchActionModals ── */}
-
-      <RegisterEventModal
-        visible={modals.registerEvent}
-        match={activeEventMatch}
-        onSelectEvent={modalProps.onSelectEvent}
-        onCancel={modalProps.onCloseRegisterEvent}
+      <EditScheduledMatchModal
+        visible={Boolean(editingMatch)}
+        match={editingMatch}
+        saving={editMatchSubmitting}
+        onConfirm={handleEditMatchConfirm}
+        onCancel={() => { if (!editMatchSubmitting) setEditingMatch(null); }}
       />
 
-      <GoalEventModal
-        visible={modals.goal}
-        match={activeEventMatch}
-        onConfirm={modalProps.onGoalConfirm}
-        onCancel={modalProps.onCloseGoal}
-      />
+      {/* ── Modales operativos: solo se montan para roles con acceso ── */}
 
-      <YellowCardModal
-        visible={modals.yellowCard}
-        match={activeEventMatch}
-        onConfirm={modalProps.onYellowCardConfirm}
-        onCancel={modalProps.onCloseYellowCard}
-      />
+      {dashPerms.canRegisterEvent && (
+        <>
+          <RegisterEventModal
+            visible={modals.registerEvent}
+            match={activeEventMatch}
+            onSelectEvent={modalProps.onSelectEvent}
+            onCancel={modalProps.onCloseRegisterEvent}
+            disabled={modalProps.pending.any}
+          />
+          <GoalEventModal
+            visible={modals.goal}
+            match={activeEventMatch}
+            onConfirm={modalProps.onGoalConfirm}
+            onCancel={modalProps.onCloseGoal}
+            submitting={modalProps.pending.any}
+          />
+          <YellowCardModal
+            visible={modals.yellowCard}
+            match={activeEventMatch}
+            onConfirm={modalProps.onYellowCardConfirm}
+            onCancel={modalProps.onCloseYellowCard}
+            submitting={modalProps.pending.any}
+          />
+          <RedCardModal
+            visible={modals.redCard}
+            match={activeEventMatch}
+            onConfirm={modalProps.onRedCardConfirm}
+            onCancel={modalProps.onCloseRedCard}
+            submitting={modalProps.pending.any}
+          />
+          <SubstitutionModal
+            visible={modals.substitution}
+            match={activeEventMatch}
+            onConfirm={modalProps.onSubstitutionConfirm}
+            onCancel={modalProps.onCloseSubstitution}
+            submitting={modalProps.pending.any}
+          />
+        </>
+      )}
 
-      <RedCardModal
-        visible={modals.redCard}
-        match={activeEventMatch}
-        onConfirm={modalProps.onRedCardConfirm}
-        onCancel={modalProps.onCloseRedCard}
-      />
+      {dashPerms.canEndMatch && (
+        <EndMatchModal
+          visible={modals.endMatch}
+          match={activeEndMatch}
+          onConfirm={modalProps.onEndMatchConfirm}
+          onCancel={modalProps.onCloseEndMatch}
+          submitting={modalProps.pending.any}
+        />
+      )}
 
-      <SubstitutionModal
-        visible={modals.substitution}
-        match={activeEventMatch}
-        onConfirm={modalProps.onSubstitutionConfirm}
-        onCancel={modalProps.onCloseSubstitution}
-      />
-
-      <EndMatchModal
-        visible={modals.endMatch}
-        match={activeEndMatch}
-        onConfirm={modalProps.onEndMatchConfirm}
-        onCancel={modalProps.onCloseEndMatch}
-      />
-
-      <StartMatchModal
-        visible={modals.startMatch}
-        match={activeStartMatch}
-        onConfirm={modalProps.onStartMatchConfirm}
-        onCancel={modalProps.onCloseStartMatch}
-      />
+      {dashPerms.canStartMatch && (
+        <StartMatchModal
+          visible={modals.startMatch}
+          match={activeStartMatch}
+          onConfirm={modalProps.onStartMatchConfirm}
+          onCancel={modalProps.onCloseStartMatch}
+          isSubmitting={modalProps.pending.any}
+        />
+      )}
     </View>
   );
 }

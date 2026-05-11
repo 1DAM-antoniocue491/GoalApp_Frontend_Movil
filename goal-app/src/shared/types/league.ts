@@ -1,15 +1,10 @@
 // Tipos base para las ligas de GoalApp
 // Estos tipos definen la estructura de datos para la pantalla de inicio
 
-/**
- * Roles posibles que puede tener un usuario en una liga
- */
+/** Roles posibles que puede tener un usuario en una liga */
 export type LeagueRole = 'admin' | 'coach' | 'player' | 'field_delegate' | 'observer';
 
-/**
- * Categorías de edad de una liga.
- * Los valores son estables para el backend — no los cambies sin migración.
- */
+/** Categorías de edad de una liga. */
 export type LeagueCategory =
   | 'pre_benjamin'
   | 'benjamin'
@@ -19,9 +14,6 @@ export type LeagueCategory =
   | 'juvenil'
   | 'senior';
 
-/**
- * Etiquetas legibles por categoría para UI
- */
 export const CATEGORY_LABELS: Record<LeagueCategory, string> = {
   pre_benjamin: 'Pre-benjamín (sub-7/8)',
   benjamin: 'Benjamín (sub-9/10)',
@@ -32,76 +24,47 @@ export const CATEGORY_LABELS: Record<LeagueCategory, string> = {
   senior: 'Senior',
 };
 
-/**
- * Estados posibles de una liga
- */
 export type LeagueStatus = 'active' | 'finished';
-
-/**
- * Filtros disponibles para la sección "Mis ligas"
- */
 export type LeagueFilter = 'all' | 'active' | 'finished' | 'favorites';
 
-/**
- * Interfaz principal que representa una liga en la app
- */
+/** Interfaz principal que representa una liga en la app */
 export interface LeagueItem {
-  /** Identificador único de la liga */
   id: string;
-  /** Nombre de la liga */
   name: string;
-  /** Temporada actual (ej: "2025/26") */
   season: string;
-  /** Estado de la liga (activa o finalizada) */
   status: LeagueStatus;
-  /** Rol del usuario en esta liga */
   role: LeagueRole;
-  /** Si la liga está marcada como favorita */
   isFavorite: boolean;
-  /** Nombre del equipo del usuario en esta liga (opcional) */
+  /** ID del equipo asignado al usuario dentro de esta liga, si aplica. */
+  teamId?: string;
+  /** Nombre del equipo asignado al usuario dentro de esta liga, si aplica. */
   teamName?: string;
-  /** Número total de equipos en la liga */
   teamsCount: number;
-  /** URL del escudo de la liga (puede ser null o undefined) */
   crestUrl?: string | null;
-  /** Si el usuario tiene permisos para reactivar la liga (solo para finalizadas) */
   canReactivate?: boolean;
-  /** Categoría de la liga tal como la devuelve el backend (string libre) */
   categoria?: string;
 }
 
-/**
- * Mapeo de roles a etiquetas legibles para UI
- */
 export const ROLE_LABELS: Record<LeagueRole, string> = {
-  admin: 'Admin',
+  admin: 'Administrador',
   coach: 'Entrenador',
-  field_delegate: 'Delegado de campo',
+  field_delegate: 'Delegado',
   player: 'Jugador',
   observer: 'Observador',
 };
 
-/**
- * Mapeo de roles a colores de texto para UI
- */
 export const ROLE_COLORS: Record<LeagueRole, string> = {
-  admin: '#FFD60A',      // amarillo/dorado
-  coach: '#18A2FB',      // azul/cian
-  field_delegate: '#D946EF', // morado/fucsia
-  player: '#20E3B2',     // verde agua
-  observer: '#94A3B8',   // gris azulado
+  admin: '#C8F558',
+  coach: '#00B4D8',
+  field_delegate: '#FFD60A',
+  player: '#18A2FB',
+  observer: '#94A3B8',
 };
 
-/**
- * Fondos semitransparentes del badge de rol.
- * Son versiones oscuras de ROLE_COLORS adaptadas al fondo dark de la app.
- * Centralizados aquí para que cualquier pantalla que muestre badges de rol
- * use los mismos valores sin hardcodearlos.
- */
 export const ROLE_BG_COLORS: Record<LeagueRole, string> = {
-  admin: '#4B3B05',
-  coach: '#0A3E66',
-  field_delegate: '#4B0F4D',
-  player: '#0E4A3D',
-  observer: '#1E2A3A',
+  admin: 'rgba(200,245,88,0.15)',
+  coach: 'rgba(0,180,216,0.15)',
+  field_delegate: 'rgba(255,214,10,0.15)',
+  player: 'rgba(24,162,251,0.15)',
+  observer: 'rgba(161,161,170,0.12)',
 };

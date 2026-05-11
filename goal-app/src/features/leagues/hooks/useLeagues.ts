@@ -1,38 +1,44 @@
 /**
- * useLeagues - Hook para cargar y gestionar las ligas del usuario autenticado
+ * useLeagues - Hook para cargar y gestionar las ligas del usuario autenticado.
  *
- * Expone:
- * - leagues, loading, error, refresh  → lectura de ligas
- * - createNewLeague, submitting, createError → creación de liga
+ * Reglas importantes:
+ * - Favoritos se guardan en API con /seguir. No son estado local temporal.
+ * - Reactivar liga se hace con PUT /ligas/{id}/reactivar. No se simula en UI.
+ * - La carga de equipo asignado es secundaria para que el onboarding pinte rápido.
  */
 
 import { useState, useEffect, useCallback } from 'react';
-import { fetchMyLeagues, createLeagueWithConfig, updateLeagueWithConfigService } from '../services/leagueService';
+import {
+  createLeagueWithConfig,
+  enrichLeagueTeamAssignments,
+  fetchMyLeagues,
+  joinLeagueByCodeService,
+  reactivateLeagueService,
+  toggleFavoriteLeagueService,
+} from '../services/leagueService';
 import { logger } from '@/src/shared/utils/logger';
 import type { LeagueItem } from '@/src/shared/types/league';
-import type {
-  LigaConfiguracionRequest,
-  LigaCreateRequest,
-  LigaUpdateRequest,
-  UpdateLeagueConfigRequest,
-} from '../types/league.api.types';
+import type { LigaConfiguracionRequest, LigaCreateRequest } from '../types/league.api.types';
 
 interface UseLeaguesResult {
   leagues: LeagueItem[];
   loading: boolean;
   error: string | null;
   refresh: () => Promise<void>;
+
   submitting: boolean;
   createError: string | null;
   createNewLeague: (input: { league: LigaCreateRequest; config?: LigaConfiguracionRequest }) => Promise<LeagueItem | null>;
-  editSubmitting: boolean;
-  editError: string | null;
-  editLeague: (input: {
-    ligaId: string;
-    league: LigaUpdateRequest;
-    config?: UpdateLeagueConfigRequest;
-    configExists?: boolean;
-  }) => Promise<boolean>;
+
+  favoriteUpdatingId: string | null;
+  toggleFavoriteLeague: (leagueId: string) => Promise<boolean>;
+
+  reactivatingLeagueId: string | null;
+  reactivateLeagueById: (leagueId: string) => Promise<boolean>;
+
+  joiningByCode: boolean;
+  joinError: string | null;
+  joinLeagueByCode: (code: string) => Promise<boolean>;
 }
 
 export function useLeagues(): UseLeaguesResult {
@@ -41,17 +47,25 @@ export function useLeagues(): UseLeaguesResult {
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [createError, setCreateError] = useState<string | null>(null);
-  const [editSubmitting, setEditSubmitting] = useState(false);
-  const [editError, setEditError] = useState<string | null>(null);
+  const [favoriteUpdatingId, setFavoriteUpdatingId] = useState<string | null>(null);
+  const [reactivatingLeagueId, setReactivatingLeagueId] = useState<string | null>(null);
+  const [joiningByCode, setJoiningByCode] = useState(false);
+  const [joinError, setJoinError] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     try {
       setLoading(true);
       setError(null);
-      const data = await fetchMyLeagues();
-      setLeagues(data);
+
+      // 1) Carga rápida: ligas + favoritos persistentes.
+      const baseLeagues = await fetchMyLeagues({ enrichTeams: false });
+      setLeagues(baseLeagues);
+      setLoading(false);
+
+      // 2) Enriquecimiento secundario: “Mi equipo” en tarjetas.
+      const enriched = await enrichLeagueTeamAssignments(baseLeagues);
+      setLeagues(enriched);
     } catch (err) {
-      // Mensaje fijo para la UI — el detalle técnico solo va al logger
       setError('No se pudieron cargar las ligas');
       logger.warn('useLeagues', 'Error cargando ligas', {
         error: err instanceof Error ? err.message : String(err),
@@ -61,53 +75,88 @@ export function useLeagues(): UseLeaguesResult {
     }
   }, []);
 
-  const createNewLeague = useCallback(async (input: { league: LigaCreateRequest; config?: LigaConfiguracionRequest }): Promise<LeagueItem | null> => {
-    try {
-      setSubmitting(true);
-      setCreateError(null);
-      const league = await createLeagueWithConfig(input);
-      await load();
-      return league;
-    } catch (err) {
-      const message = err instanceof Error ? err.message : 'Error al crear la liga';
-      setCreateError(message);
-      logger.error('useLeagues/createNewLeague', 'Error creando liga', { error: message });
-      return null;
-    } finally {
-      setSubmitting(false);
-    }
-  }, [load]);
-
-  const editLeague = useCallback(async (input: {
-    ligaId: string;
-    league: LigaUpdateRequest;
-    config?: UpdateLeagueConfigRequest;
-    configExists?: boolean;
-  }): Promise<boolean> => {
-    try {
-      setEditSubmitting(true);
-      setEditError(null);
-      const result = await updateLeagueWithConfigService({
-        ligaId: Number(input.ligaId),
-        league: input.league,
-        config: input.config ?? {},
-        configExists: input.configExists,
-      });
-      if (result.success) {
+  const createNewLeague = useCallback(
+    async (input: { league: LigaCreateRequest; config?: LigaConfiguracionRequest }): Promise<LeagueItem | null> => {
+      try {
+        setSubmitting(true);
+        setCreateError(null);
+        const league = await createLeagueWithConfig(input);
         await load();
-        return true;
+        return league;
+      } catch (err) {
+        const message = err instanceof Error ? err.message : 'Error al crear la liga';
+        setCreateError(message);
+        logger.error('useLeagues/createNewLeague', 'Error creando liga', { error: message });
+        return null;
+      } finally {
+        setSubmitting(false);
       }
-      setEditError(result.error ?? 'Error al guardar los cambios');
-      return false;
+    },
+    [load],
+  );
+
+  const toggleFavoriteLeague = useCallback(
+    async (leagueId: string): Promise<boolean> => {
+      const target = leagues.find((league) => league.id === leagueId);
+      if (!target) return false;
+
+      try {
+        setFavoriteUpdatingId(leagueId);
+        const result = await toggleFavoriteLeagueService(leagueId, target.isFavorite);
+
+        if (!result.success || !result.data) {
+          setError(result.error ?? 'No se pudo actualizar el favorito');
+          return false;
+        }
+
+        setLeagues(result.data);
+        return true;
+      } finally {
+        setFavoriteUpdatingId(null);
+      }
+    },
+    [leagues],
+  );
+
+  const reactivateLeagueById = useCallback(async (leagueId: string): Promise<boolean> => {
+    try {
+      setReactivatingLeagueId(leagueId);
+      const result = await reactivateLeagueService(leagueId);
+
+      if (!result.success || !result.data) {
+        setError(result.error ?? 'No se pudo reactivar la liga');
+        return false;
+      }
+
+      // La lista refrescada desde API decide si el botón vuelve a ser “Entrar”.
+      setLeagues(result.data);
+      return true;
+    } finally {
+      setReactivatingLeagueId(null);
+    }
+  }, []);
+
+  const joinLeagueByCode = useCallback(async (code: string): Promise<boolean> => {
+    try {
+      setJoiningByCode(true);
+      setJoinError(null);
+
+      const result = await joinLeagueByCodeService(code);
+      if (!result.success || !result.data) {
+        setJoinError(result.error ?? 'No se pudo unir a la liga.');
+        return false;
+      }
+
+      setLeagues(result.data.leagues);
+      return true;
     } catch (err) {
-      const message = err instanceof Error ? err.message : 'Error al guardar los cambios';
-      setEditError(message);
-      logger.error('useLeagues/editLeague', 'Error editando liga', { error: message });
+      const message = err instanceof Error ? err.message : 'No se pudo unir a la liga.';
+      setJoinError(message);
       return false;
     } finally {
-      setEditSubmitting(false);
+      setJoiningByCode(false);
     }
-  }, [load]);
+  }, []);
 
   useEffect(() => {
     load();
@@ -121,8 +170,12 @@ export function useLeagues(): UseLeaguesResult {
     submitting,
     createError,
     createNewLeague,
-    editSubmitting,
-    editError,
-    editLeague,
+    favoriteUpdatingId,
+    toggleFavoriteLeague,
+    reactivatingLeagueId,
+    reactivateLeagueById,
+    joiningByCode,
+    joinError,
+    joinLeagueByCode,
   };
 }

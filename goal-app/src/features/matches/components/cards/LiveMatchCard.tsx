@@ -232,7 +232,7 @@ export function LiveMatchCard({
         </View>
       ) : null}
 
-      {expired ? (
+      {expired && permissions.canEndMatch ? (
         <View
           style={{
             marginTop: 16,
